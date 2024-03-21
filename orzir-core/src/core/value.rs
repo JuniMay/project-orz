@@ -78,7 +78,7 @@ impl OpResultBuilder {
             .deref_mut(&mut ctx.ops)
             .as_inner_mut()
             .as_base_mut()
-            .add_operand(ptr);
+            .add_result(ptr);
 
         let instance = Value::OpResult { ty, op, index };
         ctx.values.fill(ptr, instance);
