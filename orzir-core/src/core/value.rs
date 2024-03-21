@@ -1,3 +1,5 @@
+use anyhow::{anyhow, Result};
+
 use crate::support::storage::ArenaPtr;
 
 use super::{
@@ -70,9 +72,9 @@ impl OpResultBuilder {
         self
     }
 
-    pub fn build(self, ctx: &mut Context) -> ArenaPtr<Value> {
-        let ty = self.ty.expect("missing type");
-        let op = self.op.expect("missing operation");
+    pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
+        let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
+        let op = self.op.ok_or_else(|| anyhow!("missing op"))?;
         let ptr = ctx.values.reserve();
         let index = op
             .deref_mut(&mut ctx.ops)
@@ -82,7 +84,7 @@ impl OpResultBuilder {
 
         let instance = Value::OpResult { ty, op, index };
         ctx.values.fill(ptr, instance);
-        ptr
+        Ok(ptr)
     }
 }
 
@@ -97,14 +99,14 @@ impl BlockArgumentBuilder {
         self
     }
 
-    pub fn build(self, ctx: &mut Context) -> ArenaPtr<Value> {
-        let ty = self.ty.expect("missing type");
-        let block = self.block.expect("missing block");
+    pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
+        let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
+        let block = self.block.ok_or_else(|| anyhow!("missing block"))?;
         let ptr = ctx.values.reserve();
         let index = block.deref_mut(&mut ctx.blocks).add_arg(ptr);
 
         let instance = Value::BlockArgument { ty, block, index };
         ctx.values.fill(ptr, instance);
-        ptr
+        Ok(ptr)
     }
 }

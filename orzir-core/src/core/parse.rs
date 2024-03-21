@@ -189,9 +189,6 @@ pub enum BasicParseError {
     #[error("unclosed block comment at {0}")]
     UnclosedBlockComment(Span),
 
-    #[error("invalid character after `-` at {0}, expect `>`")]
-    ExpectArrow(Span),
-
     #[error("invalid escape sequence at {0}")]
     InvalidEscapeSequence(Pos),
 
@@ -200,9 +197,6 @@ pub enum BasicParseError {
 
     #[error("invalid token at {0}, expect {1}")]
     InvalidToken(Span, TokenKind),
-
-    #[error("unexpected eof")]
-    UnexpectedEof,
 }
 
 impl<'a> TokenStream<'a> {

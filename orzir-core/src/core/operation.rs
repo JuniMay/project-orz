@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
 
-use crate::support::storage::ArenaPtr;
+use crate::{support::storage::ArenaPtr, Region};
 
 use super::{attribute::AttrObj, context::Context, mnemonic::Mnemonic, value::Value};
 
@@ -11,7 +11,8 @@ pub struct OpBase {
     attrs: HashMap<String, AttrObj>,
     results: Vec<ArenaPtr<Value>>,
     operands: Vec<ArenaPtr<Value>>,
-    regions: Vec<ArenaPtr<Value>>,
+    regions: Vec<ArenaPtr<Region>>,
+    parent_region: Option<ArenaPtr<Region>>,
 }
 
 impl OpBase {
@@ -39,6 +40,15 @@ impl OpBase {
     pub fn add_operand(&mut self, operand: ArenaPtr<Value>) -> usize {
         self.operands.push(operand);
         self.operands.len() - 1
+    }
+
+    pub fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
+        self.regions.push(region);
+        self.regions.len() - 1
+    }
+
+    pub fn parent_region(&self) -> Option<ArenaPtr<Region>> {
+        self.parent_region
     }
 }
 
