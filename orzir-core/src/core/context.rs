@@ -10,17 +10,31 @@ use super::{
 /// The context of the whole IR.
 pub struct Context {
     /// The values.
-    values: Arena<Value>,
+    pub values: Arena<Value>,
     /// The blocks.
-    blocks: Arena<Block>,
+    pub blocks: Arena<Block>,
     /// The regions.
-    regions: Arena<Region>,
+    pub regions: Arena<Region>,
     /// The operations.
-    ops: Arena<OpObj>,
+    pub ops: Arena<OpObj>,
     /// The types.
-    types: UniqueArena<TypeObj>,
+    pub types: UniqueArena<TypeObj>,
     /// The dialects.
-    dialects: HashMap<MnemonicSegment, Dialect>,
+    pub dialects: HashMap<MnemonicSegment, Dialect>,
     /// The name of values.
-    value_names: NameManager<Value>,
+    pub value_names: NameManager<Value>,
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self {
+            values: Arena::default(),
+            blocks: Arena::default(),
+            regions: Arena::default(),
+            ops: Arena::default(),
+            types: UniqueArena::default(),
+            dialects: HashMap::default(),
+            value_names: NameManager::default(),
+        }
+    }
 }

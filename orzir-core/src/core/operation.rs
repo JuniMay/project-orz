@@ -41,10 +41,6 @@ impl OpBase {
 }
 
 pub trait Op: Downcast + CastFrom {
-    fn from_base(base: OpBase) -> OpObj
-    where
-        Self: Sized;
-
     /// Get the mnemonic of the type.
     fn mnemonic(&self, ctx: &Context) -> Mnemonic;
     /// Get the mnemonic of the type statically.

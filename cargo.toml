@@ -1,6 +1,3 @@
 [workspace]
 resolver = "2"
-members = [
-    "orzir-core",
-    "orzir-macros",
-]
+members = ["orzir", "orzir-core", "orzir-macros"]

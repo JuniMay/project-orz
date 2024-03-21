@@ -1,5 +1,3 @@
-use std::hash::Hash;
-
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
 

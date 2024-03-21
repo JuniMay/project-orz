@@ -1,13 +1,10 @@
 [package]
-name = "orzir-core"
+name = "orzir"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-downcast-rs = "1.2.0"
-thiserror = "1.0.58"
-anyhow = "1.0.81"
-
-intertrait = { git = "https://github.com/JuniMay/intertrait.git" }
+orzir-macros = { path = "../orzir-macros" }
+orzir-core = { path = "../orzir-core" }
