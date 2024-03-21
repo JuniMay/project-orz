@@ -31,12 +31,14 @@ impl OpBase {
         self.operands.get(index).copied()
     }
 
-    pub fn add_result(&mut self, result: ArenaPtr<Value>) {
+    pub fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
         self.results.push(result);
+        self.results.len() - 1
     }
 
-    pub fn add_operand(&mut self, operand: ArenaPtr<Value>) {
+    pub fn add_operand(&mut self, operand: ArenaPtr<Value>) -> usize {
         self.operands.push(operand);
+        self.operands.len() - 1
     }
 }
 
@@ -72,6 +74,10 @@ impl OpObj {
     /// Get the inside trait object.
     pub fn as_inner(&self) -> &dyn Op {
         &*self.0
+    }
+
+    pub fn as_inner_mut(&mut self) -> &mut dyn Op {
+        &mut *self.0
     }
 
     /// Check if the type object is a concrete type.

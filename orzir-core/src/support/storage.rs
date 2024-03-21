@@ -1,9 +1,11 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt,
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{Hash, Hasher},
     marker::PhantomData,
 };
+
+use std::collections::hash_map::DefaultHasher;
 
 pub struct ArenaPtr<T> {
     index: usize,

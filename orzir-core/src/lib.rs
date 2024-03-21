@@ -1,7 +1,7 @@
 pub(crate) mod core;
 pub(crate) mod support;
 
-pub use core::{
+pub use crate::core::{
     attribute::{Attr, AttrObj},
     context::Context,
     dialect::Dialect,
@@ -13,4 +13,4 @@ pub use core::{
     ty::{Type, TypeObj, Typed},
 };
 
-pub use support::storage::{Arena, ArenaBase, ArenaPtr, UniqueArena};
+pub use crate::support::storage::{Arena, ArenaBase, ArenaPtr, UniqueArena};
