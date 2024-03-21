@@ -1,3 +1,4 @@
+use attribute::derive_attr;
 use proc_macro::TokenStream;
 use ty::derive_ty;
 
@@ -19,5 +20,5 @@ pub fn ty(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn attr(attr: TokenStream, item: TokenStream) -> TokenStream {
-    todo!()
+    derive_attr(attr, item)
 }
