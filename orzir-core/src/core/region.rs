@@ -116,6 +116,14 @@ impl Region {
     pub fn builder() -> RegionBuilder {
         RegionBuilder::default()
     }
+
+    pub fn register_symbol(&self, name: String, op: ArenaPtr<OpObj>) {
+        self.symbol_table.borrow_mut().insert(name, op);
+    }
+
+    pub fn lookup_symbol(&self, name: &str) -> Option<ArenaPtr<OpObj>> {
+        self.symbol_table.borrow().lookup(name)
+    }
 }
 
 impl Parse for Region {
@@ -166,6 +174,7 @@ impl Print for Region {
         for block in self.layout.iter_blocks() {
             block.deref(&ctx.blocks).print(ctx, state)?;
         }
+        state.write_indent()?;
         write!(state.buffer, "}}")?;
         Ok(())
     }

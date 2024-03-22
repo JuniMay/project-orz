@@ -5,7 +5,7 @@ use crate::{
 use anyhow::{anyhow, Result};
 use std::fmt::Write;
 
-use super::{builder, value::Value};
+use super::value::Value;
 
 #[derive(Debug)]
 pub struct Block {
@@ -152,8 +152,7 @@ impl Parse for Block {
         // parse the block arguments.
 
         let is_entry = block.deref(&ctx.blocks).is_entry();
-
-        if is_entry {
+        if !is_entry {
             let token = stream.consume()?;
             match token.kind {
                 TokenKind::Char('(') => {
@@ -253,15 +252,15 @@ impl Print for Block {
             writeln!(state.buffer)?;
         }
 
-        state.indent();
-
         let region = self.parent_region.deref(&ctx.regions);
 
+        state.indent();
         for op in region.layout().iter_ops(self.self_ptr) {
             state.write_indent()?;
             op.deref(&ctx.ops).print(ctx, state)?;
             writeln!(state.buffer)?;
         }
+        state.dedent();
 
         Ok(())
     }

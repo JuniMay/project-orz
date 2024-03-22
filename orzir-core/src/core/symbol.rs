@@ -34,8 +34,8 @@ impl SymbolTable {
     }
 
     /// Insert a symbol into the table.
-    pub fn insert(&mut self, name: String, value: ArenaPtr<OpObj>) {
-        self.symbols.insert(name, value);
+    pub fn insert(&mut self, name: String, op: ArenaPtr<OpObj>) {
+        self.symbols.insert(name, op);
     }
 
     pub fn lookup(&self, name: &str) -> Option<ArenaPtr<OpObj>> {

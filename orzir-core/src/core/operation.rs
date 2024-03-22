@@ -1,4 +1,6 @@
-use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream};
+use crate::{
+    support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed,
+};
 use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
@@ -27,6 +29,20 @@ impl OpBase {
 
     pub fn operands(&self) -> &[ArenaPtr<Value>] {
         &self.operands
+    }
+
+    pub fn operand_types(&self, ctx: &Context) -> Vec<ArenaPtr<TypeObj>> {
+        self.operands
+            .iter()
+            .map(|ptr| ptr.deref(&ctx.values).ty(ctx))
+            .collect()
+    }
+
+    pub fn result_types(&self, ctx: &Context) -> Vec<ArenaPtr<TypeObj>> {
+        self.results
+            .iter()
+            .map(|ptr| ptr.deref(&ctx.values).ty(ctx))
+            .collect()
     }
 
     pub fn regions(&self) -> &[ArenaPtr<Region>] {
@@ -160,12 +176,16 @@ impl Parse for OpObj {
 
     fn parse(parent: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
         let mut result_builders = Vec::new();
+
         loop {
             let token = stream.peek()?;
             match token.kind {
                 TokenKind::ValueName(ref name) => {
                     let builder = Value::op_result_builder().name(name.clone());
                     result_builders.push(builder);
+                    // eat the value name
+                    let _ = stream.consume()?;
+                    // eat the next token, `=` or `,`
                     let token = stream.consume()?;
                     match token.kind {
                         TokenKind::Char(',') => continue,

@@ -50,7 +50,7 @@ impl Print for ModuleOp {
         if let Some(symbol) = &self.symbol {
             write!(state.buffer, "@{}", symbol)?;
         }
-
+        write!(state.buffer, " ")?;
         self.as_base()
             .get_region(0)
             .unwrap()
@@ -183,6 +183,10 @@ impl Parse for FunctionType {
         stream.expect(TokenKind::Char('('))?;
         let mut args = Vec::new();
         loop {
+            if stream.peek()?.kind == TokenKind::Char(')') {
+                stream.consume()?;
+                break;
+            }
             let ty = TypeObj::parse((), ctx, stream)?;
             args.push(ty);
             let token = stream.consume()?;
@@ -294,6 +298,25 @@ impl Print for MemRefType {
         }
         self.elem.deref(&ctx.types).print(ctx, state)?;
         write!(state.buffer, ">")?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+#[ty("builtin.unit")]
+pub struct UnitType;
+
+impl Parse for UnitType {
+    type Arg = ();
+    type Item = ArenaPtr<TypeObj>;
+
+    fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
+        Ok(UnitType::get(ctx))
+    }
+}
+
+impl Print for UnitType {
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
         Ok(())
     }
 }

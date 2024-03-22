@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.81"
-
 orzir-macros = { path = "../orzir-macros" }
 orzir-core = { path = "../orzir-core" }
+
+anyhow = "1.0.81"
+arpfloat = "0.1.10"
+num-bigint = "0.4.4"
