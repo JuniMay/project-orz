@@ -244,7 +244,7 @@ impl Print for Block {
                     write!(state.buffer, "{}:", arg.name(ctx))?;
                     let ty = arg.ty(ctx);
                     ty.deref(&ctx.types).print(ctx, state)?;
-                    if i + 1 < self.args.len() {
+                    if i != self.args.len() - 1 {
                         write!(state.buffer, ",")?;
                     }
                 }

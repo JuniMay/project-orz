@@ -117,7 +117,7 @@ impl fmt::Display for TokenKind {
             TokenKind::ValueName(s) => write!(f, "%{}", s),
             TokenKind::TypeAlias(s) => write!(f, "!{}", s),
             TokenKind::SymbolName(s) => write!(f, "@{}", s),
-            TokenKind::Quoted(s) => write!(f, "\"{}\"", s),
+            TokenKind::Quoted(s) => write!(f, "{}", s),
             TokenKind::Tokenized(s) => write!(f, "{}", s),
             TokenKind::Eof => write!(f, "EOF"),
         }
@@ -413,6 +413,7 @@ impl<'a> TokenStream<'a> {
         let inside_quote = match self.peek_char()? {
             Some('"') => {
                 self.consume_char();
+                s.push('"');
                 true
             }
             _ => false,
@@ -425,6 +426,7 @@ impl<'a> TokenStream<'a> {
                 }
                 Some('"') if inside_quote => {
                     self.consume_char();
+                    s.push('"');
                     break;
                 }
                 Some('\\') if inside_quote => {

@@ -1,6 +1,6 @@
+use crate::{Context, Parse, Print, PrintState, TokenStream};
 use anyhow::Result;
-
-use crate::{Context, Parse, TokenStream};
+use std::fmt::Write;
 
 use super::parse::TokenKind;
 
@@ -72,13 +72,31 @@ impl Parse for Mnemonic {
                 Ok(Mnemonic::new(primary, secondary))
             }
             TokenKind::Quoted(ref s) => {
+                // remove the quotes.
+                let s = if s.starts_with('"') && s.ends_with('"') {
+                    &s[1..s.len() - 1]
+                } else {
+                    s.as_str()
+                };
                 let (primary, secondary) = match s.split_once('.') {
                     Some((primary, secondary)) => (primary, secondary),
-                    None => ("builtin", s.as_str()),
+                    None => ("builtin", s),
                 };
                 Ok(Mnemonic::new(primary, secondary))
             }
             _ => anyhow::bail!("expect a mnemonic."),
         }
+    }
+}
+
+impl Print for Mnemonic {
+    fn print(&self, _: &Context, state: &mut PrintState) -> Result<()> {
+        write!(
+            state.buffer,
+            "{}.{}",
+            self.primary.as_str(),
+            self.secondary.as_str()
+        )?;
+        Ok(())
     }
 }

@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
+use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream};
 use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
-
-use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream};
+use std::fmt::Write;
 
 use super::{
     block::Block,
@@ -74,8 +72,8 @@ impl OpBase {
         self.parent_block
     }
 
-    pub fn set_parent_block(&mut self, parent_block: ArenaPtr<Block>) {
-        self.parent_block = Some(parent_block);
+    pub fn set_parent_block(&mut self, parent_block: Option<ArenaPtr<Block>>) {
+        self.parent_block = parent_block;
     }
 
     pub fn parent_region(&self, ctx: &Context) -> Option<ArenaPtr<Region>> {
@@ -86,11 +84,11 @@ impl OpBase {
     }
 }
 
-pub trait Op: Downcast + CastFrom {
+pub trait Op: Downcast + CastFrom + Print {
     /// Get the mnemonic of the type.
-    fn mnemonic(&self, ctx: &Context) -> Mnemonic;
+    fn mnemonic(&self) -> Mnemonic;
     /// Get the mnemonic of the type statically.
-    fn mnemonic_static(ctx: &Context) -> Mnemonic
+    fn mnemonic_static() -> Mnemonic
     where
         Self: Sized;
 
@@ -99,6 +97,17 @@ pub trait Op: Downcast + CastFrom {
 
     /// Get the mutable operation base.
     fn as_base_mut(&mut self) -> &mut OpBase;
+
+    fn register(ctx: &mut Context, parse_fn: OpParseFn)
+    where
+        Self: Sized,
+    {
+        let mnemonic = Self::mnemonic_static();
+        ctx.dialects
+            .get_mut(mnemonic.primary())
+            .unwrap()
+            .add_op(mnemonic, parse_fn);
+    }
 }
 
 impl_downcast!(Op);
@@ -185,6 +194,20 @@ pub type OpParseFn = ParseFn<(Vec<OpResultBuilder>, Option<ArenaPtr<Block>>), Ar
 
 impl Print for OpObj {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        todo!()
+        let results = self.as_inner().as_base().results();
+
+        if !results.is_empty() {
+            for (i, result) in results.iter().enumerate() {
+                result.deref(&ctx.values).print(ctx, state)?;
+                if i != results.len() - 1 {
+                    write!(state.buffer, ", ")?;
+                }
+            }
+            write!(state.buffer, " = ")?;
+        }
+
+        self.as_inner().mnemonic().print(ctx, state)?;
+        self.as_inner().print(ctx, state)?;
+        Ok(())
     }
 }

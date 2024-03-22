@@ -9,15 +9,26 @@ use crate::{
 
 use super::{context::Context, mnemonic::Mnemonic, parse::ParseFn};
 
-pub trait Type: Downcast + CastFrom + GetUniqueArenaHash {
+pub trait Type: Downcast + CastFrom + GetUniqueArenaHash + Print {
     /// Get the mnemonic of the type.
-    fn mnemonic(&self, ctx: &Context) -> Mnemonic;
+    fn mnemonic(&self) -> Mnemonic;
     /// Get the mnemonic of the type statically.
-    fn mnemonic_static(ctx: &Context) -> Mnemonic
+    fn mnemonic_static() -> Mnemonic
     where
         Self: Sized;
     /// Check if the type is equal to another type.
     fn eq(&self, other: &dyn Type) -> bool;
+
+    fn register(ctx: &mut Context, parse_fn: TypeParseFn)
+    where
+        Self: Sized,
+    {
+        let mnemonic = Self::mnemonic_static();
+        ctx.dialects
+            .get_mut(mnemonic.primary())
+            .unwrap()
+            .add_type(mnemonic, parse_fn);
+    }
 }
 
 impl_downcast!(Type);
@@ -83,7 +94,14 @@ impl Parse for TypeObj {
     type Item = ArenaPtr<TypeObj>;
 
     fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        todo!()
+        let mnemonic = Mnemonic::parse((), ctx, stream)?;
+        let parse_fn = ctx
+            .dialects
+            .get(mnemonic.primary())
+            .expect("dialect not registered")
+            .get_type_parse_fn(&mnemonic)
+            .expect("type not registered");
+        parse_fn((), ctx, stream)
     }
 }
 
@@ -91,6 +109,8 @@ pub type TypeParseFn = ParseFn<(), ArenaPtr<TypeObj>>;
 
 impl Print for TypeObj {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        todo!()
+        self.as_inner().mnemonic().print(ctx, state)?;
+        self.as_inner().print(ctx, state)?;
+        Ok(())
     }
 }

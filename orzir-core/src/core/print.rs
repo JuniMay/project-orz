@@ -1,7 +1,6 @@
 use anyhow::Result;
 
 use super::context::Context;
-use std::fmt;
 use std::fmt::Write;
 
 pub struct PrintState {
@@ -39,7 +38,5 @@ impl PrintState {
 }
 
 pub trait Print {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        Ok(())
-    }
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()>;
 }

@@ -101,11 +101,11 @@ pub fn derive_ty(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl ::orzir_core::Type for #ident {
-            fn mnemonic(&self, ctx: &::orzir_core::Context) -> ::orzir_core::Mnemonic {
+            fn mnemonic(&self) -> ::orzir_core::Mnemonic {
                 ::orzir_core::Mnemonic::new(#primary, #secondary)
             }
 
-            fn mnemonic_static(ctx: &::orzir_core::Context) -> ::orzir_core::Mnemonic
+            fn mnemonic_static() -> ::orzir_core::Mnemonic
             where
                 Self: Sized
             {

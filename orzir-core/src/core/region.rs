@@ -13,7 +13,6 @@ use super::{
     operation::OpObj,
     symbol::{NameManager, SymbolTable, SymbolTableOwned},
 };
-use super::{builder, ty};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RegionKind {
@@ -158,5 +157,16 @@ impl Parse for Region {
             }
         }
         Ok(region_ptr)
+    }
+}
+
+impl Print for Region {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        writeln!(state.buffer, "{{")?;
+        for block in self.layout.iter_blocks() {
+            block.deref(&ctx.blocks).print(ctx, state)?;
+        }
+        write!(state.buffer, "}}")?;
+        Ok(())
     }
 }
