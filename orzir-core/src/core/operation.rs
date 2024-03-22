@@ -1,18 +1,33 @@
 use std::collections::HashMap;
 
+use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
 
-use crate::{support::storage::ArenaPtr, Region};
+use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream};
 
-use super::{attribute::AttrObj, context::Context, mnemonic::Mnemonic, value::Value};
+use super::{
+    attribute::AttrObj, block::Block, context::Context, mnemonic::Mnemonic, ty, value::Value,
+};
 
 pub struct OpBase {
     attrs: HashMap<String, AttrObj>,
     results: Vec<ArenaPtr<Value>>,
     operands: Vec<ArenaPtr<Value>>,
     regions: Vec<ArenaPtr<Region>>,
-    parent_region: Option<ArenaPtr<Region>>,
+    parent_block: Option<ArenaPtr<Block>>,
+}
+
+impl Default for OpBase {
+    fn default() -> Self {
+        Self {
+            attrs: HashMap::default(),
+            results: Vec::default(),
+            operands: Vec::default(),
+            regions: Vec::default(),
+            parent_block: None,
+        }
+    }
 }
 
 impl OpBase {
@@ -32,6 +47,14 @@ impl OpBase {
         self.operands.get(index).copied()
     }
 
+    pub fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>> {
+        self.regions.get(index).copied()
+    }
+
+    pub fn get_attr(&self, name: &str) -> Option<&AttrObj> {
+        self.attrs.get(name)
+    }
+
     pub fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
         self.results.push(result);
         self.results.len() - 1
@@ -47,8 +70,27 @@ impl OpBase {
         self.regions.len() - 1
     }
 
-    pub fn parent_region(&self) -> Option<ArenaPtr<Region>> {
-        self.parent_region
+    pub fn add_attr(&mut self, name: String, attr: AttrObj) -> Result<()> {
+        if self.attrs.contains_key(&name) {
+            anyhow::bail!("The attribute name is already used.");
+        }
+        self.attrs.insert(name, attr);
+        Ok(())
+    }
+
+    pub fn parent_block(&self) -> Option<ArenaPtr<Block>> {
+        self.parent_block
+    }
+
+    pub fn set_parent_block(&mut self, parent_block: ArenaPtr<Block>) {
+        self.parent_block = Some(parent_block);
+    }
+
+    pub fn parent_region(&self, ctx: &Context) -> Option<ArenaPtr<Region>> {
+        self.parent_block.map(|ptr| {
+            let block = ptr.deref(&ctx.blocks);
+            block.parent_region()
+        })
     }
 }
 
@@ -111,6 +153,17 @@ impl OpObj {
     }
 }
 
-pub trait OpBuilder {
-    fn build(self, ctx: &Context) -> OpObj;
+impl Parse for OpObj {
+    type Arg = Option<ArenaPtr<Block>>;
+    type Item = ArenaPtr<OpObj>;
+
+    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        todo!()
+    }
+}
+
+impl Print for OpObj {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        todo!()
+    }
 }

@@ -247,7 +247,7 @@ where
             .entry(unique_hash)
             .or_insert_with(HashSet::default)
             .insert(ptr);
-        return ptr;
+        ptr
     }
 
     fn free(&mut self, ptr: ArenaPtr<T>) {

@@ -1,7 +1,11 @@
+use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
 
-use crate::support::storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash};
+use crate::{
+    support::storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
+    Parse, Print, PrintState, TokenStream,
+};
 
 use super::{context::Context, mnemonic::Mnemonic};
 
@@ -73,3 +77,18 @@ impl PartialEq for TypeObj {
 }
 
 impl Eq for TypeObj {}
+
+impl Parse for TypeObj {
+    type Arg = ();
+    type Item = ArenaPtr<TypeObj>;
+
+    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        todo!()
+    }
+}
+
+impl Print for TypeObj {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        todo!()
+    }
+}

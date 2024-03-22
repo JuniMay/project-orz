@@ -5,6 +5,7 @@ use thiserror::Error;
 
 use super::context::Context;
 
+/// The position in the source code.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Pos {
     line: u32,
@@ -58,6 +59,7 @@ impl Pos {
     }
 }
 
+/// The span of a token/item in the source code.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub(self) start: Pos,
@@ -97,7 +99,7 @@ pub enum TokenKind {
     /// A symbol name starting with `@`.
     SymbolName(String),
     /// A string literal.
-    QuotedString(String),
+    Quoted(String),
     /// Other tokenized string.
     ///
     /// This represents contiguous alphanumeric or with `_`, `-`, `.` characters.
@@ -115,7 +117,7 @@ impl fmt::Display for TokenKind {
             TokenKind::ValueName(s) => write!(f, "%{}", s),
             TokenKind::TypeAlias(s) => write!(f, "!{}", s),
             TokenKind::SymbolName(s) => write!(f, "@{}", s),
-            TokenKind::QuotedString(s) => write!(f, "\"{}\"", s),
+            TokenKind::Quoted(s) => write!(f, "\"{}\"", s),
             TokenKind::Tokenized(s) => write!(f, "{}", s),
             TokenKind::Eof => write!(f, "EOF"),
         }
@@ -352,7 +354,7 @@ impl<'a> TokenStream<'a> {
             }
             Some('"') => {
                 // not consume here, just hand over to handle_identifier
-                TokenKind::QuotedString(self.handle_identifier()?)
+                TokenKind::Quoted(self.handle_identifier()?)
             }
             Some(_) => TokenKind::Tokenized(self.handle_identifier()?),
             None => TokenKind::Eof,

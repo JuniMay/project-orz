@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
 
 use crate::support::storage::{Arena, UniqueArena};
 
@@ -8,6 +8,7 @@ use super::{
 };
 
 /// The context of the whole IR.
+#[derive(Default)]
 pub struct Context {
     /// The values.
     pub values: Arena<Value>,
@@ -22,19 +23,5 @@ pub struct Context {
     /// The dialects.
     pub dialects: HashMap<MnemonicSegment, Dialect>,
     /// The name of values.
-    pub value_names: NameManager<Value>,
-}
-
-impl Default for Context {
-    fn default() -> Self {
-        Self {
-            values: Arena::default(),
-            blocks: Arena::default(),
-            regions: Arena::default(),
-            ops: Arena::default(),
-            types: UniqueArena::default(),
-            dialects: HashMap::default(),
-            value_names: NameManager::default(),
-        }
-    }
+    pub(crate) value_names: RefCell<NameManager<Value>>,
 }

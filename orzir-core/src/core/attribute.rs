@@ -1,5 +1,8 @@
+use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
+
+use crate::{Parse, Print, PrintState, TokenStream};
 
 use super::{context::Context, mnemonic::Mnemonic};
 
@@ -57,5 +60,20 @@ impl AttrObj {
 impl PartialEq for AttrObj {
     fn eq(&self, other: &Self) -> bool {
         self.as_inner().eq(other.as_inner())
+    }
+}
+
+impl Print for AttrObj {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        todo!()
+    }
+}
+
+impl Parse for AttrObj {
+    type Arg = ();
+    type Item = AttrObj;
+
+    fn parse(_: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        todo!()
     }
 }

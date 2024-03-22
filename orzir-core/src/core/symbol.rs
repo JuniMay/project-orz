@@ -4,7 +4,10 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::support::{bimap::BiMap, storage::ArenaPtr};
+use crate::support::{
+    bimap::{BiMap, Duplicated},
+    storage::ArenaPtr,
+};
 use anyhow::Result;
 use thiserror::Error;
 
@@ -46,14 +49,18 @@ impl SymbolTable {
 }
 
 #[derive(Debug, Error)]
-pub enum NameAllocErr {
-    /// The key is already assigned or allocated.
+pub enum NameAllocDuplicatedErr {
+    /// The key is already assigned or allocated with a different name.
     #[error("key is already allocated.")]
-    KeyDuplicated,
+    Key,
 
-    /// The name is already assigned or allocated.
+    /// The name is already assigned or allocated for a different key.
     #[error("name is already allocated.")]
-    NameDuplicated,
+    Name,
+
+    /// The key and name are both duplicated with different values.
+    #[error("key and name are both duplicated.")]
+    Both,
 }
 
 pub struct NameManager<T> {
@@ -72,14 +79,14 @@ impl<T> Default for NameManager<T> {
 
 impl<T> NameManager<T> {
     pub fn set(&mut self, ptr: ArenaPtr<T>, name: String) -> Result<()> {
-        if self.names.contains_rev(&name) {
-            return Err(NameAllocErr::NameDuplicated.into());
+        let result = self.names.checked_insert(ptr, name);
+        match result {
+            Ok(_) => Ok(()),
+            Err(Duplicated::Fwd(_)) => Err(NameAllocDuplicatedErr::Key.into()),
+            Err(Duplicated::Rev(_)) => Err(NameAllocDuplicatedErr::Name.into()),
+            Err(Duplicated::Both(_, _)) => Err(NameAllocDuplicatedErr::Both.into()),
+            Err(Duplicated::Full) => Ok(()),
         }
-        if self.names.contains_fwd(&ptr) {
-            return Err(NameAllocErr::KeyDuplicated.into());
-        }
-        self.names.insert(ptr, name);
-        Ok(())
     }
 
     pub fn get(&mut self, ptr: ArenaPtr<T>) -> String {

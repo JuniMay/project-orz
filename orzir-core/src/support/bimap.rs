@@ -2,9 +2,13 @@ use std::{collections::HashMap, hash::Hash};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Duplicated<L, R> {
+    /// The forward key is duplicated with different reverse key.
     Fwd(R),
+    /// The reverse key is duplicated with different forward key.
     Rev(L),
+    /// Both keys are duplicated with different values.
     Both(R, L),
+    /// The given key-value pair is already in the map.
     Full,
 }
 
