@@ -362,6 +362,16 @@ impl<'a> TokenStream<'a> {
                 self.consume_char();
                 TokenKind::Char(c)
             }
+            Some('-') => {
+                self.consume_char();
+                match self.peek_char()? {
+                    Some('>') => {
+                        self.consume_char();
+                        TokenKind::Arrow
+                    }
+                    _ => TokenKind::Char('-'),
+                }
+            }
             Some(_) => TokenKind::Tokenized(self.handle_identifier()?),
             None => TokenKind::Eof,
         };

@@ -168,6 +168,136 @@ impl Print for TupleType {
     }
 }
 
+#[derive(Debug, Hash, PartialEq, Eq)]
+#[ty("builtin.fn")]
+pub struct FunctionType {
+    args: Vec<ArenaPtr<TypeObj>>,
+    rets: Vec<ArenaPtr<TypeObj>>,
+}
+
+impl Parse for FunctionType {
+    type Arg = ();
+    type Item = ArenaPtr<TypeObj>;
+
+    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        stream.expect(TokenKind::Char('('))?;
+        let mut args = Vec::new();
+        loop {
+            let ty = TypeObj::parse((), ctx, stream)?;
+            args.push(ty);
+            let token = stream.consume()?;
+            match token.kind {
+                TokenKind::Char(',') => {}
+                TokenKind::Char(')') => break,
+                _ => anyhow::bail!("expect ',' or ')', got {:?}", token.kind),
+            }
+        }
+
+        stream.expect(TokenKind::Arrow)?;
+
+        let mut rets = Vec::new();
+        if stream.peek()?.kind != TokenKind::Char('(') {
+            let ty = TypeObj::parse((), ctx, stream)?;
+            rets.push(ty);
+        } else {
+            stream.consume()?;
+            loop {
+                let ty = TypeObj::parse((), ctx, stream)?;
+                rets.push(ty);
+                let token = stream.consume()?;
+                match token.kind {
+                    TokenKind::Char(',') => {}
+                    TokenKind::Char(')') => break,
+                    _ => anyhow::bail!("expect ',' or ')', got {:?}", token.kind),
+                }
+            }
+        }
+
+        Ok(FunctionType::get(ctx, args, rets))
+    }
+}
+
+impl Print for FunctionType {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        write!(state.buffer, "(")?;
+        for (i, ty) in self.args.iter().enumerate() {
+            ty.deref(&ctx.types).print(ctx, state)?;
+            if i != self.args.len() - 1 {
+                write!(state.buffer, ", ")?;
+            }
+        }
+        write!(state.buffer, ") -> ")?;
+        if self.rets.len() > 1 {
+            write!(state.buffer, "(")?;
+        }
+        for (i, ty) in self.rets.iter().enumerate() {
+            ty.deref(&ctx.types).print(ctx, state)?;
+            if i != self.rets.len() - 1 {
+                write!(state.buffer, ", ")?;
+            }
+        }
+        if self.rets.len() > 1 {
+            write!(state.buffer, ")")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Hash, PartialEq, Eq)]
+#[ty("builtin.memref")]
+pub struct MemRefType {
+    shape: Vec<usize>,
+    elem: ArenaPtr<TypeObj>,
+}
+
+impl Parse for MemRefType {
+    type Arg = ();
+    type Item = ArenaPtr<TypeObj>;
+
+    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        stream.expect(TokenKind::Char('<'))?;
+        let mut shape = Vec::new();
+        let mut elem = None;
+        loop {
+            let token = stream.peek()?;
+            match &token.kind {
+                TokenKind::Tokenized(s) if s == "x" => {
+                    stream.consume()?;
+                }
+                TokenKind::Tokenized(s) => {
+                    let dim = s.parse::<usize>().ok();
+                    if let Some(dim) = dim {
+                        stream.consume()?;
+                        shape.push(dim);
+                    } else {
+                        elem = Some(TypeObj::parse((), ctx, stream)?);
+                    }
+                }
+                TokenKind::Char('>') => {
+                    stream.consume()?;
+                    break;
+                }
+                _ => anyhow::bail!("expect a number or 'x', got {:?}", token.kind),
+            }
+        }
+
+        Ok(MemRefType::get(ctx, shape, elem.unwrap()))
+    }
+}
+
+impl Print for MemRefType {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        write!(state.buffer, "<")?;
+        for dim in self.shape.iter() {
+            write!(state.buffer, "{}", dim)?;
+            write!(state.buffer, " x ")?;
+        }
+        self.elem.deref(&ctx.types).print(ctx, state)?;
+        write!(state.buffer, ">")?;
+        Ok(())
+    }
+}
+
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("builtin".into());
     ctx.dialects.insert("builtin".into(), dialect);
@@ -178,16 +308,20 @@ pub fn register(ctx: &mut Context) {
     FloatType::register(ctx, FloatType::parse);
     DoubleType::register(ctx, DoubleType::parse);
     TupleType::register(ctx, TupleType::parse);
+    FunctionType::register(ctx, FunctionType::parse);
+    MemRefType::register(ctx, MemRefType::parse);
 }
 
 #[cfg(test)]
 mod tests {
     use orzir_core::{Context, Parse, Print, PrintState, TokenStream, TypeObj};
 
-    use crate::dialects::builtin::{self, DoubleType, FloatType, IntType, TupleType};
+    use crate::dialects::builtin::{
+        self, DoubleType, FloatType, FunctionType, IntType, MemRefType, TupleType,
+    };
 
     #[test]
-    fn test_types() {
+    fn test_types_cmp() {
         let mut ctx = Context::default();
 
         let int0 = IntType::get(&mut ctx, 32);
@@ -212,6 +346,22 @@ mod tests {
 
         assert_eq!(tuple0, tuple1);
         assert_ne!(tuple0, tuple2);
+
+        let fn0 = FunctionType::get(&mut ctx, vec![int0, float0], vec![double0]);
+        let fn1 = FunctionType::get(&mut ctx, vec![int0, float0], vec![double0]);
+        let fn2 = FunctionType::get(&mut ctx, vec![int0, float0], vec![double0, int0]);
+
+        assert_eq!(fn0, fn1);
+        assert_ne!(fn0, fn2);
+
+        let memref0 = MemRefType::get(&mut ctx, vec![1, 2, 3], int0);
+        let memref1 = MemRefType::get(&mut ctx, vec![1, 2, 3], int0);
+        let memref2 = MemRefType::get(&mut ctx, vec![1, 2, 3], int1);
+        let memref3 = MemRefType::get(&mut ctx, vec![6, 6, 6], int1);
+
+        assert_eq!(memref0, memref1);
+        assert_ne!(memref0, memref2);
+        assert_ne!(memref0, memref3);
     }
 
     fn test_type_parse_print(ty: &str, expected: &str) {
@@ -244,6 +394,38 @@ mod tests {
         test_type_parse_print(
             "tuple<int<32>, float>",
             "builtin.tuple<builtin.int<32>, builtin.float>",
+        );
+    }
+
+    #[test]
+    fn test_func_parse_0() {
+        test_type_parse_print(
+            "fn(int<32>, float) -> double",
+            "builtin.fn(builtin.int<32>, builtin.float) -> builtin.double",
+        );
+    }
+
+    #[test]
+    fn test_func_parse_1() {
+        test_type_parse_print(
+            "fn(int<32>, float) -> tuple<int<32>, float>",
+            "builtin.fn(builtin.int<32>, builtin.float) -> builtin.tuple<builtin.int<32>, builtin.float>",
+        );
+    }
+
+    #[test]
+    fn test_func_parse_2() {
+        test_type_parse_print(
+            "fn(int<32>, float) -> (int<32>, float)",
+            "builtin.fn(builtin.int<32>, builtin.float) -> (builtin.int<32>, builtin.float)",
+        );
+    }
+
+    #[test]
+    fn test_memref_parse() {
+        test_type_parse_print(
+            "memref<1 x 2 x 3 x int<32>>",
+            "builtin.memref<1 x 2 x 3 x builtin.int<32>>",
         );
     }
 }
