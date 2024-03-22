@@ -68,6 +68,13 @@ impl Value {
     pub(crate) fn set_name(&self, ctx: &Context, name: String) -> Result<()> {
         ctx.value_names.borrow_mut().set(self.self_ptr(), name)
     }
+
+    /// Reserve a unknown value with a name.
+    pub(crate) fn reserve_with_name(ctx: &mut Context, name: String) -> ArenaPtr<Self> {
+        let self_ptr = ctx.values.reserve();
+        ctx.value_names.borrow_mut().set(self_ptr, name).unwrap();
+        self_ptr
+    }
 }
 
 #[derive(Debug, Default)]

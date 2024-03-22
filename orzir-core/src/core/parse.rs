@@ -463,3 +463,5 @@ pub trait Parse {
 
     fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item>;
 }
+
+pub type ParseFn<Arg, Item> = fn(Arg, &mut Context, &mut TokenStream) -> Result<Item>;

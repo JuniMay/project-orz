@@ -2,7 +2,6 @@ pub(crate) mod core;
 pub(crate) mod support;
 
 pub use crate::core::{
-    attribute::{Attr, AttrObj},
     context::Context,
     dialect::Dialect,
     mnemonic::{Mnemonic, MnemonicSegment},

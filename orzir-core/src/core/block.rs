@@ -24,17 +24,22 @@ impl Block {
         BlockBuilder::default()
     }
 
+    /// Get the name of the block.
+    ///
+    /// This will allocate a new name if the block does not have one.
     pub(crate) fn name(&self, ctx: &Context) -> String {
         let region = self.parent_region.deref(&ctx.regions);
         let name = region.block_names.borrow_mut().get(self.self_ptr);
         name
     }
 
+    /// Set the name of the block.
     pub(crate) fn set_name(&self, ctx: &Context, name: String) -> Result<()> {
         let region = self.parent_region.deref(&ctx.regions);
         region.block_names.borrow_mut().set(self.self_ptr, name)
     }
 
+    /// Add an argument to the block.
     pub(crate) fn add_arg(&mut self, arg: ArenaPtr<Value>) -> usize {
         self.args.push(arg);
         self.args.len() - 1
@@ -52,11 +57,24 @@ impl Block {
         self.is_entry = is_entry;
     }
 
+    /// Reserve a unknown block with a name
+    pub(crate) fn reserve_with_name(
+        ctx: &mut Context,
+        name: String,
+        region: ArenaPtr<Region>,
+    ) -> ArenaPtr<Block> {
+        let region = region.deref(&ctx.regions);
+        let self_ptr = ctx.blocks.reserve();
+        region.block_names.borrow_mut().set(self_ptr, name).unwrap();
+        self_ptr
+    }
+
     pub fn parent_region(&self) -> ArenaPtr<Region> {
         self.parent_region
     }
 }
 
+/// A block builder.
 #[derive(Debug, Default)]
 pub struct BlockBuilder {
     name: Option<String>,
@@ -65,16 +83,19 @@ pub struct BlockBuilder {
 }
 
 impl BlockBuilder {
+    /// Set the entry of the block.
     pub fn entry(mut self, is_entry: bool) -> Self {
         self.is_entry = Some(is_entry);
         self
     }
 
+    /// Set the parent region of the block.
     pub fn parent_region(mut self, parent_region: ArenaPtr<Region>) -> Self {
         self.parent_region = Some(parent_region);
         self
     }
 
+    /// Set the name of the block.
     pub fn name(mut self, name: String) -> Self {
         self.name = Some(name);
         self

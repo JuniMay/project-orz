@@ -7,27 +7,19 @@ use intertrait::{cast::CastRef, CastFrom};
 use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream};
 
 use super::{
-    attribute::AttrObj, block::Block, context::Context, mnemonic::Mnemonic, ty, value::Value,
+    block::Block,
+    context::Context,
+    mnemonic::Mnemonic,
+    parse::{ParseFn, TokenKind},
+    value::{OpResultBuilder, Value},
 };
 
+#[derive(Default)]
 pub struct OpBase {
-    attrs: HashMap<String, AttrObj>,
     results: Vec<ArenaPtr<Value>>,
     operands: Vec<ArenaPtr<Value>>,
     regions: Vec<ArenaPtr<Region>>,
     parent_block: Option<ArenaPtr<Block>>,
-}
-
-impl Default for OpBase {
-    fn default() -> Self {
-        Self {
-            attrs: HashMap::default(),
-            results: Vec::default(),
-            operands: Vec::default(),
-            regions: Vec::default(),
-            parent_block: None,
-        }
-    }
 }
 
 impl OpBase {
@@ -37,6 +29,18 @@ impl OpBase {
 
     pub fn operands(&self) -> &[ArenaPtr<Value>] {
         &self.operands
+    }
+
+    pub fn regions(&self) -> &[ArenaPtr<Region>] {
+        &self.regions
+    }
+
+    pub fn set_results(&mut self, results: Vec<ArenaPtr<Value>>) {
+        self.results = results;
+    }
+
+    pub fn set_operands(&mut self, operands: Vec<ArenaPtr<Value>>) {
+        self.operands = operands;
     }
 
     pub fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>> {
@@ -49,10 +53,6 @@ impl OpBase {
 
     pub fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>> {
         self.regions.get(index).copied()
-    }
-
-    pub fn get_attr(&self, name: &str) -> Option<&AttrObj> {
-        self.attrs.get(name)
     }
 
     pub fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
@@ -68,14 +68,6 @@ impl OpBase {
     pub fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
         self.regions.push(region);
         self.regions.len() - 1
-    }
-
-    pub fn add_attr(&mut self, name: String, attr: AttrObj) -> Result<()> {
-        if self.attrs.contains_key(&name) {
-            anyhow::bail!("The attribute name is already used.");
-        }
-        self.attrs.insert(name, attr);
-        Ok(())
     }
 
     pub fn parent_block(&self) -> Option<ArenaPtr<Block>> {
@@ -157,10 +149,39 @@ impl Parse for OpObj {
     type Arg = Option<ArenaPtr<Block>>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        todo!()
+    fn parse(parent: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        let mut result_builders = Vec::new();
+        loop {
+            let token = stream.peek()?;
+            match token.kind {
+                TokenKind::ValueName(ref name) => {
+                    let builder = Value::op_result_builder().name(name.clone());
+                    result_builders.push(builder);
+                    let token = stream.consume()?;
+                    match token.kind {
+                        TokenKind::Char(',') => continue,
+                        TokenKind::Char('=') => break,
+                        _ => anyhow::bail!("invalid token: {:?}, expected ',' or '='", token.kind),
+                    }
+                }
+                _ => break,
+            }
+        }
+
+        let mnemonic = Mnemonic::parse((), ctx, stream)?;
+
+        let parse_fn = ctx
+            .dialects
+            .get(mnemonic.primary())
+            .expect("dialect not registered")
+            .get_op_parse_fn(&mnemonic)
+            .expect("op not registered");
+
+        parse_fn((result_builders, parent), ctx, stream)
     }
 }
+
+pub type OpParseFn = ParseFn<(Vec<OpResultBuilder>, Option<ArenaPtr<Block>>), ArenaPtr<OpObj>>;
 
 impl Print for OpObj {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {

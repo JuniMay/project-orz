@@ -7,7 +7,7 @@ use crate::{
     Parse, Print, PrintState, TokenStream,
 };
 
-use super::{context::Context, mnemonic::Mnemonic};
+use super::{context::Context, mnemonic::Mnemonic, parse::ParseFn};
 
 pub trait Type: Downcast + CastFrom + GetUniqueArenaHash {
     /// Get the mnemonic of the type.
@@ -86,6 +86,8 @@ impl Parse for TypeObj {
         todo!()
     }
 }
+
+pub type TypeParseFn = ParseFn<(), ArenaPtr<TypeObj>>;
 
 impl Print for TypeObj {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {

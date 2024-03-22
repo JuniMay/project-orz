@@ -1,5 +1,5 @@
 use orzir_core::{ArenaPtr, TypeObj};
-use orzir_macros::{attr, op, ty};
+use orzir_macros::{op, ty};
 
 #[op("builtin.module")]
 pub struct ModuleOp;
@@ -20,18 +20,6 @@ pub struct DoubleType;
 #[ty("builtin.tuple")]
 pub struct TupleType {
     elems: Vec<ArenaPtr<TypeObj>>,
-}
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[attr("builtin.string")]
-pub struct StringAttr {
-    value: String,
-}
-
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[attr("builtin.symbol")]
-pub struct SymbolAttr {
-    value: String,
 }
 
 #[cfg(test)]
