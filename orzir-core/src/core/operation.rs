@@ -14,11 +14,80 @@ use super::{
     value::{OpResultBuilder, Value},
 };
 
+pub struct Successor {
+    block: ArenaPtr<Block>,
+    args: Vec<ArenaPtr<Value>>,
+}
+
+impl Successor {
+    pub fn new(block: ArenaPtr<Block>, args: Vec<ArenaPtr<Value>>) -> Self {
+        Self { block, args }
+    }
+
+    pub fn block(&self) -> ArenaPtr<Block> {
+        self.block
+    }
+
+    pub fn args(&self) -> &[ArenaPtr<Value>] {
+        &self.args
+    }
+}
+
+impl Parse for Successor {
+    type Arg = ArenaPtr<Region>;
+    type Item = Successor;
+
+    fn parse(region: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        let token = stream.consume()?;
+        if let TokenKind::BlockLabel(label) = &token.kind {
+            let block = Block::reserve_with_name(ctx, label.clone(), region);
+            let mut args = Vec::new();
+            if stream.consume_if(TokenKind::Char('('))?.is_some() {
+                loop {
+                    if stream.consume_if(TokenKind::Char(')'))?.is_some() {
+                        break;
+                    }
+                    let arg = Value::parse((), ctx, stream)?;
+                    args.push(arg);
+
+                    match stream.consume()?.kind {
+                        TokenKind::Char(')') => break,
+                        TokenKind::Char(',') => continue,
+                        _ => anyhow::bail!("expected ')' or ','"),
+                    }
+                }
+            }
+            Ok(Successor::new(block, args))
+        } else {
+            anyhow::bail!("expected block label");
+        }
+    }
+}
+
+impl Print for Successor {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        let block_name = self.block.deref(&ctx.blocks).name(ctx);
+        write!(state.buffer, "^{}", block_name)?;
+        if !self.args.is_empty() {
+            write!(state.buffer, "(")?;
+            for (i, arg) in self.args.iter().enumerate() {
+                arg.deref(&ctx.values).print(ctx, state)?;
+                if i != self.args.len() - 1 {
+                    write!(state.buffer, ", ")?;
+                }
+            }
+            write!(state.buffer, ")")?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Default)]
 pub struct OpBase {
     results: Vec<ArenaPtr<Value>>,
     operands: Vec<ArenaPtr<Value>>,
     regions: Vec<ArenaPtr<Region>>,
+    successors: Vec<Successor>,
     parent_block: Option<ArenaPtr<Block>>,
 }
 
@@ -29,6 +98,10 @@ impl OpBase {
 
     pub fn operands(&self) -> &[ArenaPtr<Value>] {
         &self.operands
+    }
+
+    pub fn successors(&self) -> &[Successor] {
+        &self.successors
     }
 
     pub fn operand_types(&self, ctx: &Context) -> Vec<ArenaPtr<TypeObj>> {
@@ -69,6 +142,10 @@ impl OpBase {
         self.regions.get(index).copied()
     }
 
+    pub fn get_successor(&self, index: usize) -> Option<&Successor> {
+        self.successors.get(index)
+    }
+
     pub fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
         self.results.push(result);
         self.results.len() - 1
@@ -82,6 +159,10 @@ impl OpBase {
     pub fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
         self.regions.push(region);
         self.regions.len() - 1
+    }
+
+    pub fn add_successor(&mut self, successor: Successor) {
+        self.successors.push(successor);
     }
 
     pub fn parent_block(&self) -> Option<ArenaPtr<Block>> {

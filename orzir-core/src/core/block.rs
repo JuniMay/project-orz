@@ -57,14 +57,18 @@ impl Block {
         self.is_entry = is_entry;
     }
 
-    /// Reserve a unknown block with a name
+    /// Reserve a unknown block with a name, if the name is already used, return the block.
     pub(crate) fn reserve_with_name(
         ctx: &mut Context,
         name: String,
         region: ArenaPtr<Region>,
     ) -> ArenaPtr<Block> {
         let region = region.deref(&ctx.regions);
-        let self_ptr = ctx.blocks.reserve();
+        let self_ptr = region
+            .block_names
+            .borrow()
+            .get_by_name(&name)
+            .unwrap_or_else(|| ctx.blocks.reserve());
         region.block_names.borrow_mut().set(self_ptr, name).unwrap();
         self_ptr
     }
