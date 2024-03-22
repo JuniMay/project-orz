@@ -1,6 +1,7 @@
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Op, OpObj, OpResultBuilder, Parse, Print, PrintState, Region, RegionKind, TokenKind, TokenStream, TypeObj
+    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
+    Region, RegionKind, TokenKind, TokenStream, Type, TypeObj,
 };
 use orzir_macros::{op, ty};
 use std::fmt::Write;
@@ -31,7 +32,10 @@ impl Parse for ModuleOp {
         };
 
         let op = ModuleOp::new(ctx, symbol);
-        op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops)
+            .as_inner_mut()
+            .as_base_mut()
+            .set_parent_block(parent_block);
 
         let region_builder = Region::builder().parent_op(op).kind(RegionKind::Graph);
         // the region will be added in the parser.
@@ -96,7 +100,7 @@ impl Parse for FloatType {
     fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
         Ok(FloatType::get(ctx))
     }
-}   
+}
 
 impl Print for FloatType {
     fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
@@ -123,43 +127,123 @@ impl Print for DoubleType {
     }
 }
 
-// #[derive(Debug, Hash, PartialEq, Eq)]
-// #[ty("builtin.tuple")]
-// pub struct TupleType {
-//     elems: Vec<ArenaPtr<TypeObj>>,
-// }
+#[derive(Debug, Hash, PartialEq, Eq)]
+#[ty("builtin.tuple")]
+pub struct TupleType {
+    elems: Vec<ArenaPtr<TypeObj>>,
+}
 
-// #[cfg(test)]
-// mod tests {
-//     use orzir_core::Context;
+impl Parse for TupleType {
+    type Arg = ();
+    type Item = ArenaPtr<TypeObj>;
 
-//     use crate::dialects::builtin::{DoubleType, FloatType, IntType, TupleType};
+    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        stream.expect(TokenKind::Char('<'))?;
+        let mut elems = Vec::new();
+        loop {
+            let ty = TypeObj::parse((), ctx, stream)?;
+            elems.push(ty);
+            let token = stream.consume()?;
+            match token.kind {
+                TokenKind::Char(',') => {}
+                TokenKind::Char('>') => break,
+                _ => anyhow::bail!("expect ',' or '>', got {:?}", token.kind),
+            }
+        }
+        Ok(TupleType::get(ctx, elems))
+    }
+}
 
-//     #[test]
-//     fn test_types() {
-//         let mut ctx = Context::default();
+impl Print for TupleType {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        write!(state.buffer, "<")?;
+        for (i, ty) in self.elems.iter().enumerate() {
+            ty.deref(&ctx.types).print(ctx, state)?;
+            if i != self.elems.len() - 1 {
+                write!(state.buffer, ", ")?;
+            }
+        }
+        write!(state.buffer, ">")?;
+        Ok(())
+    }
+}
 
-//         let int0 = IntType::get(&mut ctx, 32);
-//         let int1 = IntType::get(&mut ctx, 64);
-//         let int2 = IntType::get(&mut ctx, 32);
-//         let float0 = FloatType::get(&mut ctx);
-//         let float1 = FloatType::get(&mut ctx);
+pub fn register(ctx: &mut Context) {
+    let dialect = Dialect::new("builtin".into());
+    ctx.dialects.insert("builtin".into(), dialect);
 
-//         let double0 = DoubleType::get(&mut ctx);
-//         let double1 = DoubleType::get(&mut ctx);
+    ModuleOp::register(ctx, ModuleOp::parse);
 
-//         assert_ne!(int0, float0);
-//         assert_ne!(int0, int1);
-//         assert_eq!(int0, int2);
-//         assert_eq!(float0, float1);
-//         assert_ne!(float0, double0);
-//         assert_eq!(double0, double1);
+    IntType::register(ctx, IntType::parse);
+    FloatType::register(ctx, FloatType::parse);
+    DoubleType::register(ctx, DoubleType::parse);
+    TupleType::register(ctx, TupleType::parse);
+}
 
-//         let tuple0 = TupleType::get(&mut ctx, vec![int0, float0]);
-//         let tuple1 = TupleType::get(&mut ctx, vec![int0, float0]);
-//         let tuple2 = TupleType::get(&mut ctx, vec![int0, float0, double0]);
+#[cfg(test)]
+mod tests {
+    use orzir_core::{Context, Parse, Print, PrintState, TokenStream, TypeObj};
 
-//         assert_eq!(tuple0, tuple1);
-//         assert_ne!(tuple0, tuple2);
-//     }
-// }
+    use crate::dialects::builtin::{self, DoubleType, FloatType, IntType, TupleType};
+
+    #[test]
+    fn test_types() {
+        let mut ctx = Context::default();
+
+        let int0 = IntType::get(&mut ctx, 32);
+        let int1 = IntType::get(&mut ctx, 64);
+        let int2 = IntType::get(&mut ctx, 32);
+        let float0 = FloatType::get(&mut ctx);
+        let float1 = FloatType::get(&mut ctx);
+
+        let double0 = DoubleType::get(&mut ctx);
+        let double1 = DoubleType::get(&mut ctx);
+
+        assert_ne!(int0, float0);
+        assert_ne!(int0, int1);
+        assert_eq!(int0, int2);
+        assert_eq!(float0, float1);
+        assert_ne!(float0, double0);
+        assert_eq!(double0, double1);
+
+        let tuple0 = TupleType::get(&mut ctx, vec![int0, float0]);
+        let tuple1 = TupleType::get(&mut ctx, vec![int0, float0]);
+        let tuple2 = TupleType::get(&mut ctx, vec![int0, float0, double0]);
+
+        assert_eq!(tuple0, tuple1);
+        assert_ne!(tuple0, tuple2);
+    }
+
+    fn test_type_parse_print(ty: &str, expected: &str) {
+        let mut stream = TokenStream::new(ty);
+        let mut ctx = Context::default();
+        builtin::register(&mut ctx);
+        let ty = TypeObj::parse((), &mut ctx, &mut stream).unwrap();
+        let mut state = PrintState::new("");
+        ty.deref(&ctx.types).print(&ctx, &mut state).unwrap();
+        assert_eq!(state.buffer, expected);
+    }
+
+    #[test]
+    fn test_int_parse() {
+        test_type_parse_print("int<32>", "builtin.int<32>");
+    }
+
+    #[test]
+    fn test_float_parse() {
+        test_type_parse_print("float", "builtin.float");
+    }
+
+    #[test]
+    fn test_double_parse() {
+        test_type_parse_print("double", "builtin.double");
+    }
+
+    #[test]
+    fn test_tuple_parse() {
+        test_type_parse_print(
+            "tuple<int<32>, float>",
+            "builtin.tuple<builtin.int<32>, builtin.float>",
+        );
+    }
+}

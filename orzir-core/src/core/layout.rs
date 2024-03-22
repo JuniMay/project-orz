@@ -53,7 +53,7 @@ impl Layout {
     pub fn iter_ops_chained(&self) -> impl Iterator<Item = ArenaPtr<OpObj>> + '_ {
         self.blocks
             .into_iter()
-            .flat_map(|(block, node)| node.ops.into_iter().map(move |(op, _)| op))
+            .flat_map(|(_, node)| node.ops.into_iter().map(move |(op, _)| op))
     }
 
     pub fn append_block(&mut self, block: ArenaPtr<Block>) {

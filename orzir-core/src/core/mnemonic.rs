@@ -10,6 +10,12 @@ use super::parse::TokenKind;
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct MnemonicSegment(String);
 
+impl From<&str> for MnemonicSegment {
+    fn from(segment: &str) -> Self {
+        Self(segment.to_string())
+    }
+}
+
 impl MnemonicSegment {
     /// Create a new mnemonic segment.
     pub fn new(segment: &str) -> Self {

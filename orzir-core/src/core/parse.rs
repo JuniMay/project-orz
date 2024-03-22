@@ -117,8 +117,8 @@ impl fmt::Display for TokenKind {
             TokenKind::ValueName(s) => write!(f, "%{}", s),
             TokenKind::TypeAlias(s) => write!(f, "!{}", s),
             TokenKind::SymbolName(s) => write!(f, "@{}", s),
-            TokenKind::Quoted(s) => write!(f, "{}", s),
-            TokenKind::Tokenized(s) => write!(f, "{}", s),
+            TokenKind::Quoted(s) => write!(f, "Quoted({})", s),
+            TokenKind::Tokenized(s) => write!(f, "Tokenized({})", s),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -196,9 +196,6 @@ pub enum BasicParseError {
 
     #[error("invalid character at {0}")]
     InvalidCharacter(Pos),
-
-    #[error("invalid token at {0}, expect {1}")]
-    InvalidToken(Span, TokenKind),
 }
 
 impl<'a> TokenStream<'a> {
@@ -356,6 +353,15 @@ impl<'a> TokenStream<'a> {
                 // not consume here, just hand over to handle_identifier
                 TokenKind::Quoted(self.handle_identifier()?)
             }
+            Some(c)
+                if matches!(
+                    c,
+                    ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';'
+                ) =>
+            {
+                self.consume_char();
+                TokenKind::Char(c)
+            }
             Some(_) => TokenKind::Tokenized(self.handle_identifier()?),
             None => TokenKind::Eof,
         };
@@ -446,6 +452,9 @@ impl<'a> TokenStream<'a> {
                 None => break,
             }
         }
+        if s.is_empty() {
+            panic!("empty identifier");
+        }
         Ok(s)
     }
 
@@ -454,7 +463,8 @@ impl<'a> TokenStream<'a> {
         if token.kind == kind {
             Ok(())
         } else {
-            Err(BasicParseError::InvalidToken(token.span, kind).into())
+            // Err(BasicParseError::InvalidToken(token.span, kind).into())
+            anyhow::bail!("invalid token: `{:?}`, expected `{:?}`", token.kind, kind)
         }
     }
 }

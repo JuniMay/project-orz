@@ -7,11 +7,11 @@ pub use crate::core::{
     dialect::Dialect,
     mnemonic::{Mnemonic, MnemonicSegment},
     operation::{Op, OpBase, OpObj},
-    parse::{Parse, TokenStream, TokenKind},
+    parse::{Parse, TokenKind, TokenStream},
     print::{Print, PrintState},
     region::{Region, RegionKind},
     ty::{Type, TypeObj, Typed},
-    value::{OpResultBuilder, BlockArgumentBuilder, Value},
+    value::{BlockArgumentBuilder, OpResultBuilder, Value},
 };
 
 pub use crate::support::storage::{Arena, ArenaBase, ArenaPtr, UniqueArena};
