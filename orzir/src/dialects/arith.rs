@@ -68,7 +68,7 @@ impl Parse for IConstOp {
         stream: &mut orzir_core::TokenStream,
     ) -> Result<Self::Item> {
         let (mut result_builders, parent_block) = arg;
-
+        let neg = stream.consume_if(TokenKind::Char('-'))?.is_some();
         let token = stream.consume()?;
         let value = if let TokenKind::Tokenized(s) = token.kind {
             if s == "true" {
@@ -91,6 +91,8 @@ impl Parse for IConstOp {
         } else {
             anyhow::bail!("invalid token: {:?}", token.kind);
         };
+
+        let value = value * if neg { -1 } else { 1 };
 
         stream.expect(TokenKind::Char(':'))?;
         let ty = TypeObj::parse((), ctx, stream)?;
@@ -186,7 +188,9 @@ mod tests {
                 %0 = arith.iconst true : int<32>
                 %1 = arith.iconst false : int<32>
                 %2 = arith.iadd %0, %1 : int<32>
-                %aaaa = arith.iconst 0x123 : int<32>
+
+                %aaaa = arith.iconst -0x123 : int<32>
+
                 %b = arith.iconst 0b101 : int<32>
                 %c = arith.iconst 0o123 : int<32>
                 %d = arith.iconst 123 : int<32>

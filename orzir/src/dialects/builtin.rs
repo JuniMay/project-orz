@@ -39,7 +39,7 @@ impl Parse for ModuleOp {
 
         let region_builder = Region::builder().parent_op(op).kind(RegionKind::Graph);
         // the region will be added in the parser.
-        let _region = Region::parse(region_builder, ctx, stream);
+        let _region = Region::parse(region_builder, ctx, stream)?;
 
         Ok(op)
     }
