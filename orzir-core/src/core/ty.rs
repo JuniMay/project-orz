@@ -98,9 +98,9 @@ impl Parse for TypeObj {
         let parse_fn = ctx
             .dialects
             .get(mnemonic.primary())
-            .expect("dialect not registered")
+            .unwrap_or_else(|| panic!("dialect {} not found", mnemonic.primary().as_str()))
             .get_type_parse_fn(&mnemonic)
-            .expect("type not registered");
+            .unwrap_or_else(|| panic!("type {}.{} not found", mnemonic.primary().as_str(), mnemonic.secondary().as_str()));
         parse_fn((), ctx, stream)
     }
 }

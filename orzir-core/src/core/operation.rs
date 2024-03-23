@@ -311,9 +311,9 @@ impl Parse for OpObj {
         let parse_fn = ctx
             .dialects
             .get(mnemonic.primary())
-            .expect("dialect not registered")
+            .unwrap_or_else(|| panic!("dialect {} not found: ", mnemonic.primary().as_str()))
             .get_op_parse_fn(&mnemonic)
-            .expect("op not registered");
+            .unwrap_or_else(|| panic!("op {}.{} not found", mnemonic.primary().as_str(), mnemonic.secondary().as_str()));
 
         parse_fn((result_builders, parent), ctx, stream)
     }
