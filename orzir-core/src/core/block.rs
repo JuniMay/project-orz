@@ -181,8 +181,6 @@ impl Parse for Block {
                                     .ty(ty)
                                     .build(ctx)?;
 
-                                block.deref_mut(&mut ctx.blocks).add_arg(arg);
-
                                 if stream.consume_if(TokenKind::Char(','))?.is_none() {
                                     // end of the arguments.
                                     stream.expect(TokenKind::Char(')'))?;
@@ -248,7 +246,7 @@ impl Print for Block {
                     let ty = arg.ty(ctx);
                     ty.deref(&ctx.types).print(ctx, state)?;
                     if i != self.args.len() - 1 {
-                        write!(state.buffer, ",")?;
+                        write!(state.buffer, ", ")?;
                     }
                 }
                 write!(state.buffer, "):")?;

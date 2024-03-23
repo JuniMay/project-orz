@@ -61,6 +61,18 @@ impl Region {
     pub fn set_kind(&mut self, kind: RegionKind) {
         self.kind = kind;
     }
+
+    pub fn parent_op(&self) -> ArenaPtr<OpObj> {
+        self.parent_op
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
+    pub fn self_ptr(&self) -> ArenaPtr<Self> {
+        self.self_ptr
+    }
 }
 
 impl RegionBuilder {
@@ -130,6 +142,10 @@ impl Parse for Region {
     type Arg = RegionBuilder;
     type Item = ArenaPtr<Region>;
 
+    /// Parse the region.
+    ///
+    /// This require the parent operation parser to pass the builder to the region parser, and set
+    /// the kind and parent operation.
     fn parse(
         builder: Self::Arg,
         ctx: &mut Context,

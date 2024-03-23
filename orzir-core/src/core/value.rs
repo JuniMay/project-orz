@@ -68,13 +68,6 @@ impl Value {
     pub(crate) fn set_name(&self, ctx: &Context, name: String) -> Result<()> {
         ctx.value_names.borrow_mut().set(self.self_ptr(), name)
     }
-
-    /// Reserve a unknown value with a name.
-    pub(crate) fn reserve_with_name(ctx: &mut Context, name: String) -> ArenaPtr<Self> {
-        let self_ptr = ctx.values.reserve();
-        ctx.value_names.borrow_mut().set(self_ptr, name).unwrap();
-        self_ptr
-    }
 }
 
 #[derive(Debug, Default)]
@@ -112,6 +105,8 @@ impl OpResultBuilder {
     }
 
     /// Build the value.
+    ///
+    /// This will add the result to the operation.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
         let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
         let op = self.op.ok_or_else(|| anyhow!("missing op"))?;
@@ -165,6 +160,8 @@ impl BlockArgumentBuilder {
     }
 
     /// Build the value.
+    ///
+    /// This will add the block argument to the block.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
         let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
         let block = self.block.ok_or_else(|| anyhow!("missing block"))?;

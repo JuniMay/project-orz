@@ -177,6 +177,8 @@ impl<T> Arena<T> {
         let entry = self.pool.get_mut(ptr.index()).unwrap();
         if let ArenaEntry::Reserved = entry {
             *entry = ArenaEntry::Occupied(val);
+        } else if let ArenaEntry::Occupied(_) = entry {
+            panic!("ArenaPtr occupied");
         } else {
             panic!("ArenaPtr not reserved");
         }
