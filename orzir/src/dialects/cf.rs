@@ -29,6 +29,11 @@ impl Parse for Jump {
             .as_base_mut()
             .add_successor(successor);
 
+        op.deref_mut(&mut ctx.ops)
+            .as_inner_mut()
+            .as_base_mut()
+            .set_parent_block(parent_block);
+
         Ok(op)
     }
 }
@@ -74,6 +79,7 @@ impl Parse for Branch {
         op_base.add_operand(cond);
         op_base.add_successor(then_block);
         op_base.add_successor(else_block);
+        op_base.set_parent_block(parent_block);
 
         Ok(op)
     }
@@ -186,7 +192,7 @@ mod tests {
                 cf.jump ^return
 
             ^return:
-                // func.return %a // not implemented
+                func.return %a
             }
         }
         "#;

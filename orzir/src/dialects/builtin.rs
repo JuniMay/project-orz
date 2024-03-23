@@ -327,6 +327,7 @@ pub fn register(ctx: &mut Context) {
 
     ModuleOp::register(ctx, ModuleOp::parse);
 
+    UnitType::register(ctx, UnitType::parse);
     IntType::register(ctx, IntType::parse);
     FloatType::register(ctx, FloatType::parse);
     DoubleType::register(ctx, DoubleType::parse);
