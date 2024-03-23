@@ -1,7 +1,7 @@
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
-    Region, RegionKind, TokenKind, TokenStream, TypeObj,
+    Region, RegionKind, TokenKind, TokenStream, TypeObj, Value,
 };
 use orzir_macros::op;
 use std::fmt::Write;
@@ -65,11 +65,67 @@ impl Print for FuncOp {
     }
 }
 
+#[op("func.return")]
+pub struct ReturnOp;
+
+impl Parse for ReturnOp {
+    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Item = ArenaPtr<OpObj>;
+
+    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        // func.return %1, %2
+        // func.return
+        let (result_builders, parent_block) = arg;
+        assert!(result_builders.is_empty());
+        
+        let op = ReturnOp::new(ctx);
+
+        while let TokenKind::ValueName(_) = stream.peek()?.kind {
+            let operand = Value::parse((), ctx, stream)?;
+            op.deref_mut(&mut ctx.ops)
+                .as_inner_mut()
+                .as_base_mut()
+                .add_operand(operand);
+
+            if let TokenKind::Char(',') = stream.peek()?.kind {
+                stream.consume()?;
+            } else {
+                break;
+            }
+        }
+
+        op.deref_mut(&mut ctx.ops)
+            .as_inner_mut()
+            .as_base_mut()
+            .set_parent_block(parent_block);
+
+        Ok(op)
+    }
+}
+
+impl Print for ReturnOp {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        let operations = self.as_base().operands();
+        if !operations.is_empty() {
+            write!(state.buffer, " ")?;
+            for (i, operand) in operations.iter().enumerate() {
+                if i > 0 {
+                    write!(state.buffer, ", ")?;
+                }
+                operand.deref(&ctx.values).print(ctx, state)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("func".into());
     ctx.dialects.insert("func".into(), dialect);
 
     FuncOp::register(ctx, FuncOp::parse);
+    ReturnOp::register(ctx, ReturnOp::parse);
 }
 
 #[cfg(test)]
@@ -77,8 +133,7 @@ mod tests {
     use orzir_core::{Context, Op, OpObj, Parse, Print, PrintState, TokenStream};
 
     use crate::dialects::{
-        builtin::{self, ModuleOp},
-        func,
+        arith, builtin::{self, ModuleOp}, func
     };
 
     #[test]
@@ -87,7 +142,14 @@ mod tests {
         module {
             func.func @foo () -> (int<32>, float) {
             ^entry:
-                // nothing here
+                // %x = arith.iconst 123 : int<32>
+                // %y = arith.iconst 123 : int<32>
+            ^return:
+                func.return %x, %y
+            ^single:
+                func.return %x
+            ^null:
+                func.return
             }
         }
         "#;
@@ -97,9 +159,10 @@ mod tests {
 
         builtin::register(&mut ctx);
         func::register(&mut ctx);
+        arith::register(&mut ctx);
 
         let op = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
-        let mut state = PrintState::new("");
+        let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
 
