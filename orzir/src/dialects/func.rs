@@ -77,7 +77,7 @@ impl Parse for ReturnOp {
         // func.return
         let (result_builders, parent_block) = arg;
         assert!(result_builders.is_empty());
-        
+
         let op = ReturnOp::new(ctx);
 
         while let TokenKind::ValueName(_) = stream.peek()?.kind {
@@ -133,7 +133,9 @@ mod tests {
     use orzir_core::{Context, Op, OpObj, Parse, Print, PrintState, TokenStream};
 
     use crate::dialects::{
-        arith, builtin::{self, ModuleOp}, func
+        arith,
+        builtin::{self, ModuleOp},
+        func,
     };
 
     #[test]

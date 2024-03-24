@@ -1,6 +1,7 @@
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState, Successor, TokenKind, TokenStream, Value
+    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
+    Successor, TokenKind, TokenStream, Value,
 };
 use orzir_macros::op;
 use std::fmt::Write;
@@ -89,7 +90,11 @@ impl Print for Branch {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " ")?;
         let op_base = self.as_base();
-        op_base.get_operand(0).unwrap().deref(&ctx.values).print(ctx, state)?;
+        op_base
+            .get_operand(0)
+            .unwrap()
+            .deref(&ctx.values)
+            .print(ctx, state)?;
         write!(state.buffer, ", ")?;
         op_base.get_successor(0).unwrap().print(ctx, state)?;
         write!(state.buffer, ", ")?;

@@ -100,7 +100,13 @@ impl Parse for TypeObj {
             .get(mnemonic.primary())
             .unwrap_or_else(|| panic!("dialect {} not found", mnemonic.primary().as_str()))
             .get_type_parse_fn(&mnemonic)
-            .unwrap_or_else(|| panic!("type {}.{} not found", mnemonic.primary().as_str(), mnemonic.secondary().as_str()));
+            .unwrap_or_else(|| {
+                panic!(
+                    "type {}.{} not found",
+                    mnemonic.primary().as_str(),
+                    mnemonic.secondary().as_str()
+                )
+            });
         parse_fn((), ctx, stream)
     }
 }

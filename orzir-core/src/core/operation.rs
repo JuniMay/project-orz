@@ -313,7 +313,13 @@ impl Parse for OpObj {
             .get(mnemonic.primary())
             .unwrap_or_else(|| panic!("dialect {} not found: ", mnemonic.primary().as_str()))
             .get_op_parse_fn(&mnemonic)
-            .unwrap_or_else(|| panic!("op {}.{} not found", mnemonic.primary().as_str(), mnemonic.secondary().as_str()));
+            .unwrap_or_else(|| {
+                panic!(
+                    "op {}.{} not found",
+                    mnemonic.primary().as_str(),
+                    mnemonic.secondary().as_str()
+                )
+            });
 
         parse_fn((result_builders, parent), ctx, stream)
     }
