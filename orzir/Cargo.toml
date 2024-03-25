@@ -13,4 +13,3 @@ intertrait = { git = "https://github.com/JuniMay/intertrait.git" }
 anyhow = "1.0.81"
 arpfloat = "0.1.10"
 num-bigint = "0.4.4"
-linkme = "0.3.25"

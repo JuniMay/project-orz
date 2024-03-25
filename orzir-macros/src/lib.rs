@@ -7,8 +7,8 @@ mod operation;
 mod ty;
 
 /// Implement a [Op](orzir_core::Op) for the given struct.
-#[proc_macro_attribute]
-pub fn op(attr: TokenStream, item: TokenStream) -> TokenStream { derive_op(attr, item) }
+#[proc_macro_derive(Op, attributes(mnemonic, base))]
+pub fn op(item: TokenStream) -> TokenStream { derive_op(item) }
 
 /// Implement a [Type](orzir_core::Type) for the given struct.
 #[proc_macro_attribute]

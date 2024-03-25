@@ -6,7 +6,7 @@ use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
     PrintState, TokenKind, TypeObj, Value,
 };
-use orzir_macros::op;
+use orzir_macros::Op;
 
 fn parse_binary(
     arg: (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>),
@@ -47,8 +47,11 @@ fn print_binary(ctx: &Context, state: &mut PrintState, op_base: &OpBase) -> Resu
     Ok(())
 }
 
-#[op("arith.iconst")]
+#[derive(Op)]
+#[mnemonic("arith.iconst")]
 pub struct IConstOp {
+    #[base]
+    op_base: OpBase,
     value: BigInt,
 }
 
@@ -116,8 +119,12 @@ impl Print for IConstOp {
     }
 }
 
-#[op("arith.iadd")]
-pub struct IAddOp;
+#[derive(Op)]
+#[mnemonic("arith.iadd")]
+pub struct IAddOp {
+    #[base]
+    op_base: OpBase,
+}
 
 impl Parse for IAddOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);

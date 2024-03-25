@@ -13,4 +13,6 @@ quote = "1.0.35"
 proc-macro = true
 
 [dev-dependencies]
+trybuild = "=1.0.0"
 orzir-core = { path = "../orzir-core" }
+anyhow = "1.0.81"

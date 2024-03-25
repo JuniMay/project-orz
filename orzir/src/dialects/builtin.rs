@@ -3,17 +3,23 @@ use std::fmt::Write;
 use anyhow::Result;
 use intertrait::cast_to;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
-    Region, RegionKind, TokenKind, TokenStream, Type, TypeObj,
+    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
+    PrintState, Region, RegionKind, TokenKind, TokenStream, Type, TypeObj,
 };
-use orzir_macros::{op, ty};
+use orzir_macros::{ty, Op};
 
 use crate::interfaces::IsIsolatedFromAbove;
 
-#[op("builtin.module")]
+#[derive(Op)]
+#[mnemonic("builtin.module")]
 pub struct ModuleOp {
+    #[base]
+    op_base: OpBase,
     symbol: Option<String>,
 }
+
+#[cast_to]
+impl IsIsolatedFromAbove for ModuleOp {}
 
 impl Parse for ModuleOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -48,9 +54,6 @@ impl Parse for ModuleOp {
         Ok(op)
     }
 }
-
-#[cast_to]
-impl IsIsolatedFromAbove for ModuleOp {}
 
 impl Print for ModuleOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
@@ -106,9 +109,7 @@ impl Parse for FloatType {
 }
 
 impl Print for FloatType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
-        Ok(())
-    }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
@@ -125,9 +126,7 @@ impl Parse for DoubleType {
 }
 
 impl Print for DoubleType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
-        Ok(())
-    }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
@@ -319,9 +318,7 @@ impl Parse for UnitType {
 }
 
 impl Print for UnitType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
-        Ok(())
-    }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
 pub fn register(ctx: &mut Context) {
@@ -402,19 +399,13 @@ mod tests {
     }
 
     #[test]
-    fn test_int_parse() {
-        test_type_parse_print("int<32>", "int<32>");
-    }
+    fn test_int_parse() { test_type_parse_print("int<32>", "int<32>"); }
 
     #[test]
-    fn test_float_parse() {
-        test_type_parse_print("float", "float");
-    }
+    fn test_float_parse() { test_type_parse_print("float", "float"); }
 
     #[test]
-    fn test_double_parse() {
-        test_type_parse_print("double", "double");
-    }
+    fn test_double_parse() { test_type_parse_print("double", "double"); }
 
     #[test]
     fn test_tuple_parse() {

@@ -3,16 +3,19 @@ use std::fmt::Write;
 use anyhow::{Ok, Result};
 use intertrait::cast_to;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
-    Region, RegionKind, TokenKind, TokenStream, TypeObj, Value,
+    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
+    PrintState, Region, RegionKind, TokenKind, TokenStream, TypeObj, Value,
 };
-use orzir_macros::op;
+use orzir_macros::Op;
 
 use super::builtin::FunctionType;
 use crate::interfaces::IsIsolatedFromAbove;
 
-#[op("func.func")]
+#[derive(Op)]
+#[mnemonic("func.func")]
 pub struct FuncOp {
+    #[base]
+    op_base: OpBase,
     symbol: String,
     ty: ArenaPtr<TypeObj>,
 }
@@ -67,8 +70,12 @@ impl Print for FuncOp {
     }
 }
 
-#[op("func.return")]
-pub struct ReturnOp;
+#[derive(Op)]
+#[mnemonic("func.return")]
+pub struct ReturnOp {
+    #[base]
+    op_base: OpBase,
+}
 
 impl Parse for ReturnOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -125,8 +132,11 @@ impl Print for ReturnOp {
 /// ```text
 /// %result = func.call @callee(%arg1, %arg2) : int<32>
 /// ```
-#[op("func.call")]
+#[derive(Op)]
+#[mnemonic("func.call")]
 pub struct CallOp {
+    #[base]
+    op_base: OpBase,
     callee: String,
     ret_type: ArenaPtr<TypeObj>,
 }
@@ -215,7 +225,9 @@ mod tests {
     use orzir_core::{Context, Op, OpObj, Parse, Print, PrintState, TokenStream};
 
     use crate::dialects::{
-        arith, builtin::{self, ModuleOp}, cf, func
+        arith,
+        builtin::{self, ModuleOp},
+        cf, func,
     };
 
     #[test]
@@ -261,7 +273,6 @@ mod tests {
 
     #[test]
     fn test_call_op() {
-
         let src = r#"
         module {
             func.func @bar(int<32>) -> int<32> {
@@ -280,7 +291,6 @@ mod tests {
             }
         }
         "#;
-
 
         let mut stream = TokenStream::new(src);
         let mut ctx = Context::default();
@@ -312,6 +322,5 @@ mod tests {
             .deref(&ctx.regions)
             .lookup_symbol("bar")
             .is_some());
-
     }
 }

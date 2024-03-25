@@ -2,13 +2,17 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
-    Successor, TokenKind, TokenStream, Value,
+    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
+    PrintState, Successor, TokenKind, TokenStream, Value,
 };
-use orzir_macros::op;
+use orzir_macros::Op;
 
-#[op("cf.jump")]
-pub struct Jump;
+#[derive(Op)]
+#[mnemonic("cf.jump")]
+pub struct Jump {
+    #[base]
+    op_base: OpBase,
+}
 
 impl Parse for Jump {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -47,8 +51,12 @@ impl Print for Jump {
     }
 }
 
-#[op("cf.branch")]
-pub struct Branch;
+#[derive(Op)]
+#[mnemonic("cf.branch")]
+pub struct Branch {
+    #[base]
+    op_base: OpBase,
+}
 
 impl Parse for Branch {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);

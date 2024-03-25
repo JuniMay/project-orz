@@ -13,6 +13,7 @@ pub use crate::{
         region::{Region, RegionBuilder, RegionKind},
         ty::{Type, TypeObj, Typed},
         value::{BlockArgumentBuilder, OpResultBuilder, Value},
+        verify::Verify,
     },
     support::storage::{Arena, ArenaBase, ArenaPtr, UniqueArena},
 };

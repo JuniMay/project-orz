@@ -1,57 +1,35 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, spanned::Spanned, Data, DeriveInput, Fields, Index, LitStr};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, LitStr};
 
-pub fn derive_op(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn derive_op(item: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(item as DeriveInput);
 
-    let vis = ast.vis;
     let ident = ast.ident;
-    let (field, struct_def) = match &ast.data {
+
+    let (ctor, base_field) = match &ast.data {
         Data::Struct(s) => match &s.fields {
             Fields::Named(fields) => {
-                let fields = fields.named.iter();
-                let def = quote! {
-                    #vis struct #ident {
-                        base: ::orzir_core::OpBase,
-                        #(#fields,)*
+                let mut base_field = None;
+                for field in fields.named.iter() {
+                    for attr in field.attrs.iter() {
+                        if attr.path().is_ident("base") {
+                            base_field = Some(field.ident.clone().unwrap());
+                            break;
+                        }
                     }
-                };
-                let field = quote!(base);
-                (field, def)
-            }
-            Fields::Unnamed(fields) => {
-                let len = fields.unnamed.len();
-                let fields = fields.unnamed.iter();
-                let def = quote! {
-                    #vis struct #ident (#(#fields,)* ::orzir_core::OpBase);
-                };
-                let field = Index::from(len);
-                let field = quote!(#field);
-                (field, def)
-            }
-            Fields::Unit => {
-                let def = quote! {
-                    #vis struct #ident(::orzir_core::OpBase);
-                };
-                let field = Index::from(0);
-                let field = quote!(#field);
-                (field, def)
-            }
-        },
-        _ => panic!("only structs are supported to derive `Op`"),
-    };
+                }
 
-    let mnemonic = syn::parse_macro_input!(attr as LitStr).value();
-    let (primary, secondary) = mnemonic.split_once('.').unwrap();
+                if base_field.is_none() {
+                    panic!("no field for `OpBase` member.")
+                }
 
-    // get the arguments of the `get` constructor
-    let new_ctor = match &ast.data {
-        Data::Struct(s) => match &s.fields {
-            Fields::Named(fields) => {
+                let base_field = base_field.unwrap();
+
                 let fn_args = fields
                     .named
                     .iter()
+                    .filter(|field| field.ident.as_ref().unwrap() != &base_field)
                     .map(|field| {
                         let ident = field.ident.clone().unwrap();
                         let ty = field.ty.clone();
@@ -60,14 +38,20 @@ pub fn derive_op(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                     })
                     .collect::<Vec<_>>();
-                let fn_arg_names = fields.named.iter().map(|field| field.ident.clone().unwrap());
-                quote! {
+
+                let fn_arg_names = fields
+                    .named
+                    .iter()
+                    .filter(|field| field.ident.as_ref().unwrap() != &base_field)
+                    .map(|field| field.ident.clone().unwrap());
+
+                let ctor = quote! {
                     fn new(
                         ctx: &mut ::orzir_core::Context,
                         #(#fn_args),*
                     ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
                         let instance = Self {
-                            base: ::orzir_core::OpBase::default(),
+                            #base_field: ::orzir_core::OpBase::default(),
                             #(#fn_arg_names),*
                         };
                         let instance = ::orzir_core::OpObj::from(instance);
@@ -77,61 +61,41 @@ pub fn derive_op(attr: TokenStream, item: TokenStream) -> TokenStream {
                             ::orzir_core::OpObj
                         >>::alloc(&mut ctx.ops, instance)
                     }
-                }
+                };
+
+                let base_field = quote! {
+                    #base_field
+                };
+
+                (ctor, base_field)
             }
-            Fields::Unnamed(fields) => {
-                let fn_args = fields
-                    .unnamed
-                    .iter()
-                    .enumerate()
-                    .map(|(i, field)| {
-                        let ident = syn::Ident::new(&format!("arg_{}", i), field.span());
-                        let ty = field.ty.clone();
-                        quote! {
-                            #ident: #ty
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                let fn_arg_names = (0..fields.unnamed.len())
-                    .map(|i| syn::Ident::new(&format!("arg_{}", i), ident.span()));
-                quote! {
-                    fn new(
-                        ctx: &mut ::orzir_core::Context,
-                        #(#fn_args),*
-                    ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
-                        let instance = Self(#(#fn_arg_names,)* ::orzir_core::OpBase::default());
-                        let instance = ::orzir_core::OpObj::from(instance);
-                        <::orzir_core::Arena<
-                            ::orzir_core::OpObj
-                        > as ::orzir_core::ArenaBase<
-                            ::orzir_core::OpObj
-                        >>::alloc(&mut ctx.ops, instance)
-                    }
-                }
+            Fields::Unnamed(_) => {
+                panic!("unnamed fields are not supported.")
             }
             Fields::Unit => {
-                quote! {
-                    fn new(
-                        ctx: &mut ::orzir_core::Context
-                    ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
-                        let instance = ::orzir_core::OpObj::from(Self(::orzir_core::OpBase::default()));
-                        <::orzir_core::Arena<
-                            ::orzir_core::OpObj
-                        > as ::orzir_core::ArenaBase<
-                            ::orzir_core::OpObj
-                        >>::alloc(&mut ctx.ops, instance)
-                    }
-                }
+                panic!("no field for `OpBase` member.")
             }
         },
-        _ => panic!("only structs are supported to derive `Type`"),
+        _ => panic!("only structs are supported to derive `Op`"),
     };
 
-    let result = quote! {
-        #struct_def
+    let mut mnemonic = None;
+    for attr in ast.attrs.iter() {
+        if attr.path().is_ident("mnemonic") {
+            mnemonic = Some(attr.parse_args::<LitStr>().unwrap().value());
+            break;
+        }
+    }
 
+    if mnemonic.is_none() {
+        panic!("no mnemonic specified.")
+    }
+    let mnemonic = mnemonic.unwrap();
+    let (primary, secondary) = mnemonic.split_once('.').unwrap();
+
+    let result = quote! {
         impl #ident {
-            pub #new_ctor
+            pub #ctor
         }
 
         impl ::orzir_core::Op for #ident {
@@ -147,11 +111,11 @@ pub fn derive_op(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             fn as_base(&self) -> &::orzir_core::OpBase {
-                &self.#field
+                &self.#base_field
             }
 
             fn as_base_mut(&mut self) -> &mut ::orzir_core::OpBase {
-                &mut self.#field
+                &mut self.#base_field
             }
         }
     };

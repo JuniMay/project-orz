@@ -1,6 +1,10 @@
 use anyhow::Result;
 use orzir_core::{Context, Op};
 
+/// An trait indicating that the operation will not refer to any SSA values from
+/// above regions.
+///
+/// Note that symbols can be used.
 pub trait IsIsolatedFromAbove: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
         let op_base = self.as_base();
@@ -30,6 +34,78 @@ pub trait IsIsolatedFromAbove: Op {
             }
         }
 
+        Ok(())
+    }
+}
+
+pub trait NumResults<const N: usize>: Op {
+    fn verify(&self, _: &Context) -> Result<()> {
+        let op_base = self.as_base();
+        if op_base.results().len() != N {
+            anyhow::bail!("expected {} results, got {}", N, op_base.results().len());
+        }
+        Ok(())
+    }
+}
+
+pub trait NumOperands<const N: usize>: Op {
+    fn verify(&self, _: &Context) -> Result<()> {
+        let op_base = self.as_base();
+        if op_base.operands().len() != N {
+            anyhow::bail!("expected {} operands, got {}", N, op_base.operands().len());
+        }
+        Ok(())
+    }
+}
+
+pub trait NumRegions<const N: usize>: Op {
+    fn verify(&self, _: &Context) -> Result<()> {
+        let op_base = self.as_base();
+        if op_base.regions().len() != N {
+            anyhow::bail!("expected {} regions, got {}", N, op_base.regions().len());
+        }
+        Ok(())
+    }
+}
+
+pub trait AtLeastNumResults<const N: usize>: Op {
+    fn verify(&self, _: &Context) -> Result<()> {
+        let op_base = self.as_base();
+        if op_base.results().len() < N {
+            anyhow::bail!(
+                "expected at least {} results, got {}",
+                N,
+                op_base.results().len()
+            );
+        }
+        Ok(())
+    }
+}
+
+pub trait AtLeastNumOperands<const N: usize>: Op {
+    fn verify(&self, _: &Context) -> Result<()> {
+        let op_base = self.as_base();
+        if op_base.operands().len() < N {
+            anyhow::bail!(
+                "expected at least {} operands, got {}",
+                N,
+                op_base.operands().len()
+            );
+        }
+        Ok(())
+    }
+}
+
+pub trait AtLeastNumRegions<const N: usize>: Op {
+    fn verify(&self, _: &Context) -> Result<()> {
+        let op_base = self.as_base();
+        if op_base.regions().len() < N {
+            anyhow::bail!(
+                "expected at least {} regions, got {}",
+                N,
+                op_base.regions().len()
+            );
+        }
         Ok(())
     }
 }
