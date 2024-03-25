@@ -1,9 +1,8 @@
+use super::{block::Block, operation::OpObj};
 use crate::{
     impl_list_node,
     support::{list::List, storage::ArenaPtr},
 };
-
-use super::{block::Block, operation::OpObj};
 
 #[derive(Default)]
 pub struct BlockNode {
@@ -33,9 +32,7 @@ pub struct Layout {
 }
 
 impl Layout {
-    pub fn entry_block(&self) -> Option<ArenaPtr<Block>> {
-        self.blocks.front()
-    }
+    pub fn entry_block(&self) -> Option<ArenaPtr<Block>> { self.blocks.front() }
 
     pub fn iter_blocks(&self) -> impl Iterator<Item = ArenaPtr<Block>> + '_ {
         self.blocks.into_iter().map(|(block, _)| block)
@@ -56,17 +53,13 @@ impl Layout {
             .flat_map(|(_, node)| node.ops.into_iter().map(move |(op, _)| op))
     }
 
-    pub fn append_block(&mut self, block: ArenaPtr<Block>) {
-        self.blocks.append(block).unwrap();
-    }
+    pub fn append_block(&mut self, block: ArenaPtr<Block>) { self.blocks.append(block).unwrap(); }
 
     pub fn append_op(&mut self, block: ArenaPtr<Block>, op: ArenaPtr<OpObj>) {
         self.blocks.node_mut(block).unwrap().ops.append(op).unwrap();
     }
 
-    pub fn remove_block(&mut self, block: ArenaPtr<Block>) {
-        self.blocks.remove(block).unwrap();
-    }
+    pub fn remove_block(&mut self, block: ArenaPtr<Block>) { self.blocks.remove(block).unwrap(); }
 
     pub fn remove_op(&mut self, block: ArenaPtr<Block>, op: ArenaPtr<OpObj>) {
         self.blocks.node_mut(block).unwrap().ops.remove(op).unwrap();

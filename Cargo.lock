@@ -131,6 +131,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arpfloat",
+ "intertrait",
+ "linkme",
  "num-bigint",
  "orzir-core",
  "orzir-macros",
@@ -143,6 +145,7 @@ dependencies = [
  "anyhow",
  "downcast-rs",
  "intertrait",
+ "linkme",
  "thiserror",
 ]
 

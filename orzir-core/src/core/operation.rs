@@ -1,10 +1,8 @@
-use crate::{
-    support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed,
-};
+use std::fmt::Write;
+
 use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
-use std::fmt::Write;
 
 use super::{
     block::Block,
@@ -13,6 +11,9 @@ use super::{
     parse::{ParseFn, TokenKind},
     value::{OpResultBuilder, Value},
 };
+use crate::{
+    support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed,
+};
 
 pub struct Successor {
     block: ArenaPtr<Block>,
@@ -20,17 +21,11 @@ pub struct Successor {
 }
 
 impl Successor {
-    pub fn new(block: ArenaPtr<Block>, args: Vec<ArenaPtr<Value>>) -> Self {
-        Self { block, args }
-    }
+    pub fn new(block: ArenaPtr<Block>, args: Vec<ArenaPtr<Value>>) -> Self { Self { block, args } }
 
-    pub fn block(&self) -> ArenaPtr<Block> {
-        self.block
-    }
+    pub fn block(&self) -> ArenaPtr<Block> { self.block }
 
-    pub fn args(&self) -> &[ArenaPtr<Value>] {
-        &self.args
-    }
+    pub fn args(&self) -> &[ArenaPtr<Value>] { &self.args }
 }
 
 impl Parse for Successor {
@@ -93,19 +88,13 @@ pub struct OpBase {
 
 impl OpBase {
     /// Get the results of the operation.
-    pub fn results(&self) -> &[ArenaPtr<Value>] {
-        &self.results
-    }
+    pub fn results(&self) -> &[ArenaPtr<Value>] { &self.results }
 
     /// Get the operands of the operation.
-    pub fn operands(&self) -> &[ArenaPtr<Value>] {
-        &self.operands
-    }
+    pub fn operands(&self) -> &[ArenaPtr<Value>] { &self.operands }
 
     /// Get the successors of the operation.
-    pub fn successors(&self) -> &[Successor] {
-        &self.successors
-    }
+    pub fn successors(&self) -> &[Successor] { &self.successors }
 
     /// Collect the types of the operands.
     pub fn operand_types(&self, ctx: &Context) -> Vec<ArenaPtr<TypeObj>> {
@@ -124,9 +113,7 @@ impl OpBase {
     }
 
     /// Get the regions of the operation.
-    pub fn regions(&self) -> &[ArenaPtr<Region>] {
-        &self.regions
-    }
+    pub fn regions(&self) -> &[ArenaPtr<Region>] { &self.regions }
 
     /// Set the results of the operation.
     ///
@@ -137,7 +124,8 @@ impl OpBase {
 
     /// Set the operands of the operation.
     ///
-    /// This will replace the original operands and return the original operands.
+    /// This will replace the original operands and return the original
+    /// operands.
     pub fn set_operands(&mut self, operands: Vec<ArenaPtr<Value>>) -> Vec<ArenaPtr<Value>> {
         std::mem::replace(&mut self.operands, operands)
     }
@@ -158,9 +146,7 @@ impl OpBase {
     }
 
     /// Get a successor by index.
-    pub fn get_successor(&self, index: usize) -> Option<&Successor> {
-        self.successors.get(index)
-    }
+    pub fn get_successor(&self, index: usize) -> Option<&Successor> { self.successors.get(index) }
 
     /// Add an operand to the operation.
     pub fn add_operand(&mut self, operand: ArenaPtr<Value>) -> usize {
@@ -168,14 +154,13 @@ impl OpBase {
         self.operands.len() - 1
     }
 
-    pub fn add_successor(&mut self, successor: Successor) {
-        self.successors.push(successor);
-    }
+    pub fn add_successor(&mut self, successor: Successor) { self.successors.push(successor); }
 
     /// Add a result to the operation.
     ///
-    /// This should only be used by the [`OpResultBuilder`](crate::core::value::OpResultBuilder),
-    /// which will automatically set the result index.
+    /// This should only be used by the
+    /// [`OpResultBuilder`](crate::core::value::OpResultBuilder), which will
+    /// automatically set the result index.
     pub(crate) fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
         self.results.push(result);
         self.results.len() - 1
@@ -183,17 +168,16 @@ impl OpBase {
 
     /// Add a region to the operation.
     ///
-    /// This should only be used by the [`RegionBuilder`](crate::core::region::RegionBuilder),
-    /// which will automatically set the region index.
+    /// This should only be used by the
+    /// [`RegionBuilder`](crate::core::region::RegionBuilder), which will
+    /// automatically set the region index.
     pub(crate) fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
         self.regions.push(region);
         self.regions.len() - 1
     }
 
     /// Get the parent block of the operation.
-    pub fn parent_block(&self) -> Option<ArenaPtr<Block>> {
-        self.parent_block
-    }
+    pub fn parent_block(&self) -> Option<ArenaPtr<Block>> { self.parent_block }
 
     /// Set the parent block of the operation.
     pub fn set_parent_block(&mut self, parent_block: Option<ArenaPtr<Block>>) {
@@ -243,40 +227,26 @@ impl<T> From<T> for OpObj
 where
     T: Op,
 {
-    fn from(t: T) -> Self {
-        OpObj(Box::new(t))
-    }
+    fn from(t: T) -> Self { OpObj(Box::new(t)) }
 }
 
 impl OpObj {
     /// Get the inside trait object.
-    pub fn as_inner(&self) -> &dyn Op {
-        &*self.0
-    }
+    pub fn as_inner(&self) -> &dyn Op { &*self.0 }
 
-    pub fn as_inner_mut(&mut self) -> &mut dyn Op {
-        &mut *self.0
-    }
+    pub fn as_inner_mut(&mut self) -> &mut dyn Op { &mut *self.0 }
 
     /// Check if the type object is a concrete type.
-    pub fn is_a<T: Op>(&self) -> bool {
-        self.as_inner().is::<T>()
-    }
+    pub fn is_a<T: Op>(&self) -> bool { self.as_inner().is::<T>() }
 
     /// Try to downcast the type object to a concrete type.
-    pub fn as_a<T: Op>(&self) -> Option<&T> {
-        self.as_inner().downcast_ref()
-    }
+    pub fn as_a<T: Op>(&self) -> Option<&T> { self.as_inner().downcast_ref() }
 
     /// Check if the type object implements a trait.
-    pub fn impls<T: Op + ?Sized>(&self) -> bool {
-        self.as_inner().impls::<T>()
-    }
+    pub fn impls<T: Op + ?Sized>(&self) -> bool { self.as_inner().impls::<T>() }
 
     /// Try to cast the type object to another trait.
-    pub fn cast<T: Op + ?Sized>(&self) -> Option<&T> {
-        self.as_inner().cast()
-    }
+    pub fn cast<T: Op + ?Sized>(&self) -> Option<&T> { self.as_inner().cast() }
 }
 
 impl Parse for OpObj {

@@ -1,11 +1,10 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use crate::support::storage::{Arena, UniqueArena};
-
 use super::{
     block::Block, dialect::Dialect, mnemonic::MnemonicSegment, operation::OpObj, region::Region,
     symbol::NameManager, ty::TypeObj, value::Value,
 };
+use crate::support::storage::{Arena, UniqueArena};
 
 /// The context of the whole IR.
 #[derive(Default)]

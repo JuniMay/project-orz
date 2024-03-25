@@ -20,9 +20,7 @@ impl fmt::Display for Pos {
 }
 
 impl fmt::Debug for Pos {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self) }
 }
 
 impl PartialOrd for Pos {
@@ -32,9 +30,7 @@ impl PartialOrd for Pos {
 }
 
 impl Ord for Pos {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.offset.cmp(&other.offset)
-    }
+    fn cmp(&self, other: &Self) -> cmp::Ordering { self.offset.cmp(&other.offset) }
 }
 
 impl Default for Pos {
@@ -73,15 +69,11 @@ impl fmt::Display for Span {
 }
 
 impl fmt::Debug for Span {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self) }
 }
 
 impl Span {
-    pub(super) fn new(start: Pos, end: Pos) -> Self {
-        Self { start, end }
-    }
+    pub(super) fn new(start: Pos, end: Pos) -> Self { Self { start, end } }
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -102,7 +94,8 @@ pub enum TokenKind {
     Quoted(String),
     /// Other tokenized string.
     ///
-    /// This represents contiguous alphanumeric or with `_`, `-`, `.` characters.
+    /// This represents contiguous alphanumeric or with `_`, `-`, `.`
+    /// characters.
     Tokenized(String),
     /// End of file.
     Eof,
@@ -125,9 +118,7 @@ impl fmt::Display for TokenKind {
 }
 
 impl fmt::Debug for TokenKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self) }
 }
 
 pub struct Token {
@@ -136,13 +127,9 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(kind: TokenKind, span: Span) -> Self {
-        Self { kind, span }
-    }
+    pub fn new(kind: TokenKind, span: Span) -> Self { Self { kind, span } }
 
-    pub fn is_eof(&self) -> bool {
-        matches!(self.kind, TokenKind::Eof)
-    }
+    pub fn is_eof(&self) -> bool { matches!(self.kind, TokenKind::Eof) }
 }
 
 /// A simple reader.
@@ -161,9 +148,7 @@ impl<'a> SliceReader<'a> {
 }
 
 impl<'a> SliceReader<'a> {
-    fn read_char(&mut self) -> Option<char> {
-        self.chars.next()
-    }
+    fn read_char(&mut self) -> Option<char> { self.chars.next() }
 }
 
 /// A tokenizer for the IR program.
@@ -178,7 +163,8 @@ pub struct TokenStream<'a> {
     buffered_char: Option<char>,
     /// The buffered tokens for backtracking.
     ///
-    /// The grammar can be LL(1), but here still support backtracking for simplicity.
+    /// The grammar can be LL(1), but here still support backtracking for
+    /// simplicity.
     buffered_tokens: VecDeque<Token>,
     /// Current pos.
     pos: Pos,
@@ -211,8 +197,8 @@ impl<'a> TokenStream<'a> {
 
     /// Peek the next character.
     ///
-    /// This will return the buffered character if exists, otherwise read from the reader,
-    /// buffer it and return.
+    /// This will return the buffered character if exists, otherwise read from
+    /// the reader, buffer it and return.
     fn peek_char(&mut self) -> Result<Option<char>> {
         if let Some(c) = self.buffered_char {
             return Ok(Some(c));
@@ -394,8 +380,8 @@ impl<'a> TokenStream<'a> {
 
     /// Peek the next token.
     ///
-    /// This will get the front token from the buffer, if the buffer is empty, call `peek_next` to
-    /// get the next token.
+    /// This will get the front token from the buffer, if the buffer is empty,
+    /// call `peek_next` to get the next token.
     pub fn peek(&mut self) -> Result<&Token> {
         if self.buffered_tokens.is_empty() {
             self.buffer_next()?;
@@ -420,9 +406,7 @@ impl<'a> TokenStream<'a> {
     }
 
     /// Rebuffer the token to the front of the buffer.
-    pub fn rebuffer(&mut self, token: Token) {
-        self.buffered_tokens.push_front(token);
-    }
+    pub fn rebuffer(&mut self, token: Token) { self.buffered_tokens.push_front(token); }
 
     fn handle_identifier(&mut self) -> Result<String> {
         let mut s = String::new();

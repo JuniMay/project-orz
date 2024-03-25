@@ -1,17 +1,16 @@
-use anyhow::{anyhow, Result};
-use std::fmt::Write;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, fmt::Write, rc::Rc};
 
-use crate::{
-    core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState,
-    TokenStream,
-};
+use anyhow::{anyhow, Result};
 
 use super::{
     block::Block,
     layout::Layout,
     operation::OpObj,
     symbol::{NameManager, SymbolTable, SymbolTableOwned},
+};
+use crate::{
+    core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState,
+    TokenStream,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -46,32 +45,41 @@ pub struct RegionBuilder {
 }
 
 impl Region {
-    pub fn layout(&self) -> &Layout {
-        &self.layout
-    }
+    pub fn layout(&self) -> &Layout { &self.layout }
 
-    pub fn layout_mut(&mut self) -> &mut Layout {
-        &mut self.layout
-    }
+    pub fn layout_mut(&mut self) -> &mut Layout { &mut self.layout }
 
-    pub fn kind(&self) -> RegionKind {
-        self.kind
-    }
+    pub fn kind(&self) -> RegionKind { self.kind }
 
-    pub fn set_kind(&mut self, kind: RegionKind) {
-        self.kind = kind;
-    }
+    pub fn set_kind(&mut self, kind: RegionKind) { self.kind = kind; }
 
-    pub fn parent_op(&self) -> ArenaPtr<OpObj> {
+    pub fn parent_op(&self) -> ArenaPtr<OpObj> { self.parent_op }
+
+    pub fn index(&self) -> usize { self.index }
+
+    pub fn self_ptr(&self) -> ArenaPtr<Self> { self.self_ptr }
+
+    pub fn parent_region(&self, ctx: &Context) -> Option<ArenaPtr<Region>> {
         self.parent_op
+            .deref(&ctx.ops)
+            .as_inner()
+            .as_base()
+            .parent_region(ctx)
     }
 
-    pub fn index(&self) -> usize {
-        self.index
-    }
-
-    pub fn self_ptr(&self) -> ArenaPtr<Self> {
-        self.self_ptr
+    /// Check if this region is an ancestor of the other region.
+    pub fn is_ancestor(&self, ctx: &Context, other: ArenaPtr<Region>) -> bool {
+        if self.self_ptr() == other {
+            return true;
+        }
+        let mut parent = other.deref(&ctx.regions).parent_region(ctx);
+        while let Some(region) = parent {
+            if region == self.self_ptr() {
+                return true;
+            }
+            parent = other.deref(&ctx.regions).parent_region(ctx);
+        }
+        false
     }
 }
 
@@ -125,9 +133,7 @@ impl RegionBuilder {
 }
 
 impl Region {
-    pub fn builder() -> RegionBuilder {
-        RegionBuilder::default()
-    }
+    pub fn builder() -> RegionBuilder { RegionBuilder::default() }
 
     pub fn register_symbol(&self, name: String, op: ArenaPtr<OpObj>) {
         self.symbol_table.borrow_mut().insert(name, op);
@@ -144,8 +150,8 @@ impl Parse for Region {
 
     /// Parse the region.
     ///
-    /// This require the parent operation parser to pass the builder to the region parser, and set
-    /// the kind and parent operation.
+    /// This require the parent operation parser to pass the builder to the
+    /// region parser, and set the kind and parent operation.
     fn parse(
         builder: Self::Arg,
         ctx: &mut Context,

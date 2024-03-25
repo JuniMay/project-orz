@@ -1,6 +1,6 @@
-use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, TokenStream};
-use anyhow::{anyhow, Result};
 use std::fmt::Write;
+
+use anyhow::{anyhow, Result};
 
 use super::{
     block::Block,
@@ -9,6 +9,7 @@ use super::{
     parse::TokenKind,
     ty::{TypeObj, Typed},
 };
+use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream};
 
 pub enum Value {
     /// The value is a result of an operation.
@@ -45,13 +46,9 @@ impl Typed for Value {
 }
 
 impl Value {
-    pub fn op_result_builder() -> OpResultBuilder {
-        OpResultBuilder::default()
-    }
+    pub fn op_result_builder() -> OpResultBuilder { OpResultBuilder::default() }
 
-    pub fn block_argument_builder() -> BlockArgumentBuilder {
-        BlockArgumentBuilder::default()
-    }
+    pub fn block_argument_builder() -> BlockArgumentBuilder { BlockArgumentBuilder::default() }
 
     fn self_ptr(&self) -> ArenaPtr<Self> {
         match self {
@@ -67,6 +64,18 @@ impl Value {
 
     pub(crate) fn set_name(&self, ctx: &Context, name: String) -> Result<()> {
         ctx.value_names.borrow_mut().set(self.self_ptr(), name)
+    }
+
+    pub fn parent_region(&self, ctx: &Context) -> ArenaPtr<Region> {
+        match self {
+            Value::OpResult { op, .. } => op
+                .deref(&ctx.ops)
+                .as_inner()
+                .as_base()
+                .parent_region(ctx)
+                .expect("OpResult should be embraced by a region."),
+            Value::BlockArgument { block, .. } => block.deref(&ctx.blocks).parent_region(),
+        }
     }
 }
 

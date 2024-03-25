@@ -1,11 +1,12 @@
+use std::fmt::Write;
+
+use anyhow::{anyhow, Result};
+
+use super::value::Value;
 use crate::{
     core::parse::TokenKind, support::storage::ArenaPtr, Context, OpObj, Parse, Print, PrintState,
     Region, TokenStream, TypeObj, Typed,
 };
-use anyhow::{anyhow, Result};
-use std::fmt::Write;
-
-use super::value::Value;
 
 #[derive(Debug)]
 pub struct Block {
@@ -20,9 +21,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn builder() -> BlockBuilder {
-        BlockBuilder::default()
-    }
+    pub fn builder() -> BlockBuilder { BlockBuilder::default() }
 
     /// Get the name of the block.
     ///
@@ -45,19 +44,14 @@ impl Block {
         self.args.len() - 1
     }
 
-    pub(crate) fn args(&self) -> &[ArenaPtr<Value>] {
-        &self.args
-    }
+    pub(crate) fn args(&self) -> &[ArenaPtr<Value>] { &self.args }
 
-    pub fn is_entry(&self) -> bool {
-        self.is_entry
-    }
+    pub fn is_entry(&self) -> bool { self.is_entry }
 
-    pub(crate) fn set_entry(&mut self, is_entry: bool) {
-        self.is_entry = is_entry;
-    }
+    pub(crate) fn set_entry(&mut self, is_entry: bool) { self.is_entry = is_entry; }
 
-    /// Reserve a unknown block with a name, if the name is already used, return the block.
+    /// Reserve a unknown block with a name, if the name is already used, return
+    /// the block.
     pub(crate) fn reserve_with_name(
         ctx: &mut Context,
         name: String,
@@ -73,9 +67,7 @@ impl Block {
         self_ptr
     }
 
-    pub fn parent_region(&self) -> ArenaPtr<Region> {
-        self.parent_region
-    }
+    pub fn parent_region(&self) -> ArenaPtr<Region> { self.parent_region }
 }
 
 /// A block builder.
@@ -107,7 +99,7 @@ impl BlockBuilder {
 
     /// Build the block.
     ///
-    /// This will generate a new block, but will not add it to the layout.
+    /// This will generate a new block, but will **NOT** add it to the layout.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Block>> {
         let parent_region = self
             .parent_region

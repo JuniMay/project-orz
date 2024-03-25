@@ -1,11 +1,9 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
     marker::PhantomData,
 };
-
-use std::collections::hash_map::DefaultHasher;
 
 pub struct ArenaPtr<T> {
     index: usize,
@@ -19,17 +17,13 @@ impl<T> fmt::Debug for ArenaPtr<T> {
 }
 
 impl<T> PartialEq for ArenaPtr<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.index == other.index
-    }
+    fn eq(&self, other: &Self) -> bool { self.index == other.index }
 }
 
 impl<T> Eq for ArenaPtr<T> {}
 
 impl<T> Hash for ArenaPtr<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.index.hash(state);
-    }
+    fn hash<H: Hasher>(&self, state: &mut H) { self.index.hash(state); }
 }
 
 impl<T> Default for ArenaPtr<T> {
@@ -62,17 +56,11 @@ impl<T> Clone for ArenaPtr<T> {
 impl<T> Copy for ArenaPtr<T> {}
 
 impl<T> ArenaPtr<T> {
-    pub fn index(&self) -> usize {
-        self.index
-    }
+    pub fn index(&self) -> usize { self.index }
 
-    pub fn free(self, arena: &mut impl ArenaBase<T>) {
-        arena.free(self);
-    }
+    pub fn free(self, arena: &mut impl ArenaBase<T>) { arena.free(self); }
 
-    pub fn try_deref<'a>(&self, arena: &'a impl ArenaBase<T>) -> Option<&'a T> {
-        arena.get(*self)
-    }
+    pub fn try_deref<'a>(&self, arena: &'a impl ArenaBase<T>) -> Option<&'a T> { arena.get(*self) }
 
     pub fn try_deref_mut<'a>(&self, arena: &'a mut impl ArenaBase<T>) -> Option<&'a mut T> {
         arena.get_mut(*self)
@@ -205,9 +193,7 @@ impl<T> GetUniqueArenaHash for T
 where
     T: Hash + 'static + ?Sized,
 {
-    fn unique_arena_hash(&self) -> UniqueArenaHash {
-        UniqueArenaHash::new(self)
-    }
+    fn unique_arena_hash(&self) -> UniqueArenaHash { UniqueArenaHash::new(self) }
 }
 
 pub struct UniqueArena<T>
@@ -266,13 +252,9 @@ where
         self.arena.free(ptr);
     }
 
-    fn get(&self, ptr: ArenaPtr<T>) -> Option<&T> {
-        self.arena.get(ptr)
-    }
+    fn get(&self, ptr: ArenaPtr<T>) -> Option<&T> { self.arena.get(ptr) }
 
-    fn get_mut(&mut self, ptr: ArenaPtr<T>) -> Option<&mut T> {
-        self.arena.get_mut(ptr)
-    }
+    fn get_mut(&mut self, ptr: ArenaPtr<T>) -> Option<&mut T> { self.arena.get_mut(ptr) }
 }
 
 #[cfg(test)]

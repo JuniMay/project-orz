@@ -1,18 +1,24 @@
+use std::fmt::Write;
+
 use anyhow::{Ok, Result};
+use intertrait::cast_to;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
     Region, RegionKind, TokenKind, TokenStream, TypeObj, Value,
 };
 use orzir_macros::op;
-use std::fmt::Write;
 
 use super::builtin::FunctionType;
+use crate::interfaces::IsIsolatedFromAbove;
 
 #[op("func.func")]
 pub struct FuncOp {
     symbol: String,
     ty: ArenaPtr<TypeObj>,
 }
+
+#[cast_to]
+impl IsIsolatedFromAbove for FuncOp {}
 
 impl Parse for FuncOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);

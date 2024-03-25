@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
@@ -5,7 +7,6 @@ use orzir_core::{
     PrintState, TokenKind, TypeObj, Value,
 };
 use orzir_macros::op;
-use std::fmt::Write;
 
 fn parse_binary(
     arg: (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>),
@@ -62,6 +63,7 @@ pub struct IConstOp {
 impl Parse for IConstOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
     type Item = ArenaPtr<OpObj>;
+
     fn parse(
         arg: Self::Arg,
         ctx: &mut Context,
@@ -128,6 +130,7 @@ pub struct IAddOp;
 impl Parse for IAddOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
     type Item = ArenaPtr<OpObj>;
+
     fn parse(
         arg: Self::Arg,
         ctx: &mut Context,

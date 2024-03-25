@@ -1,10 +1,11 @@
+use std::fmt::Write;
+
 use anyhow::Result;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
     Successor, TokenKind, TokenStream, Value,
 };
 use orzir_macros::op;
-use std::fmt::Write;
 
 #[op("cf.jump")]
 pub struct Jump;

@@ -1,10 +1,14 @@
+use std::fmt::Write;
+
 use anyhow::Result;
+use intertrait::cast_to;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
     Region, RegionKind, TokenKind, TokenStream, Type, TypeObj,
 };
 use orzir_macros::{op, ty};
-use std::fmt::Write;
+
+use crate::interfaces::IsIsolatedFromAbove;
 
 #[op("builtin.module")]
 pub struct ModuleOp {
@@ -44,6 +48,9 @@ impl Parse for ModuleOp {
         Ok(op)
     }
 }
+
+#[cast_to]
+impl IsIsolatedFromAbove for ModuleOp {}
 
 impl Print for ModuleOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
@@ -103,9 +110,7 @@ impl Parse for FloatType {
 }
 
 impl Print for FloatType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
-        Ok(())
-    }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
@@ -122,9 +127,7 @@ impl Parse for DoubleType {
 }
 
 impl Print for DoubleType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
-        Ok(())
-    }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
@@ -316,9 +319,7 @@ impl Parse for UnitType {
 }
 
 impl Print for UnitType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
-        Ok(())
-    }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
 pub fn register(ctx: &mut Context) {
@@ -399,19 +400,13 @@ mod tests {
     }
 
     #[test]
-    fn test_int_parse() {
-        test_type_parse_print("int<32>", "builtin.int<32>");
-    }
+    fn test_int_parse() { test_type_parse_print("int<32>", "builtin.int<32>"); }
 
     #[test]
-    fn test_float_parse() {
-        test_type_parse_print("float", "builtin.float");
-    }
+    fn test_float_parse() { test_type_parse_print("float", "builtin.float"); }
 
     #[test]
-    fn test_double_parse() {
-        test_type_parse_print("double", "builtin.double");
-    }
+    fn test_double_parse() { test_type_parse_print("double", "builtin.double"); }
 
     #[test]
     fn test_tuple_parse() {

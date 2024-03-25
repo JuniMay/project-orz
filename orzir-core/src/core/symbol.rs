@@ -4,14 +4,14 @@ use std::{
     rc::{Rc, Weak},
 };
 
-use crate::support::{
-    bimap::{BiMap, Duplicated},
-    storage::ArenaPtr,
-};
 use anyhow::Result;
 use thiserror::Error;
 
 use super::operation::OpObj;
+use crate::support::{
+    bimap::{BiMap, Duplicated},
+    storage::ArenaPtr,
+};
 
 pub type SymbolTableOwned = Rc<RefCell<SymbolTable>>;
 pub type SymbolTableCell = Weak<RefCell<SymbolTable>>;
@@ -34,9 +34,7 @@ impl SymbolTable {
     }
 
     /// Insert a symbol into the table.
-    pub fn insert(&mut self, name: String, op: ArenaPtr<OpObj>) {
-        self.symbols.insert(name, op);
-    }
+    pub fn insert(&mut self, name: String, op: ArenaPtr<OpObj>) { self.symbols.insert(name, op); }
 
     pub fn lookup(&self, name: &str) -> Option<ArenaPtr<OpObj>> {
         self.symbols.get(name).cloned().or_else(|| {

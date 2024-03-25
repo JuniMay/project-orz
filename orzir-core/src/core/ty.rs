@@ -2,12 +2,11 @@ use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 use intertrait::{cast::CastRef, CastFrom};
 
+use super::{context::Context, mnemonic::Mnemonic, parse::ParseFn};
 use crate::{
     support::storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
     Parse, Print, PrintState, TokenStream,
 };
-
-use super::{context::Context, mnemonic::Mnemonic, parse::ParseFn};
 
 pub trait Type: Downcast + CastFrom + GetUniqueArenaHash + Print {
     /// Get the mnemonic of the type.
@@ -36,9 +35,7 @@ impl_downcast!(Type);
 pub struct TypeObj(Box<dyn Type>);
 
 impl GetUniqueArenaHash for TypeObj {
-    fn unique_arena_hash(&self) -> UniqueArenaHash {
-        self.as_inner().unique_arena_hash()
-    }
+    fn unique_arena_hash(&self) -> UniqueArenaHash { self.as_inner().unique_arena_hash() }
 }
 
 pub trait Typed {
@@ -49,42 +46,28 @@ impl<T> From<T> for TypeObj
 where
     T: Type,
 {
-    fn from(t: T) -> Self {
-        TypeObj(Box::new(t))
-    }
+    fn from(t: T) -> Self { TypeObj(Box::new(t)) }
 }
 
 impl TypeObj {
     /// Get the inside trait object.
-    pub fn as_inner(&self) -> &dyn Type {
-        &*self.0
-    }
+    pub fn as_inner(&self) -> &dyn Type { &*self.0 }
 
     /// Check if the type object is a concrete type.
-    pub fn is_a<T: Type>(&self) -> bool {
-        self.as_inner().is::<T>()
-    }
+    pub fn is_a<T: Type>(&self) -> bool { self.as_inner().is::<T>() }
 
     /// Try to downcast the type object to a concrete type.
-    pub fn as_a<T: Type>(&self) -> Option<&T> {
-        self.as_inner().downcast_ref()
-    }
+    pub fn as_a<T: Type>(&self) -> Option<&T> { self.as_inner().downcast_ref() }
 
     /// Check if the type object implements a trait.
-    pub fn impls<T: Type + ?Sized>(&self) -> bool {
-        self.as_inner().impls::<T>()
-    }
+    pub fn impls<T: Type + ?Sized>(&self) -> bool { self.as_inner().impls::<T>() }
 
     /// Try to cast the type object to another trait.
-    pub fn cast<T: Type + ?Sized>(&self) -> Option<&T> {
-        self.as_inner().cast()
-    }
+    pub fn cast<T: Type + ?Sized>(&self) -> Option<&T> { self.as_inner().cast() }
 }
 
 impl PartialEq for TypeObj {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_inner().eq(other.as_inner())
-    }
+    fn eq(&self, other: &Self) -> bool { self.as_inner().eq(other.as_inner()) }
 }
 
 impl Eq for TypeObj {}

@@ -134,7 +134,7 @@ pub fn derive_op(attr: TokenStream, item: TokenStream) -> TokenStream {
         #struct_def
 
         impl #ident {
-            #new_ctor
+            pub #new_ctor
         }
 
         impl ::orzir_core::Op for #ident {

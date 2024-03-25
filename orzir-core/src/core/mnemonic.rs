@@ -1,40 +1,38 @@
-use crate::{Context, Parse, Print, PrintState, TokenStream};
-use anyhow::Result;
 use std::fmt::Write;
 
+use anyhow::Result;
+
 use super::parse::TokenKind;
+use crate::{Context, Parse, Print, PrintState, TokenStream};
 
 /// A mnemonic segment.
 ///
-/// Mnemonic segment represents one part of a mnemonic, and is punctuated by a dot.
+/// Mnemonic segment represents one part of a mnemonic, and is punctuated by a
+/// dot.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct MnemonicSegment(String);
 
 impl From<&str> for MnemonicSegment {
-    fn from(segment: &str) -> Self {
-        Self(segment.to_string())
-    }
+    fn from(segment: &str) -> Self { Self(segment.to_string()) }
 }
 
 impl MnemonicSegment {
     /// Create a new mnemonic segment.
-    pub fn new(segment: &str) -> Self {
-        Self(segment.to_string())
-    }
+    pub fn new(segment: &str) -> Self { Self(segment.to_string()) }
 
     /// Get the string of the mnemonic segment.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+    pub fn as_str(&self) -> &str { &self.0 }
 }
 
 /// A mnemonic.
 ///
 /// A mnemonic is in the format of `dialect.op/attr/ty/...`.
 /// Both the primary part and the secondary part are mnemonic segments.
-/// The primary part is stored in the context, and the secondary part is stored in the dialect.
+/// The primary part is stored in the context, and the secondary part is stored
+/// in the dialect.
 ///
-/// If there are more than two parts in the mnemonic, the first dot will be used to split.
+/// If there are more than two parts in the mnemonic, the first dot will be used
+/// to split.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct Mnemonic {
     /// The primary part of the mnemonic.
@@ -53,14 +51,10 @@ impl Mnemonic {
     }
 
     /// Get the primary part of the mnemonic.
-    pub fn primary(&self) -> &MnemonicSegment {
-        &self.primary
-    }
+    pub fn primary(&self) -> &MnemonicSegment { &self.primary }
 
     /// Get the secondary part of the mnemonic.
-    pub fn secondary(&self) -> &MnemonicSegment {
-        &self.secondary
-    }
+    pub fn secondary(&self) -> &MnemonicSegment { &self.secondary }
 }
 
 impl Parse for Mnemonic {

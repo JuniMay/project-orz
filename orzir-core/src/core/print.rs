@@ -1,7 +1,8 @@
+use std::fmt::Write;
+
 use anyhow::Result;
 
 use super::context::Context;
-use std::fmt::Write;
 
 pub struct PrintState {
     indent: &'static str,
@@ -19,14 +20,10 @@ impl PrintState {
     }
 
     /// Indent the current line.
-    pub fn indent(&mut self) {
-        self.curr_indent += 1;
-    }
+    pub fn indent(&mut self) { self.curr_indent += 1; }
 
     /// Dedent the current line.
-    pub fn dedent(&mut self) {
-        self.curr_indent -= 1;
-    }
+    pub fn dedent(&mut self) { self.curr_indent -= 1; }
 
     /// Write the current indent.
     pub fn write_indent(&mut self) -> std::fmt::Result {

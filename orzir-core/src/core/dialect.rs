@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
-use crate::Mnemonic;
-
 use super::{mnemonic::MnemonicSegment, operation::OpParseFn, ty::TypeParseFn};
+use crate::Mnemonic;
 
 pub struct Dialect {
     mnemonic: MnemonicSegment,
@@ -19,9 +18,7 @@ impl Dialect {
         }
     }
 
-    pub fn mnemonic(&self) -> MnemonicSegment {
-        self.mnemonic.clone()
-    }
+    pub fn mnemonic(&self) -> MnemonicSegment { self.mnemonic.clone() }
 
     pub fn add_op(&mut self, mnemonic: Mnemonic, parse_fn: OpParseFn) {
         self.ops.insert(mnemonic, parse_fn);

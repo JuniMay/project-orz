@@ -11,3 +11,4 @@ thiserror = "1.0.58"
 anyhow = "1.0.81"
 
 intertrait = { git = "https://github.com/JuniMay/intertrait.git" }
+linkme = "0.3.25"
