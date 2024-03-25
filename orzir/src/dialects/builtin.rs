@@ -6,7 +6,7 @@ use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
     PrintState, Region, RegionKind, TokenKind, TokenStream, Type, TypeObj,
 };
-use orzir_macros::{ty, Op};
+use orzir_macros::{Op, Type};
 
 use crate::interfaces::IsIsolatedFromAbove;
 
@@ -67,8 +67,8 @@ impl Print for ModuleOp {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[ty("builtin.int")]
+#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[mnemonic("builtin.int")]
 pub struct IntType(usize);
 
 impl Parse for IntType {
@@ -95,8 +95,8 @@ impl Print for IntType {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[ty("builtin.float")]
+#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[mnemonic("builtin.float")]
 pub struct FloatType;
 
 impl Parse for FloatType {
@@ -112,8 +112,8 @@ impl Print for FloatType {
     fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[ty("builtin.double")]
+#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[mnemonic("builtin.double")]
 pub struct DoubleType;
 
 impl Parse for DoubleType {
@@ -129,8 +129,8 @@ impl Print for DoubleType {
     fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[ty("builtin.tuple")]
+#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[mnemonic("builtin.tuple")]
 pub struct TupleType {
     elems: Vec<ArenaPtr<TypeObj>>,
 }
@@ -170,8 +170,8 @@ impl Print for TupleType {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[ty("builtin.fn")]
+#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[mnemonic("builtin.fn")]
 pub struct FunctionType {
     args: Vec<ArenaPtr<TypeObj>>,
     rets: Vec<ArenaPtr<TypeObj>>,
@@ -249,8 +249,8 @@ impl Print for FunctionType {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[ty("builtin.memref")]
+#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[mnemonic("builtin.memref")]
 pub struct MemRefType {
     shape: Vec<usize>,
     elem: ArenaPtr<TypeObj>,
@@ -304,8 +304,8 @@ impl Print for MemRefType {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq)]
-#[ty("builtin.unit")]
+#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[mnemonic("builtin.unit")]
 pub struct UnitType;
 
 impl Parse for UnitType {

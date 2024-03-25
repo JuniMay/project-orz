@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, spanned::Spanned, Data, DeriveInput, Fields, LitStr};
 
-pub fn derive_ty(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn derive_ty(item: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(item as DeriveInput);
     let ident = ast.ident.clone();
 
@@ -87,12 +87,20 @@ pub fn derive_ty(attr: TokenStream, item: TokenStream) -> TokenStream {
         _ => panic!("only structs are supported to derive `Type`"),
     };
 
-    let mnemonic = syn::parse_macro_input!(attr as LitStr).value();
+    let mnemonic = ast.attrs.iter().find(|attr| attr.path().is_ident("mnemonic"));
+    
+    if mnemonic.is_none() {
+        panic!("`mnemonic` attribute is required to derive `Type`");
+    }
+
+    let mnemonic = match mnemonic.unwrap().parse_args::<LitStr>() {
+        Ok(mnemonic) => mnemonic.value(),
+        Err(err) => panic!("failed to parse `mnemonic` attribute: {}", err),
+    };
+
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
 
     let result = quote! {
-        #ast
-
         impl #ident {
             pub #get_ctor
         }

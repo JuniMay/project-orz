@@ -79,18 +79,17 @@ pub fn derive_op(item: TokenStream) -> TokenStream {
         _ => panic!("only structs are supported to derive `Op`"),
     };
 
-    let mut mnemonic = None;
-    for attr in ast.attrs.iter() {
-        if attr.path().is_ident("mnemonic") {
-            mnemonic = Some(attr.parse_args::<LitStr>().unwrap().value());
-            break;
-        }
-    }
+    let mnemonic = ast.attrs.iter().find(|attr| attr.path().is_ident("mnemonic"));
 
     if mnemonic.is_none() {
         panic!("no mnemonic specified.")
     }
-    let mnemonic = mnemonic.unwrap();
+
+    let mnemonic = match mnemonic.unwrap().parse_args::<LitStr>() {
+        Ok(mnemonic) => mnemonic.value(),
+        Err(_) => panic!("mnemonic must be a string literal."),
+    };
+    
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
 
     let result = quote! {
