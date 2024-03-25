@@ -98,18 +98,12 @@ impl OpBase {
 
     /// Collect the types of the operands.
     pub fn operand_types(&self, ctx: &Context) -> Vec<ArenaPtr<TypeObj>> {
-        self.operands
-            .iter()
-            .map(|ptr| ptr.deref(&ctx.values).ty(ctx))
-            .collect()
+        self.operands.iter().map(|ptr| ptr.deref(&ctx.values).ty(ctx)).collect()
     }
 
     /// Collect the types of the results.
     pub fn result_types(&self, ctx: &Context) -> Vec<ArenaPtr<TypeObj>> {
-        self.results
-            .iter()
-            .map(|ptr| ptr.deref(&ctx.values).ty(ctx))
-            .collect()
+        self.results.iter().map(|ptr| ptr.deref(&ctx.values).ty(ctx)).collect()
     }
 
     /// Get the regions of the operation.
@@ -212,10 +206,7 @@ pub trait Op: Downcast + CastFrom + Print {
         Self: Sized,
     {
         let mnemonic = Self::mnemonic_static();
-        ctx.dialects
-            .get_mut(mnemonic.primary())
-            .unwrap()
-            .add_op(mnemonic, parse_fn);
+        ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_op(mnemonic, parse_fn);
     }
 }
 
@@ -293,17 +284,8 @@ impl Parse for OpObj {
 
         let op = parse_fn((result_builders, parent), ctx, stream)?;
 
-        if op
-            .deref(&ctx.ops)
-            .as_inner()
-            .as_base()
-            .parent_block()
-            .is_none()
-        {
-            op.deref_mut(&mut ctx.ops)
-                .as_inner_mut()
-                .as_base_mut()
-                .set_parent_block(parent);
+        if op.deref(&ctx.ops).as_inner().as_base().parent_block().is_none() {
+            op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().set_parent_block(parent);
         }
 
         Ok(op)

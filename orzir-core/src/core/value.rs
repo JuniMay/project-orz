@@ -128,11 +128,7 @@ impl OpResultBuilder {
         } else {
             ctx.values.reserve()
         };
-        let index = op
-            .deref_mut(&mut ctx.ops)
-            .as_inner_mut()
-            .as_base_mut()
-            .add_result(self_ptr);
+        let index = op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_result(self_ptr);
 
         let instance = Value::OpResult {
             self_ptr,

@@ -62,11 +62,7 @@ impl Print for FuncOp {
         let func_type = self.ty.deref(&ctx.types).as_a::<FunctionType>().unwrap();
         func_type.print(ctx, state)?;
         write!(state.buffer, " ")?;
-        self.as_base()
-            .get_region(0)
-            .unwrap()
-            .deref(&ctx.regions)
-            .print(ctx, state)?;
+        self.as_base().get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
         Ok(())
     }
 }
@@ -88,10 +84,7 @@ impl Parse for ReturnOp {
 
         while let TokenKind::ValueName(_) = stream.peek()?.kind {
             let operand = Value::parse((), ctx, stream)?;
-            op.deref_mut(&mut ctx.ops)
-                .as_inner_mut()
-                .as_base_mut()
-                .add_operand(operand);
+            op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_operand(operand);
 
             if let TokenKind::Char(',') = stream.peek()?.kind {
                 stream.consume()?;

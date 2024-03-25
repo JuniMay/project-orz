@@ -58,11 +58,7 @@ impl Print for ModuleOp {
             write!(state.buffer, "@{}", symbol)?;
         }
         write!(state.buffer, " ")?;
-        self.as_base()
-            .get_region(0)
-            .unwrap()
-            .deref(&ctx.regions)
-            .print(ctx, state)?;
+        self.as_base().get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
 
         Ok(())
     }

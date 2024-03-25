@@ -231,10 +231,7 @@ where
         }
 
         let ptr = self.arena.alloc(val);
-        self.unique_map
-            .entry(unique_hash)
-            .or_insert_with(HashSet::default)
-            .insert(ptr);
+        self.unique_map.entry(unique_hash).or_insert_with(HashSet::default).insert(ptr);
         ptr
     }
 

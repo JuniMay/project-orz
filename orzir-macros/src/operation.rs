@@ -60,10 +60,7 @@ pub fn derive_op(attr: TokenStream, item: TokenStream) -> TokenStream {
                         }
                     })
                     .collect::<Vec<_>>();
-                let fn_arg_names = fields
-                    .named
-                    .iter()
-                    .map(|field| field.ident.clone().unwrap());
+                let fn_arg_names = fields.named.iter().map(|field| field.ident.clone().unwrap());
                 quote! {
                     fn new(
                         ctx: &mut ::orzir_core::Context,

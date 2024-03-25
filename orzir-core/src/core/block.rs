@@ -101,9 +101,7 @@ impl BlockBuilder {
     ///
     /// This will generate a new block, but will **NOT** add it to the layout.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Block>> {
-        let parent_region = self
-            .parent_region
-            .ok_or_else(|| anyhow!("missing parent region"))?;
+        let parent_region = self.parent_region.ok_or_else(|| anyhow!("missing parent region"))?;
         // try to get the reference by the name first.
         let self_ptr = if let Some(name) = &self.name {
             parent_region

@@ -26,36 +26,16 @@ fn test_isolated_from_above_0() -> Result<()> {
     let func_type = FunctionType::get(&mut ctx, vec![int, float], vec![int]);
     let func_op = FuncOp::new(&mut ctx, "foo".into(), func_type);
 
-    let region = Region::builder()
-        .kind(RegionKind::Graph)
-        .parent_op(module_op)
-        .build(&mut ctx)?;
+    let region = Region::builder().kind(RegionKind::Graph).parent_op(module_op).build(&mut ctx)?;
 
-    let block = Block::builder()
-        .entry(true)
-        .parent_region(region)
-        .build(&mut ctx)?;
-    region
-        .deref_mut(&mut ctx.regions)
-        .layout_mut()
-        .append_block(block);
-    region
-        .deref_mut(&mut ctx.regions)
-        .layout_mut()
-        .append_op(block, func_op);
+    let block = Block::builder().entry(true).parent_region(region).build(&mut ctx)?;
+    region.deref_mut(&mut ctx.regions).layout_mut().append_block(block);
+    region.deref_mut(&mut ctx.regions).layout_mut().append_op(block, func_op);
 
-    let func_region = Region::builder()
-        .kind(RegionKind::SsaCfg)
-        .parent_op(func_op)
-        .build(&mut ctx)?;
-    let func_block = Block::builder()
-        .entry(true)
-        .parent_region(func_region)
-        .build(&mut ctx)?;
-    func_region
-        .deref_mut(&mut ctx.regions)
-        .layout_mut()
-        .append_block(func_block);
+    let func_region =
+        Region::builder().kind(RegionKind::SsaCfg).parent_op(func_op).build(&mut ctx)?;
+    let func_block = Block::builder().entry(true).parent_region(func_region).build(&mut ctx)?;
+    func_region.deref_mut(&mut ctx.regions).layout_mut().append_block(func_block);
 
     let mut print_state = PrintState::new("    ");
     module_op.deref(&ctx.ops).print(&ctx, &mut print_state)?;

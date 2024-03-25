@@ -60,11 +60,7 @@ impl Region {
     pub fn self_ptr(&self) -> ArenaPtr<Self> { self.self_ptr }
 
     pub fn parent_region(&self, ctx: &Context) -> Option<ArenaPtr<Region>> {
-        self.parent_op
-            .deref(&ctx.ops)
-            .as_inner()
-            .as_base()
-            .parent_region(ctx)
+        self.parent_op.deref(&ctx.ops).as_inner().as_base().parent_region(ctx)
     }
 
     /// Check if this region is an ancestor of the other region.
@@ -101,12 +97,8 @@ impl RegionBuilder {
         let kind = self.kind.ok_or_else(|| anyhow!("missing kind"))?;
         let parent_op = self.parent_op.ok_or_else(|| anyhow!("missing parent_op"))?;
 
-        let above = parent_op
-            .deref(&ctx.ops)
-            .as_inner()
-            .as_base()
-            .parent_region(ctx)
-            .map(|region| {
+        let above =
+            parent_op.deref(&ctx.ops).as_inner().as_base().parent_region(ctx).map(|region| {
                 let region = region.deref(&ctx.regions);
                 Rc::downgrade(&region.symbol_table)
             });
@@ -165,10 +157,8 @@ impl Parse for Region {
             let token = stream.peek()?;
             match &token.kind {
                 TokenKind::BlockLabel(label) => {
-                    let builder = Block::builder()
-                        .name(label.clone())
-                        .entry(false)
-                        .parent_region(region_ptr);
+                    let builder =
+                        Block::builder().name(label.clone()).entry(false).parent_region(region_ptr);
                     // consume the label, the block already has it.
                     stream.consume()?;
                     // the block parser will add the block to the layout.

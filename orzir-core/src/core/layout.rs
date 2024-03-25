@@ -39,12 +39,7 @@ impl Layout {
     }
 
     pub fn iter_ops(&self, block: ArenaPtr<Block>) -> impl Iterator<Item = ArenaPtr<OpObj>> + '_ {
-        self.blocks
-            .node(block)
-            .unwrap()
-            .ops
-            .into_iter()
-            .map(|(op, _)| op)
+        self.blocks.node(block).unwrap().ops.into_iter().map(|(op, _)| op)
     }
 
     pub fn iter_ops_chained(&self) -> impl Iterator<Item = ArenaPtr<OpObj>> + '_ {
@@ -79,12 +74,7 @@ impl Layout {
         op: ArenaPtr<OpObj>,
         before: ArenaPtr<OpObj>,
     ) {
-        self.blocks
-            .node_mut(block)
-            .unwrap()
-            .ops
-            .insert_before(op, before)
-            .unwrap();
+        self.blocks.node_mut(block).unwrap().ops.insert_before(op, before).unwrap();
     }
 
     pub fn insert_op_after(
@@ -93,11 +83,6 @@ impl Layout {
         op: ArenaPtr<OpObj>,
         after: ArenaPtr<OpObj>,
     ) {
-        self.blocks
-            .node_mut(block)
-            .unwrap()
-            .ops
-            .insert_after(op, after)
-            .unwrap();
+        self.blocks.node_mut(block).unwrap().ops.insert_after(op, after).unwrap();
     }
 }

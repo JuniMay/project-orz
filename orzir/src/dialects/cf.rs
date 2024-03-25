@@ -26,10 +26,7 @@ impl Parse for Jump {
         let successor = Successor::parse(parent_region, ctx, stream)?;
 
         let op = Jump::new(ctx);
-        op.deref_mut(&mut ctx.ops)
-            .as_inner_mut()
-            .as_base_mut()
-            .add_successor(successor);
+        op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_successor(successor);
 
         op.deref_mut(&mut ctx.ops)
             .as_inner_mut()
@@ -91,11 +88,7 @@ impl Print for Branch {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " ")?;
         let op_base = self.as_base();
-        op_base
-            .get_operand(0)
-            .unwrap()
-            .deref(&ctx.values)
-            .print(ctx, state)?;
+        op_base.get_operand(0).unwrap().deref(&ctx.values).print(ctx, state)?;
         write!(state.buffer, ", ")?;
         op_base.get_successor(0).unwrap().print(ctx, state)?;
         write!(state.buffer, ", ")?;

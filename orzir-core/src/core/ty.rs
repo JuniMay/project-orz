@@ -23,10 +23,7 @@ pub trait Type: Downcast + CastFrom + GetUniqueArenaHash + Print {
         Self: Sized,
     {
         let mnemonic = Self::mnemonic_static();
-        ctx.dialects
-            .get_mut(mnemonic.primary())
-            .unwrap()
-            .add_type(mnemonic, parse_fn);
+        ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_type(mnemonic, parse_fn);
     }
 }
 
