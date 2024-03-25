@@ -88,7 +88,7 @@ pub fn derive_ty(item: TokenStream) -> TokenStream {
     };
 
     let mnemonic = ast.attrs.iter().find(|attr| attr.path().is_ident("mnemonic"));
-    
+
     if mnemonic.is_none() {
         panic!("`mnemonic` attribute is required to derive `Type`");
     }

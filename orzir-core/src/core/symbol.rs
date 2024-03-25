@@ -20,7 +20,9 @@ pub type SymbolTableCell = Weak<RefCell<SymbolTable>>;
 ///
 /// Symbol table defines the non-SSA values
 pub struct SymbolTable {
+    /// The symbol name and the operation that defines it.
     symbols: HashMap<String, ArenaPtr<OpObj>>,
+    /// The upper-level symbol table.
     above: Option<SymbolTableCell>,
 }
 
@@ -33,9 +35,12 @@ impl SymbolTable {
         }
     }
 
-    /// Insert a symbol into the table.
+    /// Insert a symbol and its definition operation into the table.
     pub fn insert(&mut self, name: String, op: ArenaPtr<OpObj>) { self.symbols.insert(name, op); }
 
+    /// Get the operation that defines the symbol.
+    ///
+    /// This might return the operation from the upper-level symbol table.
     pub fn lookup(&self, name: &str) -> Option<ArenaPtr<OpObj>> {
         self.symbols.get(name).cloned().or_else(|| {
             self.above
@@ -76,7 +81,7 @@ impl<T> Default for NameManager<T> {
 }
 
 impl<T> NameManager<T> {
-    pub fn set(&mut self, ptr: ArenaPtr<T>, name: String) -> Result<()> {
+    pub(super) fn set(&mut self, ptr: ArenaPtr<T>, name: String) -> Result<()> {
         let result = self.names.checked_insert(ptr, name);
         match result {
             Ok(_) => Ok(()),
@@ -87,7 +92,7 @@ impl<T> NameManager<T> {
         }
     }
 
-    pub fn get(&mut self, ptr: ArenaPtr<T>) -> String {
+    pub(super) fn get(&mut self, ptr: ArenaPtr<T>) -> String {
         if let Some(name) = self.names.get_fwd(&ptr) {
             return name.clone();
         }

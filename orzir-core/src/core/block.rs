@@ -8,6 +8,10 @@ use crate::{
     Region, TokenStream, TypeObj, Typed,
 };
 
+/// The block in the region.
+///
+/// The block does not store the operations, but represents the necessary
+/// argument information.
 #[derive(Debug)]
 pub struct Block {
     /// Self ptr.
@@ -21,34 +25,35 @@ pub struct Block {
 }
 
 impl Block {
+    /// Get the builder of the block.
     pub fn builder() -> BlockBuilder { BlockBuilder::default() }
 
     /// Get the name of the block.
     ///
     /// This will allocate a new name if the block does not have one.
-    pub(crate) fn name(&self, ctx: &Context) -> String {
+    pub fn name(&self, ctx: &Context) -> String {
         let region = self.parent_region.deref(&ctx.regions);
         let name = region.block_names.borrow_mut().get(self.self_ptr);
         name
     }
 
     /// Set the name of the block.
-    pub(crate) fn set_name(&self, ctx: &Context, name: String) -> Result<()> {
+    pub fn set_name(&self, ctx: &Context, name: String) -> Result<()> {
         let region = self.parent_region.deref(&ctx.regions);
         region.block_names.borrow_mut().set(self.self_ptr, name)
     }
 
     /// Add an argument to the block.
-    pub(crate) fn add_arg(&mut self, arg: ArenaPtr<Value>) -> usize {
+    pub fn add_arg(&mut self, arg: ArenaPtr<Value>) -> usize {
         self.args.push(arg);
         self.args.len() - 1
     }
 
-    pub(crate) fn args(&self) -> &[ArenaPtr<Value>] { &self.args }
+    /// Get the arguments of the block.
+    pub fn args(&self) -> &[ArenaPtr<Value>] { &self.args }
 
+    /// Test if the block is an entry block.
     pub fn is_entry(&self) -> bool { self.is_entry }
-
-    pub(crate) fn set_entry(&mut self, is_entry: bool) { self.is_entry = is_entry; }
 
     /// Reserve a unknown block with a name, if the name is already used, return
     /// the block.
@@ -67,19 +72,25 @@ impl Block {
         self_ptr
     }
 
+    /// Get the parent region of the block.
     pub fn parent_region(&self) -> ArenaPtr<Region> { self.parent_region }
 }
 
 /// A block builder.
+///
+/// This can be used to perform simple chained style block building.
 #[derive(Debug, Default)]
 pub struct BlockBuilder {
+    /// The name of the block.
     name: Option<String>,
+    /// If the block is an entry block.
     is_entry: Option<bool>,
+    /// The parent region of the block.
     parent_region: Option<ArenaPtr<Region>>,
 }
 
 impl BlockBuilder {
-    /// Set the entry of the block.
+    /// Set the if the block is an entry block.
     pub fn entry(mut self, is_entry: bool) -> Self {
         self.is_entry = Some(is_entry);
         self

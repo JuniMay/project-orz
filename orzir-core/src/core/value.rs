@@ -11,6 +11,7 @@ use super::{
 };
 use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream};
 
+/// An SSA value.
 pub enum Value {
     /// The value is a result of an operation.
     OpResult {

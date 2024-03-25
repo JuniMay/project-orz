@@ -7,6 +7,8 @@ use super::{
 use crate::support::storage::{Arena, UniqueArena};
 
 /// The context of the whole IR.
+///
+/// The context stores all the entities using a simple arena system.
 #[derive(Default)]
 pub struct Context {
     /// The values.
@@ -22,5 +24,7 @@ pub struct Context {
     /// The dialects.
     pub dialects: HashMap<MnemonicSegment, Dialect>,
     /// The name of values.
+    ///
+    /// TODO: More fine-grained name management.
     pub(crate) value_names: RefCell<NameManager<Value>>,
 }

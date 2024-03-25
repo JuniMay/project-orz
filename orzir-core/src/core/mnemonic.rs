@@ -78,6 +78,7 @@ impl Parse for Mnemonic {
                 } else {
                     s.as_str()
                 };
+                // TODO: More general approach to process mnemonic aliases.
                 let (primary, secondary) = match s.split_once('.') {
                     Some((primary, secondary)) => (primary, secondary),
                     None => ("builtin", s),

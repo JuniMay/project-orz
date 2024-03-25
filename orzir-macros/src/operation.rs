@@ -89,7 +89,7 @@ pub fn derive_op(item: TokenStream) -> TokenStream {
         Ok(mnemonic) => mnemonic.value(),
         Err(_) => panic!("mnemonic must be a string literal."),
     };
-    
+
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
 
     let result = quote! {

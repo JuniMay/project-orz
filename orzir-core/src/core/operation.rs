@@ -15,16 +15,22 @@ use crate::{
     support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed,
 };
 
+/// The successor.
 pub struct Successor {
+    /// The block destination of the successor.
     block: ArenaPtr<Block>,
+    /// The arguments passed to the block.
     args: Vec<ArenaPtr<Value>>,
 }
 
 impl Successor {
+    /// Create a new successor entity.
     pub fn new(block: ArenaPtr<Block>, args: Vec<ArenaPtr<Value>>) -> Self { Self { block, args } }
 
+    /// Get the block destination of the successor.
     pub fn block(&self) -> ArenaPtr<Block> { self.block }
 
+    /// Get the arguments passed to the block.
     pub fn args(&self) -> &[ArenaPtr<Value>] { &self.args }
 }
 
@@ -32,6 +38,13 @@ impl Parse for Successor {
     type Arg = ArenaPtr<Region>;
     type Item = Successor;
 
+    /// Parse the successor.
+    ///
+    /// # Syntax
+    ///
+    /// ```text
+    /// <block_label> `(` <arg_name_list> `)`
+    /// ```
     fn parse(region: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
         let token = stream.consume()?;
         if let TokenKind::BlockLabel(label) = &token.kind {
@@ -77,12 +90,24 @@ impl Print for Successor {
     }
 }
 
+/// The common struct of all operations.
+///
+/// All operation should wrap this struct to provide basic operations.
 #[derive(Default)]
 pub struct OpBase {
+    /// The results of the operation.
     results: Vec<ArenaPtr<Value>>,
+    /// The operands of the operation.
     operands: Vec<ArenaPtr<Value>>,
+    /// The regions attached to the operation.
     regions: Vec<ArenaPtr<Region>>,
+    /// The successors of the operation.
+    ///
+    /// Successors represents the control-flow destinations.
     successors: Vec<Successor>,
+    /// The parent block of the operation.
+    ///
+    /// TODO: Make sure this field is always maintained.
     parent_block: Option<ArenaPtr<Block>>,
 }
 
@@ -148,6 +173,7 @@ impl OpBase {
         self.operands.len() - 1
     }
 
+    /// Add a successor to the operation.
     pub fn add_successor(&mut self, successor: Successor) { self.successors.push(successor); }
 
     /// Add a result to the operation.
@@ -187,9 +213,11 @@ impl OpBase {
     }
 }
 
+/// The trait of all operations.
 pub trait Op: Downcast + CastFrom + Print {
     /// Get the mnemonic of the type.
     fn mnemonic(&self) -> Mnemonic;
+
     /// Get the mnemonic of the type statically.
     fn mnemonic_static() -> Mnemonic
     where
@@ -201,6 +229,10 @@ pub trait Op: Downcast + CastFrom + Print {
     /// Get the mutable operation base.
     fn as_base_mut(&mut self) -> &mut OpBase;
 
+    /// Register the operation to the context.
+    ///
+    /// The [`Parse`](crate::core::parse::Parse) trait is not object-safe, so
+    /// here just pass the parse function.
     fn register(ctx: &mut Context, parse_fn: OpParseFn)
     where
         Self: Sized,
@@ -244,6 +276,30 @@ impl Parse for OpObj {
     type Arg = Option<ArenaPtr<Block>>;
     type Item = ArenaPtr<OpObj>;
 
+    /// The top-level parsing for an operation.
+    ///
+    /// This function will parse the operation result, generate the
+    /// corresponding builders and pass them to the operation parse
+    /// function.
+    ///
+    /// e.g. for the oepration text below:
+    /// ```text
+    /// %0, %1 = dialect.agnostic_op %2, %3 : int<32>, int<32>
+    /// ```
+    ///
+    /// The result part `%0, %1` will be parsed and into [`OpResultBuilder`]s,
+    /// then the `=` will be consumed and the mnemonic will be parsed.
+    /// According to the mnemonic, the parse function will be looked up from
+    /// the context and called.
+    ///
+    /// The dialect-specific parse function should only parse the rest of the
+    /// text.
+    ///
+    /// # Syntax
+    ///
+    /// ```text
+    /// <result_name_list> `=` <mnemonic> <dialect_specific_text>
+    /// ````
     fn parse(parent: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
         let mut result_builders = Vec::new();
 
@@ -292,9 +348,16 @@ impl Parse for OpObj {
     }
 }
 
+/// The parse function type of the operations.
+///
+/// The parse function should take the result builders and the parent block as
+/// arguments and return the operation object.
 pub type OpParseFn = ParseFn<(Vec<OpResultBuilder>, Option<ArenaPtr<Block>>), ArenaPtr<OpObj>>;
 
 impl Print for OpObj {
+    /// Print the operation.
+    ///
+    /// This is actually symmetric to the parsing process.
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         let results = self.as_inner().as_base().results();
 

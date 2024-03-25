@@ -92,7 +92,8 @@ impl RegionBuilder {
 
     /// Build the region.
     ///
-    /// This will add the region to the parent operation.
+    /// This will add the region to the parent operation, and store the index in
+    /// the parent operation.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Region>> {
         let kind = self.kind.ok_or_else(|| anyhow!("missing kind"))?;
         let parent_op = self.parent_op.ok_or_else(|| anyhow!("missing parent_op"))?;
