@@ -106,7 +106,9 @@ impl Parse for FloatType {
 }
 
 impl Print for FloatType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
@@ -123,7 +125,9 @@ impl Parse for DoubleType {
 }
 
 impl Print for DoubleType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq)]
@@ -315,7 +319,9 @@ impl Parse for UnitType {
 }
 
 impl Print for UnitType {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
+    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub fn register(ctx: &mut Context) {
@@ -396,27 +402,30 @@ mod tests {
     }
 
     #[test]
-    fn test_int_parse() { test_type_parse_print("int<32>", "builtin.int<32>"); }
+    fn test_int_parse() {
+        test_type_parse_print("int<32>", "int<32>");
+    }
 
     #[test]
-    fn test_float_parse() { test_type_parse_print("float", "builtin.float"); }
+    fn test_float_parse() {
+        test_type_parse_print("float", "float");
+    }
 
     #[test]
-    fn test_double_parse() { test_type_parse_print("double", "builtin.double"); }
+    fn test_double_parse() {
+        test_type_parse_print("double", "double");
+    }
 
     #[test]
     fn test_tuple_parse() {
-        test_type_parse_print(
-            "tuple<int<32>, float>",
-            "builtin.tuple<builtin.int<32>, builtin.float>",
-        );
+        test_type_parse_print("tuple<int<32>, float>", "tuple<int<32>, float>");
     }
 
     #[test]
     fn test_func_parse_0() {
         test_type_parse_print(
             "fn(int<32>, float) -> double",
-            "builtin.fn(builtin.int<32>, builtin.float) -> builtin.double",
+            "fn(int<32>, float) -> double",
         );
     }
 
@@ -424,7 +433,7 @@ mod tests {
     fn test_func_parse_1() {
         test_type_parse_print(
             "fn(int<32>, float) -> tuple<int<32>, float>",
-            "builtin.fn(builtin.int<32>, builtin.float) -> builtin.tuple<builtin.int<32>, builtin.float>",
+            "fn(int<32>, float) -> tuple<int<32>, float>",
         );
     }
 
@@ -432,15 +441,12 @@ mod tests {
     fn test_func_parse_2() {
         test_type_parse_print(
             "fn(int<32>, float) -> (int<32>, float)",
-            "builtin.fn(builtin.int<32>, builtin.float) -> (builtin.int<32>, builtin.float)",
+            "fn(int<32>, float) -> (int<32>, float)",
         );
     }
 
     #[test]
     fn test_memref_parse() {
-        test_type_parse_print(
-            "memref<1 x 2 x 3 x int<32>>",
-            "builtin.memref<1 x 2 x 3 x builtin.int<32>>",
-        );
+        test_type_parse_print("memref<1 x 2 x 3 x int<32>>", "memref<1 x 2 x 3 x int<32>>");
     }
 }

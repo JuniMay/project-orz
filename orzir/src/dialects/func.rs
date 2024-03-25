@@ -58,7 +58,7 @@ impl Parse for FuncOp {
 
 impl Print for FuncOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        write!(state.buffer, " {}", self.symbol)?;
+        write!(state.buffer, " @{}", self.symbol)?;
         let func_type = self.ty.deref(&ctx.types).as_a::<FunctionType>().unwrap();
         func_type.print(ctx, state)?;
         write!(state.buffer, " ")?;
@@ -119,12 +119,95 @@ impl Print for ReturnOp {
     }
 }
 
+/// A direct call operation.
+///
+/// Format (example):
+/// ```text
+/// %result = func.call @callee(%arg1, %arg2) : int<32>
+/// ```
+#[op("func.call")]
+pub struct CallOp {
+    callee: String,
+    ret_type: ArenaPtr<TypeObj>,
+}
+
+impl Parse for CallOp {
+    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Item = ArenaPtr<OpObj>;
+
+    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+        let (result_builders, parent_block) = arg;
+
+        let token = stream.consume()?;
+        let callee = if let TokenKind::SymbolName(s) = token.kind {
+            s
+        } else {
+            anyhow::bail!("expected symbol name");
+        };
+
+        stream.expect(TokenKind::Char('('))?;
+
+        let mut operands = Vec::new();
+
+        while let TokenKind::ValueName(_) = stream.peek()?.kind {
+            let operand = Value::parse((), ctx, stream)?;
+            operands.push(operand);
+
+            if let TokenKind::Char(',') = stream.peek()?.kind {
+                stream.consume()?;
+            } else {
+                break;
+            }
+        }
+
+        stream.expect(TokenKind::Char(')'))?;
+        stream.expect(TokenKind::Char(':'))?;
+        let ret_type = TypeObj::parse((), ctx, stream)?;
+
+        let op = CallOp::new(ctx, callee, ret_type);
+
+        for operand in operands {
+            op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_operand(operand);
+        }
+
+        for result_builder in result_builders {
+            // the value will be added to the parent operation when building the result
+            let _result = result_builder.op(op).ty(ret_type).build(ctx)?;
+        }
+
+        op.deref_mut(&mut ctx.ops)
+            .as_inner_mut()
+            .as_base_mut()
+            .set_parent_block(parent_block);
+
+        Ok(op)
+    }
+}
+
+impl Print for CallOp {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+        write!(state.buffer, " @{}", self.callee)?;
+        write!(state.buffer, "(")?;
+        let operands = self.as_base().operands();
+        for (i, operand) in operands.iter().enumerate() {
+            operand.deref(&ctx.values).print(ctx, state)?;
+            if i != operands.len() - 1 {
+                write!(state.buffer, ", ")?;
+            }
+        }
+        write!(state.buffer, ") : ")?;
+        self.ret_type.deref(&ctx.types).print(ctx, state)?;
+        Ok(())
+    }
+}
+
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("func".into());
     ctx.dialects.insert("func".into(), dialect);
 
     FuncOp::register(ctx, FuncOp::parse);
     ReturnOp::register(ctx, ReturnOp::parse);
+    CallOp::register(ctx, CallOp::parse);
 }
 
 #[cfg(test)]
@@ -132,9 +215,7 @@ mod tests {
     use orzir_core::{Context, Op, OpObj, Parse, Print, PrintState, TokenStream};
 
     use crate::dialects::{
-        arith,
-        builtin::{self, ModuleOp},
-        func,
+        arith, builtin::{self, ModuleOp}, cf, func
     };
 
     #[test]
@@ -176,5 +257,61 @@ mod tests {
             .deref(&ctx.regions)
             .lookup_symbol("foo")
             .is_some());
+    }
+
+    #[test]
+    fn test_call_op() {
+
+        let src = r#"
+        module {
+            func.func @bar(int<32>) -> int<32> {
+            ^entry(%0 : int<32>):
+                func.return %0
+            }
+
+            func.func @foo () -> (int<32>, int<32>) {
+            ^entry:
+                %x = arith.iconst 123 : int<32>
+                %y = arith.iconst 123 : int<32>
+                %z = func.call @bar(%x) : int<32>
+                cf.jump ^return(%x, %y)
+            ^return:
+                func.return %x, %y
+            }
+        }
+        "#;
+
+
+        let mut stream = TokenStream::new(src);
+        let mut ctx = Context::default();
+
+        builtin::register(&mut ctx);
+        func::register(&mut ctx);
+        cf::register(&mut ctx);
+        arith::register(&mut ctx);
+
+        let op = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
+        let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
+        println!("{}", state.buffer);
+
+        let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
+
+        assert!(module_op
+            .as_base()
+            .get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .lookup_symbol("foo")
+            .is_some());
+
+        assert!(module_op
+            .as_base()
+            .get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .lookup_symbol("bar")
+            .is_some());
+
     }
 }

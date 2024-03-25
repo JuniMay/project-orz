@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn test_iconst_op() {
         let src = "%x = arith.iconst 123 : int<32>";
-        let expected = "%x = arith.iconst 123 : builtin.int<32>";
+        let expected = "%x = arith.iconst 123 : int<32>";
         test_parse_print(src, expected);
     }
 

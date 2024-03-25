@@ -91,12 +91,17 @@ impl Parse for Mnemonic {
 
 impl Print for Mnemonic {
     fn print(&self, _: &Context, state: &mut PrintState) -> Result<()> {
-        write!(
-            state.buffer,
-            "{}.{}",
-            self.primary.as_str(),
-            self.secondary.as_str()
-        )?;
+        if self.primary.as_str() == "builtin" {
+            write!(state.buffer, "{}", self.secondary.as_str())?;
+        } else {
+            write!(
+                state.buffer,
+                "{}.{}",
+                self.primary.as_str(),
+                self.secondary.as_str()
+            )?;
+        }
+
         Ok(())
     }
 }
