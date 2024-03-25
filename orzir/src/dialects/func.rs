@@ -144,8 +144,8 @@ mod tests {
         module {
             func.func @foo () -> (int<32>, float) {
             ^entry:
-                // %x = arith.iconst 123 : int<32>
-                // %y = arith.iconst 123 : int<32>
+                %x = arith.iconst 123 : int<32>
+                %y = arith.iconst 123 : int<32>
             ^return:
                 func.return %x, %y
             ^single:

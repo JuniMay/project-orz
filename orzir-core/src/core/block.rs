@@ -175,7 +175,9 @@ impl Parse for Block {
                                 stream.expect(TokenKind::Char(':'))?;
                                 let ty = TypeObj::parse((), ctx, stream)?;
 
-                                let arg = Value::block_argument_builder()
+                                // the `build` function will automatically add the argument to
+                                // the block and set the index of the argument in the block.
+                                let _arg = Value::block_argument_builder()
                                     .name(name)
                                     .block(block)
                                     .ty(ty)

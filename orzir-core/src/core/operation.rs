@@ -321,7 +321,22 @@ impl Parse for OpObj {
                 )
             });
 
-        parse_fn((result_builders, parent), ctx, stream)
+        let op = parse_fn((result_builders, parent), ctx, stream)?;
+
+        if op
+            .deref(&ctx.ops)
+            .as_inner()
+            .as_base()
+            .parent_block()
+            .is_none()
+        {
+            op.deref_mut(&mut ctx.ops)
+                .as_inner_mut()
+                .as_base_mut()
+                .set_parent_block(parent);
+        }
+
+        Ok(op)
     }
 }
 

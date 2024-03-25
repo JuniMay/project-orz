@@ -121,17 +121,6 @@ mod tests {
         cf, func,
     };
 
-    fn test_parse_print(src: &str, expected: &str) {
-        let mut stream = TokenStream::new(src);
-        let mut ctx = Context::default();
-        builtin::register(&mut ctx);
-        arith::register(&mut ctx);
-        let item = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
-        let mut state = PrintState::new("");
-        item.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
-        assert_eq!(state.buffer, expected);
-    }
-
     #[test]
     fn test_0() {
         let src = r#"
