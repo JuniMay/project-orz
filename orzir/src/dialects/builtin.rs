@@ -7,20 +7,16 @@ use orzir_core::{
 };
 use orzir_macros::{Op, Type};
 
-use crate::interfaces::{IsIsolatedFromAbove, NumRegions, NumResults};
+use crate::interfaces::{control_flow::*, *};
 
 #[derive(Op)]
 #[mnemonic = "builtin.module"]
-#[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
+#[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
 pub struct ModuleOp {
     #[base]
     op_base: OpBase,
     symbol: Option<String>,
 }
-
-impl IsIsolatedFromAbove for ModuleOp {}
-impl NumRegions<1> for ModuleOp {}
-impl NumResults<0> for ModuleOp {}
 
 impl Verify for ModuleOp {}
 
@@ -72,6 +68,7 @@ impl Print for ModuleOp {
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
 #[mnemonic = "builtin.int"]
+#[verifiers(IntegerLikeType)]
 pub struct IntType(usize);
 
 impl Verify for IntType {}
@@ -102,6 +99,7 @@ impl Print for IntType {
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
 #[mnemonic = "builtin.float"]
+#[verifiers(FloatLikeType)]
 pub struct FloatType;
 
 impl Verify for FloatType {}
@@ -121,6 +119,7 @@ impl Print for FloatType {
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
 #[mnemonic = "builtin.double"]
+#[verifiers(FloatLikeType)]
 pub struct DoubleType;
 
 impl Verify for DoubleType {}

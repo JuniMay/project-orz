@@ -8,6 +8,8 @@ use orzir_core::{
 };
 use orzir_macros::Op;
 
+use crate::interfaces::*;
+
 fn parse_binary(
     arg: (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>),
     ctx: &mut Context,
@@ -49,6 +51,7 @@ fn print_binary(ctx: &Context, state: &mut PrintState, op_base: &OpBase) -> Resu
 
 #[derive(Op)]
 #[mnemonic = "arith.iconst"]
+#[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultsType)]
 pub struct IConstOp {
     #[base]
     op_base: OpBase,
@@ -123,6 +126,10 @@ impl Print for IConstOp {
 
 #[derive(Op)]
 #[mnemonic = "arith.iadd"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultsType, SameOperandsType, SameOperandsAndResultsType
+)]
 pub struct IAddOp {
     #[base]
     op_base: OpBase,

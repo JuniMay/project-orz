@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState,
-    TokenStream,
+    TokenStream, Verify, VerifyInterfaces,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -42,6 +42,22 @@ pub struct Region {
 pub struct RegionBuilder {
     kind: Option<RegionKind>,
     parent_op: Option<ArenaPtr<OpObj>>,
+}
+
+impl VerifyInterfaces for Region {
+    fn verify_interfaces(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+}
+
+impl Verify for Region {
+    fn verify(&self, ctx: &Context) -> Result<()> {
+        for block in self.layout().iter_blocks() {
+            block.deref(&ctx.blocks).verify(ctx)?;
+            for op in self.layout().iter_ops(block) {
+                op.deref(&ctx.ops).as_inner().verify(ctx)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Region {

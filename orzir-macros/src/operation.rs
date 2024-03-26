@@ -50,16 +50,14 @@ pub fn derive_op(item: TokenStream) -> syn::Result<TokenStream> {
                         ctx: &mut ::orzir_core::Context,
                         #(#fn_args),*
                     ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
+                        let self_ptr = ctx.ops.reserve();
                         let instance = Self {
-                            #base_field: ::orzir_core::OpBase::default(),
+                            #base_field: ::orzir_core::OpBase::new(self_ptr),
                             #(#fn_arg_names),*
                         };
                         let instance = ::orzir_core::OpObj::from(instance);
-                        <::orzir_core::Arena<
-                            ::orzir_core::OpObj
-                        > as ::orzir_core::ArenaBase<
-                            ::orzir_core::OpObj
-                        >>::alloc(&mut ctx.ops, instance)
+                        ctx.ops.fill(self_ptr, instance);
+                        self_ptr
                     }
                 };
 
@@ -159,14 +157,31 @@ pub fn derive_op(item: TokenStream) -> syn::Result<TokenStream> {
     } else {
         Vec::new()
     };
-
-    let verifier_calls = quote! {
+    let verify_interface_impl = quote! {
         impl ::orzir_core::VerifyInterfaces for #ident {
             fn verify_interfaces(&self, ctx: &::orzir_core::Context) -> ::anyhow::Result<()> {
                 #(#verifier_calls)*
                 Ok(())
             }
         }
+    };
+
+    let verifier_impls = if let Some(verifiers) = verifiers {
+        if let Meta::List(list) = &verifiers.meta {
+            let paths =
+                list.parse_args_with(Punctuated::<Path, syn::Token![,]>::parse_terminated)?;
+            // iter to generate the register_caster macro calls
+            let register_impls = paths.into_iter().map(|path| {
+                quote! {
+                    impl #path for #ident {}
+                }
+            });
+            register_impls.collect::<Vec<_>>()
+        } else {
+            panic!("expect list inside the `verifiers` attribute");
+        }
+    } else {
+        Vec::new()
     };
 
     let result = quote! {
@@ -206,7 +221,10 @@ pub fn derive_op(item: TokenStream) -> syn::Result<TokenStream> {
             }
         }
 
-        #verifier_calls
+        #(#verifier_impls)*
+
+        #verify_interface_impl
+
     };
 
     Ok(result)

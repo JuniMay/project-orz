@@ -7,8 +7,14 @@ use orzir_core::{
 };
 use orzir_macros::Op;
 
+use crate::interfaces::{control_flow::*, *};
+
+/// The jump operation.
+///
+/// TODO: Make sure the operands number is ok to be zero.
 #[derive(Op)]
 #[mnemonic = "cf.jump"]
+#[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 pub struct Jump {
     #[base]
     op_base: OpBase,
@@ -55,6 +61,7 @@ impl Print for Jump {
 
 #[derive(Op)]
 #[mnemonic = "cf.branch"]
+#[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
 pub struct Branch {
     #[base]
     op_base: OpBase,

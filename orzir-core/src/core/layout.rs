@@ -43,6 +43,14 @@ impl Layout {
     /// any control-flow analysis.
     pub fn entry_block(&self) -> Option<ArenaPtr<Block>> { self.blocks.front() }
 
+    pub fn entry_op_at(&self, block: ArenaPtr<Block>) -> Option<ArenaPtr<OpObj>> {
+        self.blocks.node(block).unwrap().ops.front()
+    }
+
+    pub fn exit_op_at(&self, block: ArenaPtr<Block>) -> Option<ArenaPtr<OpObj>> {
+        self.blocks.node(block).unwrap().ops.back()
+    }
+
     /// Get the iterator of the blocks.
     pub fn iter_blocks(&self) -> impl Iterator<Item = ArenaPtr<Block>> + '_ {
         self.blocks.into_iter().map(|(block, _)| block)

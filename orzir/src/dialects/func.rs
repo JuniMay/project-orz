@@ -8,7 +8,7 @@ use orzir_core::{
 use orzir_macros::Op;
 
 use super::builtin::FunctionType;
-use crate::interfaces::{IsIsolatedFromAbove, NumRegions, NumResults};
+use crate::interfaces::{control_flow::*, *};
 
 #[derive(Op)]
 #[mnemonic = "func.func"]
@@ -19,10 +19,6 @@ pub struct FuncOp {
     symbol: String,
     ty: ArenaPtr<TypeObj>,
 }
-
-impl IsIsolatedFromAbove for FuncOp {}
-impl NumRegions<1> for FuncOp {}
-impl NumResults<0> for FuncOp {}
 
 impl Verify for FuncOp {}
 
@@ -75,6 +71,7 @@ impl Print for FuncOp {
 
 #[derive(Op)]
 #[mnemonic = "func.return"]
+#[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
 pub struct ReturnOp {
     #[base]
     op_base: OpBase,
@@ -139,6 +136,7 @@ impl Print for ReturnOp {
 /// ```
 #[derive(Op)]
 #[mnemonic = "func.call"]
+#[verifiers(VariadicResults, VariadicOperands, NumRegions<0>)]
 pub struct CallOp {
     #[base]
     op_base: OpBase,

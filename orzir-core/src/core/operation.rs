@@ -96,8 +96,9 @@ impl Print for Successor {
 /// The common struct of all operations.
 ///
 /// All operation should wrap this struct to provide basic operations.
-#[derive(Default)]
 pub struct OpBase {
+    /// The self ptr.
+    self_ptr: ArenaPtr<OpObj>,
     /// The results of the operation.
     results: Vec<ArenaPtr<Value>>,
     /// The operands of the operation.
@@ -115,6 +116,19 @@ pub struct OpBase {
 }
 
 impl OpBase {
+    pub fn new(self_ptr: ArenaPtr<OpObj>) -> Self {
+        Self {
+            self_ptr,
+            results: Vec::new(),
+            operands: Vec::new(),
+            regions: Vec::new(),
+            successors: Vec::new(),
+            parent_block: None,
+        }
+    }
+
+    pub fn self_ptr(&self) -> ArenaPtr<OpObj> { self.self_ptr }
+
     /// Get the results of the operation.
     pub fn results(&self) -> &[ArenaPtr<Value>] { &self.results }
 
@@ -208,6 +222,8 @@ impl OpBase {
     }
 
     /// Get the parent region of the operation.
+    ///
+    /// If the operation has no parent block, the parent region will be `None`
     pub fn parent_region(&self, ctx: &Context) -> Option<ArenaPtr<Region>> {
         self.parent_block.map(|ptr| {
             let block = ptr.deref(&ctx.blocks);

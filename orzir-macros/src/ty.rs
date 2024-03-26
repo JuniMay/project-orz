@@ -170,13 +170,31 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
         Vec::new()
     };
 
-    let verifier_calls = quote! {
+    let verify_interfaces_impl = quote! {
         impl ::orzir_core::VerifyInterfaces for #ident {
             fn verify_interfaces(&self, ctx: &::orzir_core::Context) -> ::anyhow::Result<()> {
                 #(#verifier_calls)*
                 Ok(())
             }
         }
+    };
+
+    let verifier_impls = if let Some(verifiers) = verifiers {
+        if let Meta::List(list) = &verifiers.meta {
+            let paths =
+                list.parse_args_with(Punctuated::<Path, syn::Token![,]>::parse_terminated)?;
+            // iter to generate the register_caster macro calls
+            let register_impls = paths.into_iter().map(|path| {
+                quote! {
+                    impl #path for #ident {}
+                }
+            });
+            register_impls.collect::<Vec<_>>()
+        } else {
+            panic!("expect list inside the `verifiers` attribute");
+        }
+    } else {
+        Vec::new()
     };
 
     let result = quote! {
@@ -216,7 +234,10 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
             }
         }
 
-        #verifier_calls
+        #(#verifier_impls)*
+
+        #verify_interfaces_impl
+
     };
 
     Ok(result)

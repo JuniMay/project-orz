@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use super::value::Value;
 use crate::{
     core::parse::TokenKind, support::storage::ArenaPtr, Context, OpObj, Parse, Print, PrintState,
-    Region, TokenStream, TypeObj, Typed,
+    Region, TokenStream, TypeObj, Typed, Verify, VerifyInterfaces,
 };
 
 /// The block in the region.
@@ -22,6 +22,19 @@ pub struct Block {
     is_entry: bool,
     /// The parent region.
     parent_region: ArenaPtr<Region>,
+}
+
+impl VerifyInterfaces for Block {
+    fn verify_interfaces(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+}
+
+impl Verify for Block {
+    fn verify(&self, ctx: &Context) -> Result<()> {
+        for arg in &self.args {
+            arg.deref(&ctx.values).verify(ctx)?;
+        }
+        Ok(())
+    }
 }
 
 impl Block {

@@ -9,7 +9,10 @@ use super::{
     parse::TokenKind,
     ty::{TypeObj, Typed},
 };
-use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream};
+use crate::{
+    support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream, Verify,
+    VerifyInterfaces,
+};
 
 /// An SSA value.
 pub enum Value {
@@ -43,6 +46,16 @@ impl Typed for Value {
             Value::OpResult { ty, .. } => *ty,
             Value::BlockArgument { ty, .. } => *ty,
         }
+    }
+}
+
+impl VerifyInterfaces for Value {
+    fn verify_interfaces(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+}
+
+impl Verify for Value {
+    fn verify(&self, ctx: &Context) -> Result<()> {
+        self.ty(ctx).deref(&ctx.types).as_inner().verify(ctx)
     }
 }
 
