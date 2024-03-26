@@ -26,12 +26,12 @@ pub struct Context {
     pub types: UniqueArena<TypeObj>,
     /// The dialects.
     pub dialects: HashMap<MnemonicSegment, Dialect>,
+    /// The caster storage.
+    ///
+    /// This is used for interface casting.
+    pub casters: CasterStorage,
     /// The name of values.
     ///
     /// TODO: More fine-grained name management.
     pub(crate) value_names: RefCell<NameManager<Value>>,
-    /// The caster storage.
-    ///
-    /// This is used for interface casting.
-    pub(crate) casters: CasterStorage,
 }

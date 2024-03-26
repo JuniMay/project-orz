@@ -1,9 +1,8 @@
 use std::fmt::Write;
 
 use anyhow::Result;
-use intertrait::cast_to;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
+    ArenaPtr, Block, Caster, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
     PrintState, Region, RegionKind, TokenKind, TokenStream, Type, TypeObj,
 };
 use orzir_macros::{Op, Type};
@@ -18,7 +17,6 @@ pub struct ModuleOp {
     symbol: Option<String>,
 }
 
-#[cast_to]
 impl IsIsolatedFromAbove for ModuleOp {}
 
 impl Parse for ModuleOp {
@@ -334,6 +332,11 @@ pub fn register(ctx: &mut Context) {
     TupleType::register(ctx, TupleType::parse);
     FunctionType::register(ctx, FunctionType::parse);
     MemRefType::register(ctx, MemRefType::parse);
+
+    ctx.casters.register::<ModuleOp, dyn IsIsolatedFromAbove>(Caster::new(
+        |any| any.downcast_ref::<ModuleOp>().unwrap() as &dyn IsIsolatedFromAbove,
+        |any| any.downcast_mut::<ModuleOp>().unwrap() as &mut dyn IsIsolatedFromAbove,
+    ));
 }
 
 #[cfg(test)]

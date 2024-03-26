@@ -40,6 +40,13 @@ pub struct Caster<T: ?Sized + 'static> {
     cast_mut: fn(&mut dyn Any) -> &mut T,
 }
 
+impl<T: ?Sized + 'static> Caster<T> {
+    /// Create a new caster.
+    pub fn new(cast_ref: fn(&dyn Any) -> &T, cast_mut: fn(&mut dyn Any) -> &mut T) -> Self {
+        Self { cast_ref, cast_mut }
+    }
+}
+
 impl CasterStorage {
     /// Register a caster into the storage.
     pub fn register<S: ?Sized + 'static, T: ?Sized + 'static>(&mut self, caster: Caster<T>) {
@@ -50,8 +57,6 @@ impl CasterStorage {
 
     fn lookup<T: ?Sized + 'static>(&self, id: TypeId) -> Option<&Caster<T>> {
         let caster_id = TypeId::of::<Caster<T>>();
-        dbg!(id);
-        dbg!(caster_id);
         self.0.get(&(id, caster_id)).map(|c| c.downcast_ref().unwrap())
     }
 }

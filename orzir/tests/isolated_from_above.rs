@@ -42,12 +42,12 @@ fn test_isolated_from_above_0() -> Result<()> {
 
     module_op
         .deref(&ctx.ops)
-        .cast::<dyn IsIsolatedFromAbove>()
+        .cast_ref::<dyn IsIsolatedFromAbove>(&ctx)
         .unwrap()
         .verify(&ctx)?;
     func_op
         .deref(&ctx.ops)
-        .cast::<dyn IsIsolatedFromAbove>()
+        .cast_ref::<dyn IsIsolatedFromAbove>(&ctx)
         .unwrap()
         .verify(&ctx)?;
 

@@ -1,14 +1,16 @@
 use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
-use intertrait::{cast::CastRef, CastFrom};
 
 use super::{context::Context, mnemonic::Mnemonic, parse::ParseFn};
 use crate::{
-    support::storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
+    support::{
+        cast::{CastMut, CastRef},
+        storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
+    },
     Parse, Print, PrintState, TokenStream,
 };
 
-pub trait Type: Downcast + CastFrom + GetUniqueArenaHash + Print {
+pub trait Type: Downcast + GetUniqueArenaHash + Print {
     /// Get the mnemonic of the type.
     fn mnemonic(&self) -> Mnemonic;
     /// Get the mnemonic of the type statically.
@@ -57,10 +59,14 @@ impl TypeObj {
     pub fn as_a<T: Type>(&self) -> Option<&T> { self.as_inner().downcast_ref() }
 
     /// Check if the type object implements a trait.
-    pub fn impls<T: Type + ?Sized>(&self) -> bool { self.as_inner().impls::<T>() }
+    pub fn impls<T: ?Sized + 'static>(&self, ctx: &Context) -> bool {
+        self.as_inner().impls::<T>(&ctx.casters)
+    }
 
     /// Try to cast the type object to another trait.
-    pub fn cast<T: Type + ?Sized>(&self) -> Option<&T> { self.as_inner().cast() }
+    pub fn cast_ref<T: ?Sized + 'static>(&self, ctx: &Context) -> Option<&T> {
+        self.as_inner().cast_ref(&ctx.casters)
+    }
 }
 
 impl PartialEq for TypeObj {

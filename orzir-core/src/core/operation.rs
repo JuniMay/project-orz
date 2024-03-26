@@ -2,7 +2,6 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
-use intertrait::{cast::CastRef, CastFrom};
 
 use super::{
     block::Block,
@@ -12,7 +11,11 @@ use super::{
     value::{OpResultBuilder, Value},
 };
 use crate::{
-    support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed,
+    support::{
+        cast::{CastMut, CastRef},
+        storage::ArenaPtr,
+    },
+    Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed,
 };
 
 /// The successor.
@@ -214,7 +217,7 @@ impl OpBase {
 }
 
 /// The trait of all operations.
-pub trait Op: Downcast + CastFrom + Print {
+pub trait Op: Downcast + Print {
     /// Get the mnemonic of the type.
     fn mnemonic(&self) -> Mnemonic;
 
@@ -266,10 +269,18 @@ impl OpObj {
     pub fn as_a<T: Op>(&self) -> Option<&T> { self.as_inner().downcast_ref() }
 
     /// Check if the type object implements a trait.
-    pub fn impls<T: Op + ?Sized>(&self) -> bool { self.as_inner().impls::<T>() }
+    pub fn impls<T: ?Sized + 'static>(&self, ctx: &Context) -> bool {
+        self.as_inner().impls::<T>(&ctx.casters)
+    }
 
     /// Try to cast the type object to another trait.
-    pub fn cast<T: Op + ?Sized>(&self) -> Option<&T> { self.as_inner().cast() }
+    pub fn cast_ref<T: ?Sized + 'static>(&self, ctx: &Context) -> Option<&T> {
+        self.as_inner().cast_ref(&ctx.casters)
+    }
+
+    pub fn cast_mut<T: ?Sized + 'static>(&mut self, ctx: &Context) -> Option<&mut T> {
+        self.as_inner_mut().cast_mut(&ctx.casters)
+    }
 }
 
 impl Parse for OpObj {

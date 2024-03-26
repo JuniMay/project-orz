@@ -24,7 +24,7 @@ pub trait IsIsolatedFromAbove: Op {
                     }
 
                     if !op.deref(&ctx.ops).as_inner().as_base().regions().is_empty()
-                        && !op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>()
+                        && !op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>(ctx)
                     {
                         for sub_region in op.deref(&ctx.ops).as_inner().as_base().regions() {
                             pending_regions.push(sub_region);
