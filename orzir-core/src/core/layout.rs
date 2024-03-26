@@ -29,7 +29,7 @@ pub type OpList = List<ArenaPtr<OpObj>, OpNode>;
 /// The layout of a function.
 ///
 /// The layout utilizes a key-node system to build a safe linked list.
-/// This is inspired by the [key-node-list](https://github.com/MaxXSoft/key-node-list) crate.
+/// This is inspired by the [key-node-list](https://crates.io/crates/key-node-list) crate.
 #[derive(Default)]
 pub struct Layout {
     /// The block list of the layout.

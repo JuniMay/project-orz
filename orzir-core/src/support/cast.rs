@@ -1,3 +1,22 @@
+//! Casting between trait objects.
+//!
+//! This is a simple implementation of casting between trait objects. The idea
+//! is from the [intertrait](https://crates.io/crates/intertrait) crate.
+//!
+//! The intertrait crate utilizes [`linkme`](https://crates.io/crates/linkme)
+//! to register the casters at link time. But here, all the casters are managed
+//! by a seperate storage (which is a member in the context of IR). And yet only
+//! casting to reference and mutable reference are supported.
+//!
+//! All the casters can be registered when the operation/type/dialect is
+//! registered into the context. For verifiers, the casters will be registered
+//! automatically when the operation/type is derived. For interfaces, those
+//! declared when deriving will be registered automatically, and the others can
+//! be registered by calling the `register_caster` macro in the `register`
+//! function of the dialect.
+//!
+//! For the mechanism of this implementation, see the [`Caster`] and the
+//! testcases.
 use std::{
     any::{Any, TypeId},
     collections::HashMap,
@@ -55,6 +74,12 @@ impl CasterStorage {
         self.0.insert((concrete_id, caster_id), Box::new(caster));
     }
 
+    /// Lookup a caster in the storage.
+    ///
+    /// This require the type id of the underlying concrete type id, so all the
+    /// `dyn Source` type should be upcasted to `dyn Any` to get the id of
+    /// the concrete type. Otehrwise, The type id of the `dyn Source` will
+    /// used to lookup, which will lead to a `None`.
     fn lookup<T: ?Sized + 'static>(&self, id: TypeId) -> Option<&Caster<T>> {
         let caster_id = TypeId::of::<Caster<T>>();
         self.0.get(&(id, caster_id)).map(|c| c.downcast_ref().unwrap())

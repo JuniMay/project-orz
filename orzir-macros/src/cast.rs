@@ -1,16 +1,7 @@
 use proc_macro2::TokenStream;
 use quote::quote;
 
-/// A cast info for proc-macro.
-///
-/// # Example
-///
-/// Below is an example of getting the [`Caster`](orzir_core::Caster) for
-/// casting from `ModuleOp` to `IsIsolatedFromAbove`.
-///
-/// ```rust,ignore
-/// caster!(ModuleOp => IsIsolatedFromAbove)
-/// ```
+/// A cast info for [`caster`](super::caster) proc-macro.
 struct CastInfo {
     from: syn::Type,
     to: syn::Path,
