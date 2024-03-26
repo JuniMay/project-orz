@@ -1,6 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, spanned::Spanned, Data, DeriveInput, Fields, LitStr};
+use syn::{
+    parse_macro_input, spanned::Spanned, Data, DeriveInput, Expr, Fields, Lit, LitStr, Meta,
+};
 
 pub fn derive_ty(item: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(item as DeriveInput);
@@ -93,11 +95,20 @@ pub fn derive_ty(item: TokenStream) -> TokenStream {
         panic!("`mnemonic` attribute is required to derive `Type`");
     }
 
-    let mnemonic = match mnemonic.unwrap().parse_args::<LitStr>() {
-        Ok(mnemonic) => mnemonic.value(),
-        Err(err) => panic!("failed to parse `mnemonic` attribute: {}", err),
+    // parse as `mnemonic = "xxxx.xxx"`, which is a name-value style attribute.
+    let mnemonic = if let Meta::NameValue(ref meta) = mnemonic.unwrap().meta {
+        if let Expr::Lit(lit) = &meta.value {
+            if let Lit::Str(lit) = &lit.lit {
+                lit.value()
+            } else {
+                panic!("mnemonic must be a string literal.")
+            }
+        } else {
+            panic!("mnemonic must be a string literal.")
+        }
+    } else {
+        panic!("mnemonic must be specified using a key-value style attribute.")
     };
-
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
 
     let result = quote! {

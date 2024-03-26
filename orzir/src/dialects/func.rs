@@ -2,16 +2,16 @@ use std::fmt::Write;
 
 use anyhow::{Ok, Result};
 use orzir_core::{
-    ArenaPtr, Block, Caster, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
+    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
     PrintState, Region, RegionKind, TokenKind, TokenStream, TypeObj, Value,
 };
-use orzir_macros::Op;
+use orzir_macros::{register_caster, Op};
 
 use super::builtin::FunctionType;
 use crate::interfaces::IsIsolatedFromAbove;
 
 #[derive(Op)]
-#[mnemonic("func.func")]
+#[mnemonic = "func.func"]
 pub struct FuncOp {
     #[base]
     op_base: OpBase,
@@ -69,7 +69,7 @@ impl Print for FuncOp {
 }
 
 #[derive(Op)]
-#[mnemonic("func.return")]
+#[mnemonic = "func.return"]
 pub struct ReturnOp {
     #[base]
     op_base: OpBase,
@@ -131,7 +131,7 @@ impl Print for ReturnOp {
 /// %result = func.call @callee(%arg1, %arg2) : int<32>
 /// ```
 #[derive(Op)]
-#[mnemonic("func.call")]
+#[mnemonic = "func.call"]
 pub struct CallOp {
     #[base]
     op_base: OpBase,
@@ -217,10 +217,7 @@ pub fn register(ctx: &mut Context) {
     ReturnOp::register(ctx, ReturnOp::parse);
     CallOp::register(ctx, CallOp::parse);
 
-    ctx.casters.register::<FuncOp, dyn IsIsolatedFromAbove>(Caster::new(
-        |any| any.downcast_ref::<FuncOp>().unwrap() as &dyn IsIsolatedFromAbove,
-        |any| any.downcast_mut::<FuncOp>().unwrap() as &mut dyn IsIsolatedFromAbove,
-    ));
+    register_caster!(ctx, FuncOp => IsIsolatedFromAbove);
 }
 
 #[cfg(test)]

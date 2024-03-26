@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Fields, LitStr};
+use syn::{parse_macro_input, Data, DeriveInput, Expr, Fields, Lit, Meta};
 
 pub fn derive_op(item: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(item as DeriveInput);
@@ -85,12 +85,23 @@ pub fn derive_op(item: TokenStream) -> TokenStream {
         panic!("no mnemonic specified.")
     }
 
-    let mnemonic = match mnemonic.unwrap().parse_args::<LitStr>() {
-        Ok(mnemonic) => mnemonic.value(),
-        Err(_) => panic!("mnemonic must be a string literal."),
+    // parse as `mnemonic = "xxxx.xxx"`, which is a name-value style attribute.
+    let mnemonic = if let Meta::NameValue(ref meta) = mnemonic.unwrap().meta {
+        if let Expr::Lit(lit) = &meta.value {
+            if let Lit::Str(lit) = &lit.lit {
+                lit.value()
+            } else {
+                panic!("mnemonic must be a string literal.")
+            }
+        } else {
+            panic!("mnemonic must be a string literal.")
+        }
+    } else {
+        panic!("mnemonic must be specified using a key-value style attribute.")
     };
-
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
+
+    // parse the interfaces
 
     let result = quote! {
         impl #ident {

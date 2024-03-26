@@ -8,7 +8,7 @@ use orzir_core::{
 use orzir_macros::Op;
 
 #[derive(Op)]
-#[mnemonic("builtin.module")]
+#[mnemonic = "builtin.module"]
 pub struct ModuleOp {
     #[base]
     op_base: OpBase,

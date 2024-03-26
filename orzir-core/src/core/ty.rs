@@ -4,7 +4,7 @@ use downcast_rs::{impl_downcast, Downcast};
 use super::{context::Context, mnemonic::Mnemonic, parse::ParseFn};
 use crate::{
     support::{
-        cast::{CastMut, CastRef},
+        cast::CastRef,
         storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
     },
     Parse, Print, PrintState, TokenStream,

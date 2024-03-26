@@ -8,7 +8,7 @@ use orzir_core::{
 use orzir_macros::Op;
 
 #[derive(Op)]
-#[mnemonic("cf.jump")]
+#[mnemonic = "cf.jump"]
 pub struct Jump {
     #[base]
     op_base: OpBase,
@@ -52,7 +52,7 @@ impl Print for Jump {
 }
 
 #[derive(Op)]
-#[mnemonic("cf.branch")]
+#[mnemonic = "cf.branch"]
 pub struct Branch {
     #[base]
     op_base: OpBase,

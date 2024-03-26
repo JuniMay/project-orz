@@ -2,15 +2,15 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Caster, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
+    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
     PrintState, Region, RegionKind, TokenKind, TokenStream, Type, TypeObj,
 };
-use orzir_macros::{Op, Type};
+use orzir_macros::{register_caster, Op, Type};
 
-use crate::interfaces::IsIsolatedFromAbove;
+use crate::interfaces::{IsIsolatedFromAbove, NumRegions};
 
 #[derive(Op)]
-#[mnemonic("builtin.module")]
+#[mnemonic = "builtin.module"]
 pub struct ModuleOp {
     #[base]
     op_base: OpBase,
@@ -66,7 +66,7 @@ impl Print for ModuleOp {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
-#[mnemonic("builtin.int")]
+#[mnemonic = "builtin.int"]
 pub struct IntType(usize);
 
 impl Parse for IntType {
@@ -94,7 +94,7 @@ impl Print for IntType {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
-#[mnemonic("builtin.float")]
+#[mnemonic = "builtin.float"]
 pub struct FloatType;
 
 impl Parse for FloatType {
@@ -111,7 +111,7 @@ impl Print for FloatType {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
-#[mnemonic("builtin.double")]
+#[mnemonic = "builtin.double"]
 pub struct DoubleType;
 
 impl Parse for DoubleType {
@@ -128,7 +128,7 @@ impl Print for DoubleType {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
-#[mnemonic("builtin.tuple")]
+#[mnemonic = "builtin.tuple"]
 pub struct TupleType {
     elems: Vec<ArenaPtr<TypeObj>>,
 }
@@ -169,7 +169,7 @@ impl Print for TupleType {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
-#[mnemonic("builtin.fn")]
+#[mnemonic = "builtin.fn"]
 pub struct FunctionType {
     args: Vec<ArenaPtr<TypeObj>>,
     rets: Vec<ArenaPtr<TypeObj>>,
@@ -248,7 +248,7 @@ impl Print for FunctionType {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
-#[mnemonic("builtin.memref")]
+#[mnemonic = "builtin.memref"]
 pub struct MemRefType {
     shape: Vec<usize>,
     elem: ArenaPtr<TypeObj>,
@@ -303,7 +303,7 @@ impl Print for MemRefType {
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
-#[mnemonic("builtin.unit")]
+#[mnemonic = "builtin.unit"]
 pub struct UnitType;
 
 impl Parse for UnitType {
@@ -333,10 +333,7 @@ pub fn register(ctx: &mut Context) {
     FunctionType::register(ctx, FunctionType::parse);
     MemRefType::register(ctx, MemRefType::parse);
 
-    ctx.casters.register::<ModuleOp, dyn IsIsolatedFromAbove>(Caster::new(
-        |any| any.downcast_ref::<ModuleOp>().unwrap() as &dyn IsIsolatedFromAbove,
-        |any| any.downcast_mut::<ModuleOp>().unwrap() as &mut dyn IsIsolatedFromAbove,
-    ));
+    register_caster!(ctx, ModuleOp => IsIsolatedFromAbove);
 }
 
 #[cfg(test)]
