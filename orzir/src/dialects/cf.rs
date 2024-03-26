@@ -7,7 +7,7 @@ use orzir_core::{
 };
 use orzir_macros::Op;
 
-use crate::interfaces::{control_flow::*, *};
+use crate::verifiers::{control_flow::*, *};
 
 /// The jump operation.
 ///

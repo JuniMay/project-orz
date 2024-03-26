@@ -6,12 +6,13 @@ use orzir::{
         cf,
         func::{self, FuncOp},
     },
-    interfaces::{IsIsolatedFromAbove, NumRegions, NumResults},
+    interfaces::RegionKindInterface,
+    verifiers::{IsIsolatedFromAbove, NumRegions, NumResults},
 };
 use orzir_core::{Block, Context, Print, PrintState, Region, RegionKind};
 
 #[test]
-fn test_isolated_from_above_0() -> Result<()> {
+fn test_basic_0() -> Result<()> {
     let mut ctx = Context::default();
 
     builtin::register(&mut ctx);
@@ -54,6 +55,17 @@ fn test_isolated_from_above_0() -> Result<()> {
     assert!(func_op.deref(&ctx.ops).impls::<dyn NumResults<0>>(&ctx));
 
     assert!(!func_op.deref(&ctx.ops).impls::<dyn NumResults<2>>(&ctx));
+
+    assert!(!module_op
+        .deref(&ctx.ops)
+        .cast_ref::<dyn RegionKindInterface>(&ctx)
+        .unwrap()
+        .has_ssa_dominance(&ctx, 0));
+    assert!(func_op
+        .deref(&ctx.ops)
+        .cast_ref::<dyn RegionKindInterface>(&ctx)
+        .unwrap()
+        .has_ssa_dominance(&ctx, 0));
 
     Ok(())
 }

@@ -8,7 +8,7 @@ use orzir_core::{
 };
 use orzir_macros::Op;
 
-use crate::interfaces::*;
+use crate::verifiers::*;
 
 fn parse_binary(
     arg: (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>),

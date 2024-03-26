@@ -9,10 +9,14 @@ use orzir_core::{
 use orzir_macros::Op;
 
 use super::builtin::FunctionType;
-use crate::interfaces::{control_flow::*, *};
+use crate::{
+    interfaces::*,
+    verifiers::{control_flow::*, *},
+};
 
 #[derive(Op)]
 #[mnemonic = "func.func"]
+#[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
 pub struct FuncOp {
     #[base]
@@ -20,6 +24,8 @@ pub struct FuncOp {
     symbol: String,
     ty: ArenaPtr<TypeObj>,
 }
+
+impl RegionKindInterface for FuncOp {}
 
 impl Verify for FuncOp {
     fn verify(&self, ctx: &Context) -> Result<()> {

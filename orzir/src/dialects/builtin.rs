@@ -8,16 +8,22 @@ use orzir_core::{
 };
 use orzir_macros::{Op, Type};
 
-use crate::interfaces::{control_flow::*, *};
+use crate::{
+    interfaces::*,
+    verifiers::{control_flow::*, *},
+};
 
 #[derive(Op)]
 #[mnemonic = "builtin.module"]
+#[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
 pub struct ModuleOp {
     #[base]
     op_base: OpBase,
     symbol: Option<String>,
 }
+
+impl RegionKindInterface for ModuleOp {}
 
 impl Verify for ModuleOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
