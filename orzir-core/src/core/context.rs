@@ -4,7 +4,10 @@ use super::{
     block::Block, dialect::Dialect, mnemonic::MnemonicSegment, operation::OpObj, region::Region,
     symbol::NameManager, ty::TypeObj, value::Value,
 };
-use crate::support::storage::{Arena, UniqueArena};
+use crate::support::{
+    cast::CasterStorage,
+    storage::{Arena, UniqueArena},
+};
 
 /// The context of the whole IR.
 ///
@@ -27,4 +30,8 @@ pub struct Context {
     ///
     /// TODO: More fine-grained name management.
     pub(crate) value_names: RefCell<NameManager<Value>>,
+    /// The caster storage.
+    ///
+    /// This is used for interface casting.
+    pub(crate) casters: CasterStorage,
 }
