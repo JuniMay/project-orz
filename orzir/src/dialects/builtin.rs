@@ -4,6 +4,7 @@ use anyhow::Result;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
     PrintState, Region, RegionKind, TokenKind, TokenStream, Type, TypeObj, Verify,
+    VerifyInterfaces,
 };
 use orzir_macros::{Op, Type};
 
@@ -18,7 +19,13 @@ pub struct ModuleOp {
     symbol: Option<String>,
 }
 
-impl Verify for ModuleOp {}
+impl Verify for ModuleOp {
+    fn verify(&self, ctx: &Context) -> Result<()> {
+        self.verify_interfaces(ctx)?;
+        self.as_base().get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
+        Ok(())
+    }
+}
 
 impl Parse for ModuleOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
