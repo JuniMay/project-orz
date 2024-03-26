@@ -3,15 +3,16 @@ use std::fmt::Write;
 use anyhow::{Ok, Result};
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream, TypeObj, Value,
+    PrintState, Region, RegionKind, TokenKind, TokenStream, TypeObj, Value, Verify,
 };
-use orzir_macros::{register_caster, Op};
+use orzir_macros::Op;
 
 use super::builtin::FunctionType;
-use crate::interfaces::IsIsolatedFromAbove;
+use crate::interfaces::{IsIsolatedFromAbove, NumRegions, NumResults};
 
 #[derive(Op)]
 #[mnemonic = "func.func"]
+#[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
 pub struct FuncOp {
     #[base]
     op_base: OpBase,
@@ -20,6 +21,10 @@ pub struct FuncOp {
 }
 
 impl IsIsolatedFromAbove for FuncOp {}
+impl NumRegions<1> for FuncOp {}
+impl NumResults<0> for FuncOp {}
+
+impl Verify for FuncOp {}
 
 impl Parse for FuncOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -74,6 +79,8 @@ pub struct ReturnOp {
     #[base]
     op_base: OpBase,
 }
+
+impl Verify for ReturnOp {}
 
 impl Parse for ReturnOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -138,6 +145,8 @@ pub struct CallOp {
     callee: String,
     ret_type: ArenaPtr<TypeObj>,
 }
+
+impl Verify for CallOp {}
 
 impl Parse for CallOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -216,8 +225,6 @@ pub fn register(ctx: &mut Context) {
     FuncOp::register(ctx, FuncOp::parse);
     ReturnOp::register(ctx, ReturnOp::parse);
     CallOp::register(ctx, CallOp::parse);
-
-    register_caster!(ctx, FuncOp => IsIsolatedFromAbove);
 }
 
 #[cfg(test)]

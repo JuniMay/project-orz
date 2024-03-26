@@ -1,11 +1,11 @@
-use proc_macro::TokenStream;
+use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, spanned::Spanned, Data, DeriveInput, Expr, Fields, Lit, LitStr, Meta,
+    punctuated::Punctuated, spanned::Spanned, Data, DeriveInput, Expr, Fields, Lit, Meta, Path,
 };
 
-pub fn derive_ty(item: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(item as DeriveInput);
+pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
+    let ast = syn::parse2::<DeriveInput>(item)?;
     let ident = ast.ident.clone();
 
     // get the arguments of the `get` constructor
@@ -111,6 +111,74 @@ pub fn derive_ty(item: TokenStream) -> TokenStream {
     };
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
 
+    // generate the register_caster calls for the interfaces
+    let interfaces = ast.attrs.iter().find(|attr| attr.path().is_ident("interfaces"));
+    let interfaces = if let Some(interfaces) = interfaces {
+        if let Meta::List(list) = &interfaces.meta {
+            let paths =
+                list.parse_args_with(Punctuated::<Path, syn::Token![,]>::parse_terminated)?;
+            // iter to generate the register_caster macro calls
+            let register_caster_calls = paths.into_iter().map(|path| {
+                quote! {
+                    ::orzir_macros::register_caster!(ctx, #ident => #path);
+                }
+            });
+            register_caster_calls.collect::<Vec<_>>()
+        } else {
+            panic!("expect list inside the `interfaces` attribute");
+        }
+    } else {
+        Vec::new()
+    };
+
+    let verifiers = ast.attrs.iter().find(|attr| attr.path().is_ident("verifiers"));
+    // generate the register_caster calls for the verifiers
+    let verifier_register_casters = if let Some(verifiers) = verifiers {
+        if let Meta::List(list) = &verifiers.meta {
+            let paths =
+                list.parse_args_with(Punctuated::<Path, syn::Token![,]>::parse_terminated)?;
+            // iter to generate the register_caster macro calls
+            let register_caster_calls = paths.into_iter().map(|path| {
+                quote! {
+                    ::orzir_macros::register_caster!(ctx, #ident => #path);
+                }
+            });
+            register_caster_calls.collect::<Vec<_>>()
+        } else {
+            panic!("expect list inside the `verifiers` attribute");
+        }
+    } else {
+        Vec::new()
+    };
+    // call the verifier to implement
+    // [`VerifyInterfaces`](orzir_core::VerifyInterfaces) trait.
+    let verifier_calls = if let Some(verifiers) = verifiers {
+        if let Meta::List(list) = &verifiers.meta {
+            let paths =
+                list.parse_args_with(Punctuated::<Path, syn::Token![,]>::parse_terminated)?;
+            // iter to generate the register_caster macro calls
+            let calls = paths.into_iter().map(|path| {
+                quote! {
+                    <Self as #path>::verify(self, ctx)?;
+                }
+            });
+            calls.collect::<Vec<_>>()
+        } else {
+            panic!("expect list inside the `verifiers` attribute");
+        }
+    } else {
+        Vec::new()
+    };
+
+    let verifier_calls = quote! {
+        impl ::orzir_core::VerifyInterfaces for #ident {
+            fn verify_interfaces(&self, ctx: &::orzir_core::Context) -> ::anyhow::Result<()> {
+                #(#verifier_calls)*
+                Ok(())
+            }
+        }
+    };
+
     let result = quote! {
         impl #ident {
             pub #get_ctor
@@ -135,8 +203,21 @@ pub fn derive_ty(item: TokenStream) -> TokenStream {
                     false
                 }
             }
+
+            fn register(ctx: &mut ::orzir_core::Context, parse_fn: ::orzir_core::TypeParseFn)
+            where
+                Self: Sized
+            {
+                let mnemonic = Self::mnemonic_static();
+                ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_type(mnemonic, parse_fn);
+
+                #(#interfaces)*
+                #(#verifier_register_casters)*
+            }
         }
+
+        #verifier_calls
     };
 
-    result.into()
+    Ok(result)
 }

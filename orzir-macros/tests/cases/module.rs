@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::Result;
 use orzir_core::{
     ArenaPtr, Block, Context, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream
+    PrintState, Region, RegionKind, TokenKind, TokenStream, Verify
 };
 use orzir_macros::Op;
 
@@ -14,6 +14,8 @@ pub struct ModuleOp {
     op_base: OpBase,
     symbol: Option<String>,
 }
+
+impl Verify for ModuleOp {}
 
 impl Parse for ModuleOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);

@@ -7,10 +7,10 @@ use crate::{
         cast::CastRef,
         storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
     },
-    Parse, Print, PrintState, TokenStream,
+    Parse, Print, PrintState, TokenStream, Verify,
 };
 
-pub trait Type: Downcast + GetUniqueArenaHash + Print {
+pub trait Type: Downcast + GetUniqueArenaHash + Print + Verify {
     /// Get the mnemonic of the type.
     fn mnemonic(&self) -> Mnemonic;
     /// Get the mnemonic of the type statically.
@@ -22,11 +22,7 @@ pub trait Type: Downcast + GetUniqueArenaHash + Print {
 
     fn register(ctx: &mut Context, parse_fn: TypeParseFn)
     where
-        Self: Sized,
-    {
-        let mnemonic = Self::mnemonic_static();
-        ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_type(mnemonic, parse_fn);
-    }
+        Self: Sized;
 }
 
 impl_downcast!(Type);

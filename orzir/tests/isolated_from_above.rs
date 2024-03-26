@@ -6,7 +6,7 @@ use orzir::{
         cf,
         func::{self, FuncOp},
     },
-    interfaces::IsIsolatedFromAbove,
+    interfaces::{IsIsolatedFromAbove, NumRegions, NumResults},
 };
 use orzir_core::{Block, Context, Print, PrintState, Region, RegionKind};
 
@@ -40,18 +40,20 @@ fn test_isolated_from_above_0() -> Result<()> {
     let mut print_state = PrintState::new("    ");
     module_op.deref(&ctx.ops).print(&ctx, &mut print_state)?;
 
-    module_op
-        .deref(&ctx.ops)
-        .cast_ref::<dyn IsIsolatedFromAbove>(&ctx)
-        .unwrap()
-        .verify(&ctx)?;
-    func_op
-        .deref(&ctx.ops)
-        .cast_ref::<dyn IsIsolatedFromAbove>(&ctx)
-        .unwrap()
-        .verify(&ctx)?;
+    module_op.deref(&ctx.ops).as_inner().verify(&ctx)?;
+    func_op.deref(&ctx.ops).as_inner().verify(&ctx)?;
 
     println!("{}", print_state.buffer);
+
+    assert!(module_op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>(&ctx));
+    assert!(module_op.deref(&ctx.ops).impls::<dyn NumRegions<1>>(&ctx));
+    assert!(module_op.deref(&ctx.ops).impls::<dyn NumResults<0>>(&ctx));
+
+    assert!(func_op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>(&ctx));
+    assert!(func_op.deref(&ctx.ops).impls::<dyn NumRegions<1>>(&ctx));
+    assert!(func_op.deref(&ctx.ops).impls::<dyn NumResults<0>>(&ctx));
+
+    assert!(!func_op.deref(&ctx.ops).impls::<dyn NumResults<2>>(&ctx));
 
     Ok(())
 }

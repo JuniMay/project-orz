@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::Result;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Successor, TokenKind, TokenStream, Value,
+    PrintState, Successor, TokenKind, TokenStream, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -13,6 +13,8 @@ pub struct Jump {
     #[base]
     op_base: OpBase,
 }
+
+impl Verify for Jump {}
 
 impl Parse for Jump {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -57,6 +59,8 @@ pub struct Branch {
     #[base]
     op_base: OpBase,
 }
+
+impl Verify for Branch {}
 
 impl Parse for Branch {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);

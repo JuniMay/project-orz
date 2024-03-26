@@ -15,7 +15,7 @@ use crate::{
         cast::{CastMut, CastRef},
         storage::ArenaPtr,
     },
-    Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed,
+    Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed, Verify,
 };
 
 /// The successor.
@@ -217,7 +217,7 @@ impl OpBase {
 }
 
 /// The trait of all operations.
-pub trait Op: Downcast + Print {
+pub trait Op: Downcast + Print + Verify {
     /// Get the mnemonic of the type.
     fn mnemonic(&self) -> Mnemonic;
 
@@ -238,11 +238,7 @@ pub trait Op: Downcast + Print {
     /// here just pass the parse function.
     fn register(ctx: &mut Context, parse_fn: OpParseFn)
     where
-        Self: Sized,
-    {
-        let mnemonic = Self::mnemonic_static();
-        ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_op(mnemonic, parse_fn);
-    }
+        Self: Sized;
 }
 
 impl_downcast!(Op);

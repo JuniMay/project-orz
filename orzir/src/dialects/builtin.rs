@@ -3,14 +3,15 @@ use std::fmt::Write;
 use anyhow::Result;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream, Type, TypeObj,
+    PrintState, Region, RegionKind, TokenKind, TokenStream, Type, TypeObj, Verify,
 };
-use orzir_macros::{register_caster, Op, Type};
+use orzir_macros::{Op, Type};
 
-use crate::interfaces::{IsIsolatedFromAbove, NumRegions};
+use crate::interfaces::{IsIsolatedFromAbove, NumRegions, NumResults};
 
 #[derive(Op)]
 #[mnemonic = "builtin.module"]
+#[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
 pub struct ModuleOp {
     #[base]
     op_base: OpBase,
@@ -18,6 +19,10 @@ pub struct ModuleOp {
 }
 
 impl IsIsolatedFromAbove for ModuleOp {}
+impl NumRegions<1> for ModuleOp {}
+impl NumResults<0> for ModuleOp {}
+
+impl Verify for ModuleOp {}
 
 impl Parse for ModuleOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -69,6 +74,8 @@ impl Print for ModuleOp {
 #[mnemonic = "builtin.int"]
 pub struct IntType(usize);
 
+impl Verify for IntType {}
+
 impl Parse for IntType {
     type Arg = ();
     type Item = ArenaPtr<TypeObj>;
@@ -97,6 +104,8 @@ impl Print for IntType {
 #[mnemonic = "builtin.float"]
 pub struct FloatType;
 
+impl Verify for FloatType {}
+
 impl Parse for FloatType {
     type Arg = ();
     type Item = ArenaPtr<TypeObj>;
@@ -113,6 +122,8 @@ impl Print for FloatType {
 #[derive(Debug, Hash, PartialEq, Eq, Type)]
 #[mnemonic = "builtin.double"]
 pub struct DoubleType;
+
+impl Verify for DoubleType {}
 
 impl Parse for DoubleType {
     type Arg = ();
@@ -132,6 +143,8 @@ impl Print for DoubleType {
 pub struct TupleType {
     elems: Vec<ArenaPtr<TypeObj>>,
 }
+
+impl Verify for TupleType {}
 
 impl Parse for TupleType {
     type Arg = ();
@@ -174,6 +187,8 @@ pub struct FunctionType {
     args: Vec<ArenaPtr<TypeObj>>,
     rets: Vec<ArenaPtr<TypeObj>>,
 }
+
+impl Verify for FunctionType {}
 
 impl Parse for FunctionType {
     type Arg = ();
@@ -254,6 +269,8 @@ pub struct MemRefType {
     elem: ArenaPtr<TypeObj>,
 }
 
+impl Verify for MemRefType {}
+
 impl Parse for MemRefType {
     type Arg = ();
     type Item = ArenaPtr<TypeObj>;
@@ -306,6 +323,8 @@ impl Print for MemRefType {
 #[mnemonic = "builtin.unit"]
 pub struct UnitType;
 
+impl Verify for UnitType {}
+
 impl Parse for UnitType {
     type Arg = ();
     type Item = ArenaPtr<TypeObj>;
@@ -332,8 +351,6 @@ pub fn register(ctx: &mut Context) {
     TupleType::register(ctx, TupleType::parse);
     FunctionType::register(ctx, FunctionType::parse);
     MemRefType::register(ctx, MemRefType::parse);
-
-    register_caster!(ctx, ModuleOp => IsIsolatedFromAbove);
 }
 
 #[cfg(test)]

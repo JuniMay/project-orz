@@ -9,12 +9,12 @@ mod operation;
 mod ty;
 
 /// Implement a [Op](orzir_core::Op) for the given struct.
-#[proc_macro_derive(Op, attributes(mnemonic, base))]
-pub fn op(item: TokenStream) -> TokenStream { derive_op(item) }
+#[proc_macro_derive(Op, attributes(mnemonic, base, verifiers, interfaces))]
+pub fn op(item: TokenStream) -> TokenStream { derive_op(item.into()).unwrap().into() }
 
 /// Implement a [Type](orzir_core::Type) for the given struct.
-#[proc_macro_derive(Type, attributes(mnemonic))]
-pub fn ty(item: TokenStream) -> TokenStream { derive_ty(item) }
+#[proc_macro_derive(Type, attributes(mnemonic, verifiers, interfaces))]
+pub fn ty(item: TokenStream) -> TokenStream { derive_ty(item.into()).unwrap().into() }
 
 /// Create a caster for casting from one type to another.
 #[proc_macro]

@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, TokenKind, TypeObj, Value,
+    PrintState, TokenKind, TypeObj, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -54,6 +54,8 @@ pub struct IConstOp {
     op_base: OpBase,
     value: BigInt,
 }
+
+impl Verify for IConstOp {}
 
 impl Parse for IConstOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
@@ -125,6 +127,8 @@ pub struct IAddOp {
     #[base]
     op_base: OpBase,
 }
+
+impl Verify for IAddOp {}
 
 impl Parse for IAddOp {
     type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
