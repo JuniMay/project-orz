@@ -104,6 +104,9 @@ impl Block {
 /// A block builder.
 ///
 /// This can be used to perform simple chained style block building.
+///
+/// The block builder will not add the entity to the layout of the parent
+/// region.
 #[derive(Debug, Default)]
 pub struct BlockBuilder {
     /// The name of the block.

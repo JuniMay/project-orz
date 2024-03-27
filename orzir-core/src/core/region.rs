@@ -38,6 +38,12 @@ pub struct Region {
     index: usize,
 }
 
+/// The builder of the region.
+///
+/// This builder requires the kind, parent operation, and index to be set.
+///
+/// The index is used to attach the region to the parent operation, and if
+/// it is not set, the build function will return an error.
 #[derive(Debug, Default)]
 pub struct RegionBuilder {
     kind: Option<RegionKind>,
@@ -97,29 +103,38 @@ impl Region {
 }
 
 impl RegionBuilder {
+    /// Set the kind of the region.
     pub fn kind(mut self, kind: RegionKind) -> Self {
         self.kind = Some(kind);
         self
     }
 
+    /// Set the parent operation of the region.
     pub fn parent_op(mut self, parent_op: ArenaPtr<OpObj>) -> Self {
         self.parent_op = Some(parent_op);
         self
     }
 
+    /// Set the index of the region in the parent operation.
     pub fn index(mut self, index: usize) -> Self {
         self.index = Some(index);
         self
     }
 
+    /// Parse the current token stream as an region and consume the builder.
     pub fn parse(self, ctx: &mut Context, stream: &mut TokenStream) -> Result<ArenaPtr<Region>> {
         Region::parse(self, ctx, stream)
     }
 
-    /// Build the region.
+    /// Build the region and consume the builder.
     ///
     /// This will add the region to the parent operation, and store the index in
     /// the parent operation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the kind, parent operation, or
+    /// index is not set.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Region>> {
         let kind = self.kind.ok_or_else(|| anyhow!("missing kind"))?;
         let parent_op = self.parent_op.ok_or_else(|| anyhow!("missing parent_op"))?;

@@ -60,10 +60,13 @@ impl Verify for Value {
 }
 
 impl Value {
+    /// Get a clean builder of the operation result.
     pub fn op_result_builder() -> OpResultBuilder { OpResultBuilder::default() }
 
+    /// Get a clean builder of the block argument.
     pub fn block_argument_builder() -> BlockArgumentBuilder { BlockArgumentBuilder::default() }
 
+    /// Get the self ptr.
     fn self_ptr(&self) -> ArenaPtr<Self> {
         match self {
             Value::OpResult { self_ptr, .. } => *self_ptr,
@@ -71,15 +74,21 @@ impl Value {
         }
     }
 
+    /// Get the name of the value.
+    ///
+    /// This will lookup the name by the self ptr. If the name is not set, the
+    /// name manager will allocate a new name.
     pub(crate) fn name(&self, ctx: &Context) -> String {
         let name = ctx.value_names.borrow_mut().get(self.self_ptr());
         name
     }
 
+    /// Set the name of the value.
     pub(crate) fn set_name(&self, ctx: &Context, name: String) -> Result<()> {
         ctx.value_names.borrow_mut().set(self.self_ptr(), name)
     }
 
+    /// Get the parent region of the value.
     pub fn parent_region(&self, ctx: &Context) -> ArenaPtr<Region> {
         match self {
             Value::OpResult { op, .. } => op
@@ -92,6 +101,16 @@ impl Value {
     }
 }
 
+/// The builder to build [`Value::OpResult`].
+///
+/// This builder requires the type of the result, the parent operation, and the
+/// index of the result. If the name is set, the builder will lookup if there is
+/// a reserved [`ArenaPtr<Value>`] by the name. If not, a new
+/// [`ArenaPtr<Value>`] will be reserved, and the name will be set.
+///
+/// The index represents the position of this result in the operation. If the
+/// index is not set, the builder cannot attach the result to the operation and
+/// will thus return an error.
 #[derive(Debug, Default)]
 pub struct OpResultBuilder {
     name: Option<String>,
@@ -100,6 +119,16 @@ pub struct OpResultBuilder {
     index: Option<usize>,
 }
 
+/// The builder to build [`Value::BlockArgument`].
+///
+/// This builder requires the type of the argument, the parent block, and the
+/// index of the argument. If the name is set, the builder will lookup if there
+/// is a reserved [`ArenaPtr<Value>`] by the name. If not, a new
+/// [`ArenaPtr<Value>`] will be reserved, and the name will be set.
+///
+/// The index represents the position of this argument in the block. If the
+/// index is not set, the builder cannot attach the argument to the block and
+/// will thus return an error.
 #[derive(Debug, Default)]
 pub struct BlockArgumentBuilder {
     name: Option<String>,
@@ -108,7 +137,6 @@ pub struct BlockArgumentBuilder {
     index: Option<usize>,
 }
 
-/// The builder for [`OpResult`].
 impl OpResultBuilder {
     /// Set the type of the result.
     pub fn ty(mut self, ty: ArenaPtr<TyObj>) -> Self {
@@ -128,14 +156,19 @@ impl OpResultBuilder {
         self
     }
 
+    /// Set the index of the result.
     pub fn index(mut self, index: usize) -> Self {
         self.index = Some(index);
         self
     }
 
-    /// Build the value.
+    /// Build the value and consume the builder.
     ///
     /// This will add the result to the operation.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the type, operation, or index is not
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
         let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
         let op = self.op.ok_or_else(|| anyhow!("missing op"))?;
@@ -165,7 +198,6 @@ impl OpResultBuilder {
     }
 }
 
-/// The builder for [`BlockArgument`].
 impl BlockArgumentBuilder {
     /// Set the type of the argument.
     pub fn ty(mut self, ty: ArenaPtr<TyObj>) -> Self {
@@ -191,9 +223,13 @@ impl BlockArgumentBuilder {
         self
     }
 
-    /// Build the value.
+    /// Build the value and consume the builder.
     ///
     /// This will add the block argument to the block.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if the type, block, or index is not set.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
         let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
         let block = self.block.ok_or_else(|| anyhow!("missing block"))?;
