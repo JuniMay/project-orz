@@ -27,14 +27,21 @@ fn test_basic_0() -> Result<()> {
     let func_ty = FunctionTy::get(&mut ctx, vec![int, float], vec![int]);
     let func_op = FuncOp::new(&mut ctx, "foo".into(), func_ty);
 
-    let region = Region::builder().kind(RegionKind::Graph).parent_op(module_op).build(&mut ctx)?;
+    let region = Region::builder()
+        .kind(RegionKind::Graph)
+        .parent_op(module_op)
+        .index(0)
+        .build(&mut ctx)?;
 
     let block = Block::builder().entry(true).parent_region(region).build(&mut ctx)?;
     region.deref_mut(&mut ctx.regions).layout_mut().append_block(block);
     region.deref_mut(&mut ctx.regions).layout_mut().append_op(block, func_op);
 
-    let func_region =
-        Region::builder().kind(RegionKind::SsaCfg).parent_op(func_op).build(&mut ctx)?;
+    let func_region = Region::builder()
+        .kind(RegionKind::SsaCfg)
+        .parent_op(func_op)
+        .index(0)
+        .build(&mut ctx)?;
     let func_block = Block::builder().entry(true).parent_region(func_region).build(&mut ctx)?;
     func_region.deref_mut(&mut ctx.regions).layout_mut().append_block(func_block);
 

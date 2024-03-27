@@ -97,6 +97,7 @@ pub struct OpResultBuilder {
     name: Option<String>,
     ty: Option<ArenaPtr<TyObj>>,
     op: Option<ArenaPtr<OpObj>>,
+    index: Option<usize>,
 }
 
 #[derive(Debug, Default)]
@@ -104,6 +105,7 @@ pub struct BlockArgumentBuilder {
     name: Option<String>,
     ty: Option<ArenaPtr<TyObj>>,
     block: Option<ArenaPtr<Block>>,
+    index: Option<usize>,
 }
 
 /// The builder for [`OpResult`].
@@ -126,12 +128,19 @@ impl OpResultBuilder {
         self
     }
 
+    pub fn index(mut self, index: usize) -> Self {
+        self.index = Some(index);
+        self
+    }
+
     /// Build the value.
     ///
     /// This will add the result to the operation.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
         let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
         let op = self.op.ok_or_else(|| anyhow!("missing op"))?;
+        let index = self.index.ok_or_else(|| anyhow!("missing index"))?;
+
         // the value might be used before, so try to get the reference by the name.
         let self_ptr = if let Some(ref name) = self.name {
             ctx.value_names
@@ -141,8 +150,7 @@ impl OpResultBuilder {
         } else {
             ctx.values.reserve()
         };
-        let index = op.deref_mut(&mut ctx.ops).as_mut().add_result(self_ptr);
-
+        op.deref_mut(&mut ctx.ops).as_mut().set_result(index, self_ptr)?;
         let instance = Value::OpResult {
             self_ptr,
             ty,
@@ -177,12 +185,20 @@ impl BlockArgumentBuilder {
         self
     }
 
+    /// Set the index of the argument.
+    pub fn index(mut self, index: usize) -> Self {
+        self.index = Some(index);
+        self
+    }
+
     /// Build the value.
     ///
     /// This will add the block argument to the block.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
         let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
         let block = self.block.ok_or_else(|| anyhow!("missing block"))?;
+        let index = self.index.ok_or_else(|| anyhow!("missing index"))?;
+
         let self_ptr = if let Some(ref name) = self.name {
             ctx.value_names
                 .borrow()
@@ -191,8 +207,7 @@ impl BlockArgumentBuilder {
         } else {
             ctx.values.reserve()
         };
-        let index = block.deref_mut(&mut ctx.blocks).add_arg(self_ptr);
-
+        block.deref_mut(&mut ctx.blocks).set_arg(index, self_ptr)?;
         let instance = Value::BlockArgument {
             self_ptr,
             ty,

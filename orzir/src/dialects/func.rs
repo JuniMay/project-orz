@@ -52,8 +52,11 @@ impl Parse for FuncOp {
         let op = FuncOp::new(ctx, symbol.clone(), ty);
 
         // parse the region.
-        let region_builder = Region::builder().parent_op(op).kind(RegionKind::SsaCfg);
-        let _region = Region::parse(region_builder, ctx, stream)?;
+        let _region = Region::builder()
+            .parent_op(op)
+            .kind(RegionKind::SsaCfg)
+            .index(0)
+            .parse(ctx, stream)?;
 
         op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
         // register the symbol in the parent region.
@@ -101,9 +104,12 @@ impl Parse for ReturnOp {
 
         let op = ReturnOp::new(ctx);
 
+        let mut cnt = 0;
         while let TokenKind::ValueName(_) = stream.peek()?.kind {
             let operand = Value::parse((), ctx, stream)?;
-            op.deref_mut(&mut ctx.ops).as_mut().add_operand(operand);
+
+            op.deref_mut(&mut ctx.ops).as_mut().set_operand(cnt, operand)?;
+            cnt += 1;
 
             if let TokenKind::Char(',') = stream.peek()?.kind {
                 stream.consume()?;
@@ -188,8 +194,8 @@ impl Parse for CallOp {
 
         let op = CallOp::new(ctx, callee, ret_ty);
 
-        for operand in operands {
-            op.deref_mut(&mut ctx.ops).as_mut().add_operand(operand);
+        for (i, operand) in operands.iter().enumerate() {
+            op.deref_mut(&mut ctx.ops).as_mut().set_operand(i, *operand)?;
         }
 
         for result_builder in result_builders {

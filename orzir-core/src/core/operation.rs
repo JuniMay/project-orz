@@ -296,18 +296,6 @@ pub trait Op: Downcast + Print + Verify {
     /// Get the types of the results.
     fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> { self.as_base().result_tys(ctx) }
 
-    /// Get the regions of the operation.
-    fn regions(&self) -> &[ArenaPtr<Region>] { self.as_base().regions() }
-
-    /// Get the results of the operation.
-    fn results(&self) -> &[ArenaPtr<Value>] { self.as_base().results() }
-
-    /// Get the operands of the operation.
-    fn operands(&self) -> &[ArenaPtr<Value>] { self.as_base().operands() }
-
-    /// Get the successors of the operation.
-    fn successors(&self) -> &[Successor] { self.as_base().successors() }
-
     /// Get the number of operands.
     fn num_operands(&self) -> usize { self.as_base().operands().len() }
 
@@ -340,24 +328,40 @@ pub trait Op: Downcast + Print + Verify {
         self.as_base().get_successor(index)
     }
 
-    /// Add an operand to the operation.
-    fn add_operand(&mut self, operand: ArenaPtr<Value>) -> usize {
-        self.as_base_mut().add_operand(operand)
+    /// Get the operands
+    fn operands(&self) -> Vec<ArenaPtr<Value>> {
+        let mut operands = Vec::new();
+        for i in 0..self.num_operands() {
+            operands.push(self.get_operand(i).unwrap());
+        }
+        operands
     }
 
-    /// Add a successor to the operation.
-    fn add_successor(&mut self, successor: Successor) {
-        self.as_base_mut().add_successor(successor)
+    /// Get the results
+    fn results(&self) -> Vec<ArenaPtr<Value>> {
+        let mut results = Vec::new();
+        for i in 0..self.num_results() {
+            results.push(self.get_result(i).unwrap());
+        }
+        results
     }
 
-    /// Add a result to the operation.
-    fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
-        self.as_base_mut().add_result(result)
+    /// Get the regions
+    fn regions(&self) -> Vec<ArenaPtr<Region>> {
+        let mut regions = Vec::new();
+        for i in 0..self.num_regions() {
+            regions.push(self.get_region(i).unwrap());
+        }
+        regions
     }
 
-    /// Add a region to the operation.
-    fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
-        self.as_base_mut().add_region(region)
+    /// Get the successors
+    fn successors(&self) -> Vec<&Successor> {
+        let mut successors = Vec::new();
+        for i in 0..self.num_successors() {
+            successors.push(self.get_successor(i).unwrap());
+        }
+        successors
     }
 
     /// Set the operand by index.
@@ -499,7 +503,8 @@ impl Parse for OpObj {
             let token = stream.peek()?;
             match token.kind {
                 TokenKind::ValueName(ref name) => {
-                    let builder = Value::op_result_builder().name(name.clone());
+                    let builder =
+                        Value::op_result_builder().name(name.clone()).index(result_builders.len());
                     result_builders.push(builder);
                     // eat the value name
                     let _ = stream.consume()?;

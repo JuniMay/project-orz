@@ -56,11 +56,23 @@ impl Block {
         region.block_names.borrow_mut().set(self.self_ptr, name)
     }
 
-    /// Add an argument to the block.
-    pub fn add_arg(&mut self, arg: ArenaPtr<Value>) -> usize {
-        self.args.push(arg);
-        self.args.len() - 1
+    pub fn set_arg(
+        &mut self,
+        index: usize,
+        arg: ArenaPtr<Value>,
+    ) -> Result<Option<ArenaPtr<Value>>> {
+        if index > self.args.len() {
+            anyhow::bail!("index out of range");
+        }
+        if index == self.args.len() {
+            self.args.push(arg);
+            return Ok(None);
+        }
+        let old = std::mem::replace(&mut self.args[index], arg);
+        Ok(Some(old))
     }
+
+    pub fn num_args(&self) -> usize { self.args.len() }
 
     /// Get the arguments of the block.
     pub fn args(&self) -> &[ArenaPtr<Value>] { &self.args }
@@ -174,6 +186,7 @@ impl Parse for Block {
             let token = stream.consume()?;
             match token.kind {
                 TokenKind::Char('(') => {
+                    let mut cnt = 0;
                     // parse the arguments.
                     loop {
                         let token = stream.peek()?;
@@ -195,7 +208,10 @@ impl Parse for Block {
                                     .name(name)
                                     .block(block)
                                     .ty(ty)
+                                    .index(cnt)
                                     .build(ctx)?;
+
+                                cnt += 1;
 
                                 if stream.consume_if(TokenKind::Char(','))?.is_none() {
                                     // end of the arguments.

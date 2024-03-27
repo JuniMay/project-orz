@@ -12,7 +12,7 @@ pub mod control_flow;
 pub trait IsIsolatedFromAbove: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
         let mut pending_regions = Vec::new();
-        for region in self.regions().iter() {
+        for region in self.regions() {
             pending_regions.push(region);
 
             while !pending_regions.is_empty() {
@@ -70,8 +70,8 @@ pub trait NumOperands<const N: usize>: Op {
 /// A verifier indicating that the operation has excatly `N` regions.
 pub trait NumRegions<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        if self.regions().len() != N {
-            anyhow::bail!("expected {} regions, got {}", N, self.regions().len());
+        if self.num_regions() != N {
+            anyhow::bail!("expected {} regions, got {}", N, self.num_regions());
         }
         Ok(())
     }
@@ -82,8 +82,8 @@ pub trait NumRegions<const N: usize>: Op {
 /// A verifier indicating that the operation has exactly `N` successors.
 pub trait NumSuccessors<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        if self.successors().len() != N {
-            anyhow::bail!("expected {} successors, got {}", N, self.successors().len());
+        if self.num_successors() != N {
+            anyhow::bail!("expected {} successors, got {}", N, self.num_successors());
         }
         Ok(())
     }
@@ -126,11 +126,11 @@ pub trait AtLeastNumOperands<const N: usize>: Op {
 /// A verifier indicating that the operation has at least `N` regions.
 pub trait AtLeastNumRegions<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        if self.regions().len() < N {
+        if self.num_regions() < N {
             anyhow::bail!(
                 "expected at least {} regions, got {}",
                 N,
-                self.regions().len()
+                self.num_regions()
             );
         }
         Ok(())
@@ -142,11 +142,11 @@ pub trait AtLeastNumRegions<const N: usize>: Op {
 /// A verifier indicating that the operation has at least `N` successors.
 pub trait AtLeastNumSuccessors<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        if self.successors().len() < N {
+        if self.num_successors() < N {
             anyhow::bail!(
                 "expected at least {} successors, got {}",
                 N,
-                self.successors().len()
+                self.num_successors()
             );
         }
         Ok(())
@@ -200,9 +200,8 @@ pub trait IntegerLikeTy: Ty {
 /// This verifier indicates that the operation has float-like operands.
 pub trait FloatLikeOperands: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        for operand in self.operands() {
-            let operand_ty = operand.deref(&ctx.values).ty(ctx);
-            if !operand_ty.deref(&ctx.tys).impls::<dyn FloatLikeTy>(ctx) {
+        for ty in self.operand_tys(ctx) {
+            if !ty.deref(&ctx.tys).impls::<dyn FloatLikeTy>(ctx) {
                 anyhow::bail!("operand is not a float-like type");
             }
         }
@@ -215,9 +214,8 @@ pub trait FloatLikeOperands: Op {
 /// This verifier indicates that the operation has integer-like operands.
 pub trait IntegerLikeOperands: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        for operand in self.operands() {
-            let operand_ty = operand.deref(&ctx.values).ty(ctx);
-            if !operand_ty.deref(&ctx.tys).impls::<dyn IntegerLikeTy>(ctx) {
+        for ty in self.operand_tys(ctx) {
+            if !ty.deref(&ctx.tys).impls::<dyn IntegerLikeTy>(ctx) {
                 anyhow::bail!("operand is not an integer-like type");
             }
         }

@@ -42,6 +42,7 @@ pub struct Region {
 pub struct RegionBuilder {
     kind: Option<RegionKind>,
     parent_op: Option<ArenaPtr<OpObj>>,
+    index: Option<usize>,
 }
 
 impl VerifyInterfaces for Region {
@@ -106,6 +107,15 @@ impl RegionBuilder {
         self
     }
 
+    pub fn index(mut self, index: usize) -> Self {
+        self.index = Some(index);
+        self
+    }
+
+    pub fn parse(self, ctx: &mut Context, stream: &mut TokenStream) -> Result<ArenaPtr<Region>> {
+        Region::parse(self, ctx, stream)
+    }
+
     /// Build the region.
     ///
     /// This will add the region to the parent operation, and store the index in
@@ -113,6 +123,7 @@ impl RegionBuilder {
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Region>> {
         let kind = self.kind.ok_or_else(|| anyhow!("missing kind"))?;
         let parent_op = self.parent_op.ok_or_else(|| anyhow!("missing parent_op"))?;
+        let index = self.index.ok_or_else(|| anyhow!("missing index"))?;
 
         let above = parent_op.deref(&ctx.ops).as_ref().parent_region(ctx).map(|region| {
             let region = region.deref(&ctx.regions);
@@ -120,7 +131,7 @@ impl RegionBuilder {
         });
 
         let self_ptr = ctx.regions.reserve();
-        let index = parent_op.deref_mut(&mut ctx.ops).as_mut().add_region(self_ptr);
+        parent_op.deref_mut(&mut ctx.ops).as_mut().set_region(index, self_ptr)?;
         let symbol_table = Rc::new(RefCell::new(SymbolTable::new(above)));
         let region = Region {
             self_ptr,
