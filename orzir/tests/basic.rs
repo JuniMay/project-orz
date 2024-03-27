@@ -24,8 +24,8 @@ fn test_basic_0() -> Result<()> {
 
     let int = IntType::get(&mut ctx, 32);
     let float = FloatType::get(&mut ctx);
-    let func_type = FunctionType::get(&mut ctx, vec![int, float], vec![int]);
-    let func_op = FuncOp::new(&mut ctx, "foo".into(), func_type);
+    let func_ty = FunctionType::get(&mut ctx, vec![int, float], vec![int]);
+    let func_op = FuncOp::new(&mut ctx, "foo".into(), func_ty);
 
     let region = Region::builder().kind(RegionKind::Graph).parent_op(module_op).build(&mut ctx)?;
 

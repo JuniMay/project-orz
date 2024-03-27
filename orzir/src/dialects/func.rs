@@ -3,8 +3,7 @@ use std::fmt::Write;
 use anyhow::{Ok, Result};
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream, TypeObj, Value, Verify,
-    VerifyInterfaces,
+    PrintState, Region, RegionKind, TokenKind, TokenStream, TyObj, Value, Verify, VerifyInterfaces,
 };
 use orzir_macros::Op;
 
@@ -22,7 +21,7 @@ pub struct FuncOp {
     #[base]
     op_base: OpBase,
     symbol: String,
-    ty: ArenaPtr<TypeObj>,
+    ty: ArenaPtr<TyObj>,
 }
 
 impl RegionKindInterface for FuncOp {}
@@ -30,7 +29,7 @@ impl RegionKindInterface for FuncOp {}
 impl Verify for FuncOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
         self.verify_interfaces(ctx)?;
-        self.ty.deref(&ctx.types).as_inner().verify(ctx)?;
+        self.ty.deref(&ctx.tys).as_inner().verify(ctx)?;
         self.as_base().get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
         Ok(())
     }
@@ -75,8 +74,8 @@ impl Parse for FuncOp {
 impl Print for FuncOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " @{}", self.symbol)?;
-        let func_type = self.ty.deref(&ctx.types).as_a::<FunctionType>().unwrap();
-        func_type.print(ctx, state)?;
+        let func_ty = self.ty.deref(&ctx.tys).as_a::<FunctionType>().unwrap();
+        func_ty.print(ctx, state)?;
         write!(state.buffer, " ")?;
         self.as_base().get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
         Ok(())
@@ -155,7 +154,7 @@ pub struct CallOp {
     #[base]
     op_base: OpBase,
     callee: String,
-    ret_type: ArenaPtr<TypeObj>,
+    ret_ty: ArenaPtr<TyObj>,
 }
 
 impl Verify for CallOp {}
@@ -191,9 +190,9 @@ impl Parse for CallOp {
 
         stream.expect(TokenKind::Char(')'))?;
         stream.expect(TokenKind::Char(':'))?;
-        let ret_type = TypeObj::parse((), ctx, stream)?;
+        let ret_ty = TyObj::parse((), ctx, stream)?;
 
-        let op = CallOp::new(ctx, callee, ret_type);
+        let op = CallOp::new(ctx, callee, ret_ty);
 
         for operand in operands {
             op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_operand(operand);
@@ -201,7 +200,7 @@ impl Parse for CallOp {
 
         for result_builder in result_builders {
             // the value will be added to the parent operation when building the result
-            let _result = result_builder.op(op).ty(ret_type).build(ctx)?;
+            let _result = result_builder.op(op).ty(ret_ty).build(ctx)?;
         }
 
         op.deref_mut(&mut ctx.ops)
@@ -225,7 +224,7 @@ impl Print for CallOp {
             }
         }
         write!(state.buffer, ") : ")?;
-        self.ret_type.deref(&ctx.types).print(ctx, state)?;
+        self.ret_ty.deref(&ctx.tys).print(ctx, state)?;
         Ok(())
     }
 }

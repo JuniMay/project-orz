@@ -4,7 +4,7 @@ use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, TokenKind, TypeObj, Value, Verify,
+    PrintState, TokenKind, TyObj, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -22,7 +22,7 @@ fn parse_binary(
     stream.expect(TokenKind::Char(','))?;
     let rhs = Value::parse((), ctx, stream)?;
     stream.expect(TokenKind::Char(':'))?;
-    let ty = TypeObj::parse((), ctx, stream)?;
+    let ty = TyObj::parse((), ctx, stream)?;
 
     assert!(result_builders.len() == 1);
     let result_builder = result_builders.pop().unwrap();
@@ -43,9 +43,9 @@ fn print_binary(ctx: &Context, state: &mut PrintState, op_base: &OpBase) -> Resu
     write!(state.buffer, ", ")?;
     op_base.get_operand(1).unwrap().deref(&ctx.values).print(ctx, state)?;
     write!(state.buffer, ": ")?;
-    let result_types = op_base.result_types(ctx);
-    assert!(result_types.len() == 1);
-    result_types[0].deref(&ctx.types).print(ctx, state)?;
+    let result_tys = op_base.result_tys(ctx);
+    assert!(result_tys.len() == 1);
+    result_tys[0].deref(&ctx.tys).print(ctx, state)?;
     Ok(())
 }
 
@@ -97,7 +97,7 @@ impl Parse for IConstOp {
         let value = value * if neg { -1 } else { 1 };
 
         stream.expect(TokenKind::Char(':'))?;
-        let ty = TypeObj::parse((), ctx, stream)?;
+        let ty = TyObj::parse((), ctx, stream)?;
 
         let op = IConstOp::new(ctx, value);
 
@@ -117,9 +117,9 @@ impl Parse for IConstOp {
 impl Print for IConstOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " {} : ", self.value)?;
-        let result_types = self.as_base().result_types(ctx);
-        assert!(result_types.len() == 1);
-        result_types[0].deref(&ctx.types).print(ctx, state)?;
+        let result_tys = self.as_base().result_tys(ctx);
+        assert!(result_tys.len() == 1);
+        result_tys[0].deref(&ctx.tys).print(ctx, state)?;
         Ok(())
     }
 }

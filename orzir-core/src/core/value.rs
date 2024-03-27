@@ -7,7 +7,7 @@ use super::{
     context::Context,
     operation::OpObj,
     parse::TokenKind,
-    ty::{TypeObj, Typed},
+    ty::{TyObj, Typed},
 };
 use crate::{
     support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream, Verify,
@@ -21,7 +21,7 @@ pub enum Value {
         /// The self ptr.
         self_ptr: ArenaPtr<Self>,
         /// The type of the result.
-        ty: ArenaPtr<TypeObj>,
+        ty: ArenaPtr<TyObj>,
         /// The operation.
         op: ArenaPtr<OpObj>,
         /// The index of the result.
@@ -32,7 +32,7 @@ pub enum Value {
         /// The self ptr.
         self_ptr: ArenaPtr<Self>,
         /// The type of the argument.
-        ty: ArenaPtr<TypeObj>,
+        ty: ArenaPtr<TyObj>,
         /// The block of the argument.
         block: ArenaPtr<Block>,
         /// The index of the argument.
@@ -41,7 +41,7 @@ pub enum Value {
 }
 
 impl Typed for Value {
-    fn ty(&self, _: &Context) -> ArenaPtr<TypeObj> {
+    fn ty(&self, _: &Context) -> ArenaPtr<TyObj> {
         match self {
             Value::OpResult { ty, .. } => *ty,
             Value::BlockArgument { ty, .. } => *ty,
@@ -55,7 +55,7 @@ impl VerifyInterfaces for Value {
 
 impl Verify for Value {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        self.ty(ctx).deref(&ctx.types).as_inner().verify(ctx)
+        self.ty(ctx).deref(&ctx.tys).as_inner().verify(ctx)
     }
 }
 
@@ -96,21 +96,21 @@ impl Value {
 #[derive(Debug, Default)]
 pub struct OpResultBuilder {
     name: Option<String>,
-    ty: Option<ArenaPtr<TypeObj>>,
+    ty: Option<ArenaPtr<TyObj>>,
     op: Option<ArenaPtr<OpObj>>,
 }
 
 #[derive(Debug, Default)]
 pub struct BlockArgumentBuilder {
     name: Option<String>,
-    ty: Option<ArenaPtr<TypeObj>>,
+    ty: Option<ArenaPtr<TyObj>>,
     block: Option<ArenaPtr<Block>>,
 }
 
 /// The builder for [`OpResult`].
 impl OpResultBuilder {
     /// Set the type of the result.
-    pub fn ty(mut self, ty: ArenaPtr<TypeObj>) -> Self {
+    pub fn ty(mut self, ty: ArenaPtr<TyObj>) -> Self {
         self.ty = Some(ty);
         self
     }
@@ -161,7 +161,7 @@ impl OpResultBuilder {
 /// The builder for [`BlockArgument`].
 impl BlockArgumentBuilder {
     /// Set the type of the argument.
-    pub fn ty(mut self, ty: ArenaPtr<TypeObj>) -> Self {
+    pub fn ty(mut self, ty: ArenaPtr<TyObj>) -> Self {
         self.ty = Some(ty);
         self
     }

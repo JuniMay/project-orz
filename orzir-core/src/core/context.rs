@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap};
 
 use super::{
     block::Block, dialect::Dialect, mnemonic::MnemonicSegment, operation::OpObj, region::Region,
-    symbol::NameManager, ty::TypeObj, value::Value,
+    symbol::NameManager, ty::TyObj, value::Value,
 };
 use crate::support::{
     cast::CasterStorage,
@@ -23,7 +23,7 @@ pub struct Context {
     /// The operations.
     pub ops: Arena<OpObj>,
     /// The types.
-    pub types: UniqueArena<TypeObj>,
+    pub tys: UniqueArena<TyObj>,
     /// The dialects.
     pub dialects: HashMap<MnemonicSegment, Dialect>,
     /// The caster storage.

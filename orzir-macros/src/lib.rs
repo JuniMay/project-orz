@@ -43,11 +43,11 @@ mod ty;
 #[proc_macro_derive(Op, attributes(mnemonic, base, verifiers, interfaces))]
 pub fn op(item: TokenStream) -> TokenStream { derive_op(item.into()).unwrap().into() }
 
-/// Implement a [Type](orzir_core::Type) for the given struct.
+/// Implement a [Ty](orzir_core::Ty) for the given struct.
 ///
-/// This is similar to the [`Op`] derive, but for the `Type` trait, except that
+/// This is similar to the [`Op`] derive, but for the `Ty` trait, except that
 /// the constructor will be `get` for singleton style construction.
-#[proc_macro_derive(Type, attributes(mnemonic, verifiers, interfaces))]
+#[proc_macro_derive(Ty, attributes(mnemonic, verifiers, interfaces))]
 pub fn ty(item: TokenStream) -> TokenStream { derive_ty(item.into()).unwrap().into() }
 
 /// Create a caster for casting from one trait object to another.

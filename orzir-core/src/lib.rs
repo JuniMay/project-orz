@@ -11,7 +11,7 @@ pub use crate::{
         parse::{Parse, TokenKind, TokenStream},
         print::{Print, PrintState},
         region::{Region, RegionBuilder, RegionKind},
-        ty::{Type, TypeObj, TypeParseFn, Typed},
+        ty::{Ty, TyObj, TyParseFn, Typed},
         value::{BlockArgumentBuilder, OpResultBuilder, Value},
         verify::{Verify, VerifyInterfaces},
     },

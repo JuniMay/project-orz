@@ -1,5 +1,5 @@
 use anyhow::Result;
-use orzir_core::{Context, Op, Type, Typed};
+use orzir_core::{Context, Op, Ty, Typed};
 
 pub mod control_flow;
 
@@ -194,17 +194,17 @@ pub trait VariadicSuccessors: Op {
     fn verify(&self, _: &Context) -> Result<()> { Ok(()) }
 }
 
-/// Verifier `IsTerminator` for `Type`.
+/// Verifier `IsTerminator` for `Ty`.
 ///
 /// This verifier indicates that the type is float-like.
-pub trait FloatLikeType: Type {
+pub trait FloatLikeType: Ty {
     fn verify(&self, _ctx: &Context) -> Result<()> { Ok(()) }
 }
 
-/// Verifier `IsTerminator` for `Type`.
+/// Verifier `IsTerminator` for `Ty`.
 ///
 /// This verifier indicates that the type is integer-like.
-pub trait IntegerLikeType: Type {
+pub trait IntegerLikeType: Ty {
     fn verify(&self, _ctx: &Context) -> Result<()> { Ok(()) }
 }
 
@@ -215,7 +215,7 @@ pub trait FloatLikeOperands: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
         for operand in self.as_base().operands() {
             let operand_ty = operand.deref(&ctx.values).ty(ctx);
-            if !operand_ty.deref(&ctx.types).impls::<dyn FloatLikeType>(ctx) {
+            if !operand_ty.deref(&ctx.tys).impls::<dyn FloatLikeType>(ctx) {
                 anyhow::bail!("operand is not a float-like type");
             }
         }
@@ -230,7 +230,7 @@ pub trait IntegerLikeOperands: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
         for operand in self.as_base().operands() {
             let operand_ty = operand.deref(&ctx.values).ty(ctx);
-            if !operand_ty.deref(&ctx.types).impls::<dyn IntegerLikeType>(ctx) {
+            if !operand_ty.deref(&ctx.tys).impls::<dyn IntegerLikeType>(ctx) {
                 anyhow::bail!("operand is not an integer-like type");
             }
         }
@@ -243,15 +243,15 @@ pub trait IntegerLikeOperands: Op {
 /// This verifier indicates that the operands are all the same types.
 pub trait SameOperandsType: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        let operand_types = self.as_base().operand_types(ctx);
+        let operand_tys = self.as_base().operand_tys(ctx);
 
-        if operand_types.is_empty() {
+        if operand_tys.is_empty() {
             return Ok(());
         }
 
-        let operand_ty = operand_types[0];
+        let operand_ty = operand_tys[0];
 
-        for ty in operand_types {
+        for ty in operand_tys {
             if ty != operand_ty {
                 anyhow::bail!("operands have different types");
             }
@@ -266,14 +266,14 @@ pub trait SameOperandsType: Op {
 /// This verifier indicates that the results are all the same type.
 pub trait SameResultsType: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        let result_types = self.as_base().result_types(ctx);
+        let result_tys = self.as_base().result_tys(ctx);
 
-        if result_types.is_empty() {
+        if result_tys.is_empty() {
             return Ok(());
         }
 
-        let result_ty = result_types[0];
-        for ty in result_types {
+        let result_ty = result_tys[0];
+        for ty in result_tys {
             if ty != result_ty {
                 anyhow::bail!("results have different types");
             }
@@ -293,22 +293,22 @@ pub trait SameOperandsAndResultsType: SameOperandsType + SameResultsType {
         <Self as SameOperandsType>::verify(self, ctx)?;
         <Self as SameResultsType>::verify(self, ctx)?;
 
-        let operand_types = self.as_base().operand_types(ctx);
-        let result_types = self.as_base().result_types(ctx);
+        let operand_tys = self.as_base().operand_tys(ctx);
+        let result_tys = self.as_base().result_tys(ctx);
 
-        if operand_types.is_empty() {
+        if operand_tys.is_empty() {
             return Ok(());
         }
 
-        let operand_type = operand_types[0];
+        let operand_ty = operand_tys[0];
 
-        if result_types.is_empty() {
+        if result_tys.is_empty() {
             return Ok(());
         }
 
-        let result_type = result_types[0];
+        let result_ty = result_tys[0];
 
-        if operand_type != result_type {
+        if operand_ty != result_ty {
             anyhow::bail!("results and operands have different types")
         }
 

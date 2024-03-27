@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{mnemonic::MnemonicSegment, operation::OpParseFn, ty::TypeParseFn};
+use super::{mnemonic::MnemonicSegment, operation::OpParseFn, ty::TyParseFn};
 use crate::Mnemonic;
 
 /// A dialect.
@@ -10,7 +10,7 @@ pub struct Dialect {
     /// The operations and their parse functions.
     ops: HashMap<Mnemonic, OpParseFn>,
     /// The types and their parse functions.
-    types: HashMap<Mnemonic, TypeParseFn>,
+    tys: HashMap<Mnemonic, TyParseFn>,
 }
 
 impl Dialect {
@@ -19,7 +19,7 @@ impl Dialect {
         Self {
             mnemonic,
             ops: HashMap::new(),
-            types: HashMap::new(),
+            tys: HashMap::new(),
         }
     }
 
@@ -32,8 +32,8 @@ impl Dialect {
     }
 
     /// Add a type and its parse function.
-    pub fn add_type(&mut self, mnemonic: Mnemonic, parse_fn: TypeParseFn) {
-        self.types.insert(mnemonic, parse_fn);
+    pub fn add_ty(&mut self, mnemonic: Mnemonic, parse_fn: TyParseFn) {
+        self.tys.insert(mnemonic, parse_fn);
     }
 
     /// Get the operation parse function.
@@ -42,7 +42,7 @@ impl Dialect {
     }
 
     /// Get the type parse function.
-    pub fn get_type_parse_fn(&self, mnemonic: &Mnemonic) -> Option<&TypeParseFn> {
-        self.types.get(mnemonic)
+    pub fn get_ty_parse_fn(&self, mnemonic: &Mnemonic) -> Option<&TyParseFn> {
+        self.tys.get(mnemonic)
     }
 }

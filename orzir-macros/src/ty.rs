@@ -28,16 +28,16 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
                     fn get(
                         ctx: &mut ::orzir_core::Context,
                         #(#fn_args),*
-                    ) -> ::orzir_core::ArenaPtr<::orzir_core::TypeObj> {
+                    ) -> ::orzir_core::ArenaPtr<::orzir_core::TyObj> {
                         let instance = Self {
                             #(#fn_arg_names),*
                         };
-                        let instance = ::orzir_core::TypeObj::from(instance);
+                        let instance = ::orzir_core::TyObj::from(instance);
                         <::orzir_core::UniqueArena<
-                            ::orzir_core::TypeObj
+                            ::orzir_core::TyObj
                         > as ::orzir_core::ArenaBase<
-                            ::orzir_core::TypeObj
-                        >>::alloc(&mut ctx.types, instance)
+                            ::orzir_core::TyObj
+                        >>::alloc(&mut ctx.tys, instance)
                     }
                 }
             }
@@ -60,14 +60,14 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
                     fn get(
                         ctx: &mut ::orzir_core::Context,
                         #(#fn_args),*
-                    ) -> ::orzir_core::ArenaPtr<::orzir_core::TypeObj> {
+                    ) -> ::orzir_core::ArenaPtr<::orzir_core::TyObj> {
                         let instance = Self(#(#fn_arg_names),*);
-                        let instance = ::orzir_core::TypeObj::from(instance);
+                        let instance = ::orzir_core::TyObj::from(instance);
                         <::orzir_core::UniqueArena<
-                            ::orzir_core::TypeObj
+                            ::orzir_core::TyObj
                         > as ::orzir_core::ArenaBase<
-                            ::orzir_core::TypeObj
-                        >>::alloc(&mut ctx.types, instance)
+                            ::orzir_core::TyObj
+                        >>::alloc(&mut ctx.tys, instance)
                     }
                 }
             }
@@ -75,24 +75,24 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
                 quote! {
                     fn get(
                         ctx: &mut ::orzir_core::Context
-                    ) -> ::orzir_core::ArenaPtr<::orzir_core::TypeObj> {
-                        let instance = ::orzir_core::TypeObj::from(Self);
+                    ) -> ::orzir_core::ArenaPtr<::orzir_core::TyObj> {
+                        let instance = ::orzir_core::TyObj::from(Self);
                         <::orzir_core::UniqueArena<
-                            ::orzir_core::TypeObj
+                            ::orzir_core::TyObj
                         > as ::orzir_core::ArenaBase<
-                            ::orzir_core::TypeObj
-                        >>::alloc(&mut ctx.types, instance)
+                            ::orzir_core::TyObj
+                        >>::alloc(&mut ctx.tys, instance)
                     }
                 }
             }
         },
-        _ => panic!("only structs are supported to derive `Type`"),
+        _ => panic!("only structs are supported to derive `Ty`"),
     };
 
     let mnemonic = ast.attrs.iter().find(|attr| attr.path().is_ident("mnemonic"));
 
     if mnemonic.is_none() {
-        panic!("`mnemonic` attribute is required to derive `Type`");
+        panic!("`mnemonic` attribute is required to derive `Ty`");
     }
 
     // parse as `mnemonic = "xxxx.xxx"`, which is a name-value style attribute.
@@ -202,7 +202,7 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
             pub #get_ctor
         }
 
-        impl ::orzir_core::Type for #ident {
+        impl ::orzir_core::Ty for #ident {
             fn mnemonic(&self) -> ::orzir_core::Mnemonic {
                 ::orzir_core::Mnemonic::new(#primary, #secondary)
             }
@@ -214,7 +214,7 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
                 ::orzir_core::Mnemonic::new(#primary, #secondary)
             }
 
-            fn eq(&self, other: &dyn ::orzir_core::Type) -> bool {
+            fn eq(&self, other: &dyn ::orzir_core::Ty) -> bool {
                 if let Some(other) = other.downcast_ref::<Self>() {
                     self == other
                 } else {
@@ -222,12 +222,12 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
                 }
             }
 
-            fn register(ctx: &mut ::orzir_core::Context, parse_fn: ::orzir_core::TypeParseFn)
+            fn register(ctx: &mut ::orzir_core::Context, parse_fn: ::orzir_core::TyParseFn)
             where
                 Self: Sized
             {
                 let mnemonic = Self::mnemonic_static();
-                ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_type(mnemonic, parse_fn);
+                ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_ty(mnemonic, parse_fn);
 
                 #(#interfaces)*
                 #(#verifier_register_casters)*

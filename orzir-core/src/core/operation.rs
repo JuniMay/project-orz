@@ -15,7 +15,7 @@ use crate::{
         cast::{CastMut, CastRef},
         storage::ArenaPtr,
     },
-    Parse, Print, PrintState, Region, TokenStream, TypeObj, Typed, Verify,
+    Parse, Print, PrintState, Region, TokenStream, TyObj, Typed, Verify,
 };
 
 /// The successor.
@@ -139,12 +139,12 @@ impl OpBase {
     pub fn successors(&self) -> &[Successor] { &self.successors }
 
     /// Collect the types of the operands.
-    pub fn operand_types(&self, ctx: &Context) -> Vec<ArenaPtr<TypeObj>> {
+    pub fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
         self.operands.iter().map(|ptr| ptr.deref(&ctx.values).ty(ctx)).collect()
     }
 
     /// Collect the types of the results.
-    pub fn result_types(&self, ctx: &Context) -> Vec<ArenaPtr<TypeObj>> {
+    pub fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
         self.results.iter().map(|ptr| ptr.deref(&ctx.values).ty(ctx)).collect()
     }
 

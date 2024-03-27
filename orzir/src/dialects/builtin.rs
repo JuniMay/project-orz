@@ -3,10 +3,9 @@ use std::fmt::Write;
 use anyhow::Result;
 use orzir_core::{
     ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream, Type, TypeObj, Verify,
-    VerifyInterfaces,
+    PrintState, Region, RegionKind, TokenKind, TokenStream, Ty, TyObj, Verify, VerifyInterfaces,
 };
-use orzir_macros::{Op, Type};
+use orzir_macros::{Op, Ty};
 
 use crate::{
     interfaces::*,
@@ -79,7 +78,7 @@ impl Print for ModuleOp {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.int"]
 #[verifiers(IntegerLikeType)]
 pub struct IntType(usize);
@@ -88,7 +87,7 @@ impl Verify for IntType {}
 
 impl Parse for IntType {
     type Arg = ();
-    type Item = ArenaPtr<TypeObj>;
+    type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
         stream.expect(TokenKind::Char('<'))?;
@@ -110,7 +109,7 @@ impl Print for IntType {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.float"]
 #[verifiers(FloatLikeType)]
 pub struct FloatType;
@@ -119,7 +118,7 @@ impl Verify for FloatType {}
 
 impl Parse for FloatType {
     type Arg = ();
-    type Item = ArenaPtr<TypeObj>;
+    type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
         Ok(FloatType::get(ctx))
@@ -130,7 +129,7 @@ impl Print for FloatType {
     fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.double"]
 #[verifiers(FloatLikeType)]
 pub struct DoubleType;
@@ -139,7 +138,7 @@ impl Verify for DoubleType {}
 
 impl Parse for DoubleType {
     type Arg = ();
-    type Item = ArenaPtr<TypeObj>;
+    type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
         Ok(DoubleType::get(ctx))
@@ -150,23 +149,23 @@ impl Print for DoubleType {
     fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.tuple"]
 pub struct TupleType {
-    elems: Vec<ArenaPtr<TypeObj>>,
+    elems: Vec<ArenaPtr<TyObj>>,
 }
 
 impl Verify for TupleType {}
 
 impl Parse for TupleType {
     type Arg = ();
-    type Item = ArenaPtr<TypeObj>;
+    type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
         stream.expect(TokenKind::Char('<'))?;
         let mut elems = Vec::new();
         loop {
-            let ty = TypeObj::parse((), ctx, stream)?;
+            let ty = TyObj::parse((), ctx, stream)?;
             elems.push(ty);
             let token = stream.consume()?;
             match token.kind {
@@ -183,7 +182,7 @@ impl Print for TupleType {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, "<")?;
         for (i, ty) in self.elems.iter().enumerate() {
-            ty.deref(&ctx.types).print(ctx, state)?;
+            ty.deref(&ctx.tys).print(ctx, state)?;
             if i != self.elems.len() - 1 {
                 write!(state.buffer, ", ")?;
             }
@@ -193,18 +192,18 @@ impl Print for TupleType {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.fn"]
 pub struct FunctionType {
-    args: Vec<ArenaPtr<TypeObj>>,
-    rets: Vec<ArenaPtr<TypeObj>>,
+    args: Vec<ArenaPtr<TyObj>>,
+    rets: Vec<ArenaPtr<TyObj>>,
 }
 
 impl Verify for FunctionType {}
 
 impl Parse for FunctionType {
     type Arg = ();
-    type Item = ArenaPtr<TypeObj>;
+    type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
         stream.expect(TokenKind::Char('('))?;
@@ -214,7 +213,7 @@ impl Parse for FunctionType {
                 stream.consume()?;
                 break;
             }
-            let ty = TypeObj::parse((), ctx, stream)?;
+            let ty = TyObj::parse((), ctx, stream)?;
             args.push(ty);
             let token = stream.consume()?;
             match token.kind {
@@ -228,12 +227,12 @@ impl Parse for FunctionType {
 
         let mut rets = Vec::new();
         if stream.peek()?.kind != TokenKind::Char('(') {
-            let ty = TypeObj::parse((), ctx, stream)?;
+            let ty = TyObj::parse((), ctx, stream)?;
             rets.push(ty);
         } else {
             stream.consume()?;
             loop {
-                let ty = TypeObj::parse((), ctx, stream)?;
+                let ty = TyObj::parse((), ctx, stream)?;
                 rets.push(ty);
                 let token = stream.consume()?;
                 match token.kind {
@@ -252,7 +251,7 @@ impl Print for FunctionType {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, "(")?;
         for (i, ty) in self.args.iter().enumerate() {
-            ty.deref(&ctx.types).print(ctx, state)?;
+            ty.deref(&ctx.tys).print(ctx, state)?;
             if i != self.args.len() - 1 {
                 write!(state.buffer, ", ")?;
             }
@@ -262,7 +261,7 @@ impl Print for FunctionType {
             write!(state.buffer, "(")?;
         }
         for (i, ty) in self.rets.iter().enumerate() {
-            ty.deref(&ctx.types).print(ctx, state)?;
+            ty.deref(&ctx.tys).print(ctx, state)?;
             if i != self.rets.len() - 1 {
                 write!(state.buffer, ", ")?;
             }
@@ -274,18 +273,18 @@ impl Print for FunctionType {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.memref"]
 pub struct MemRefType {
     shape: Vec<usize>,
-    elem: ArenaPtr<TypeObj>,
+    elem: ArenaPtr<TyObj>,
 }
 
 impl Verify for MemRefType {}
 
 impl Parse for MemRefType {
     type Arg = ();
-    type Item = ArenaPtr<TypeObj>;
+    type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
         stream.expect(TokenKind::Char('<'))?;
@@ -303,7 +302,7 @@ impl Parse for MemRefType {
                         stream.consume()?;
                         shape.push(dim);
                     } else {
-                        elem = Some(TypeObj::parse((), ctx, stream)?);
+                        elem = Some(TyObj::parse((), ctx, stream)?);
                     }
                 }
                 TokenKind::Char('>') => {
@@ -325,13 +324,13 @@ impl Print for MemRefType {
             write!(state.buffer, "{}", dim)?;
             write!(state.buffer, " x ")?;
         }
-        self.elem.deref(&ctx.types).print(ctx, state)?;
+        self.elem.deref(&ctx.tys).print(ctx, state)?;
         write!(state.buffer, ">")?;
         Ok(())
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Type)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.unit"]
 pub struct UnitType;
 
@@ -339,7 +338,7 @@ impl Verify for UnitType {}
 
 impl Parse for UnitType {
     type Arg = ();
-    type Item = ArenaPtr<TypeObj>;
+    type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
         Ok(UnitType::get(ctx))
@@ -367,14 +366,14 @@ pub fn register(ctx: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{Context, Parse, Print, PrintState, TokenStream, TypeObj};
+    use orzir_core::{Context, Parse, Print, PrintState, TokenStream, TyObj};
 
     use crate::dialects::builtin::{
         self, DoubleType, FloatType, FunctionType, IntType, MemRefType, TupleType,
     };
 
     #[test]
-    fn test_types_cmp() {
+    fn test_tys_cmp() {
         let mut ctx = Context::default();
 
         let int0 = IntType::get(&mut ctx, 32);
@@ -417,33 +416,31 @@ mod tests {
         assert_ne!(memref0, memref3);
     }
 
-    fn test_type_parse_print(ty: &str, expected: &str) {
+    fn test_ty_parse_print(ty: &str, expected: &str) {
         let mut stream = TokenStream::new(ty);
         let mut ctx = Context::default();
         builtin::register(&mut ctx);
-        let ty = TypeObj::parse((), &mut ctx, &mut stream).unwrap();
+        let ty = TyObj::parse((), &mut ctx, &mut stream).unwrap();
         let mut state = PrintState::new("");
-        ty.deref(&ctx.types).print(&ctx, &mut state).unwrap();
+        ty.deref(&ctx.tys).print(&ctx, &mut state).unwrap();
         assert_eq!(state.buffer, expected);
     }
 
     #[test]
-    fn test_int_parse() { test_type_parse_print("int<32>", "int<32>"); }
+    fn test_int_parse() { test_ty_parse_print("int<32>", "int<32>"); }
 
     #[test]
-    fn test_float_parse() { test_type_parse_print("float", "float"); }
+    fn test_float_parse() { test_ty_parse_print("float", "float"); }
 
     #[test]
-    fn test_double_parse() { test_type_parse_print("double", "double"); }
+    fn test_double_parse() { test_ty_parse_print("double", "double"); }
 
     #[test]
-    fn test_tuple_parse() {
-        test_type_parse_print("tuple<int<32>, float>", "tuple<int<32>, float>");
-    }
+    fn test_tuple_parse() { test_ty_parse_print("tuple<int<32>, float>", "tuple<int<32>, float>"); }
 
     #[test]
     fn test_func_parse_0() {
-        test_type_parse_print(
+        test_ty_parse_print(
             "fn(int<32>, float) -> double",
             "fn(int<32>, float) -> double",
         );
@@ -451,7 +448,7 @@ mod tests {
 
     #[test]
     fn test_func_parse_1() {
-        test_type_parse_print(
+        test_ty_parse_print(
             "fn(int<32>, float) -> tuple<int<32>, float>",
             "fn(int<32>, float) -> tuple<int<32>, float>",
         );
@@ -459,7 +456,7 @@ mod tests {
 
     #[test]
     fn test_func_parse_2() {
-        test_type_parse_print(
+        test_ty_parse_print(
             "fn(int<32>, float) -> (int<32>, float)",
             "fn(int<32>, float) -> (int<32>, float)",
         );
@@ -467,6 +464,6 @@ mod tests {
 
     #[test]
     fn test_memref_parse() {
-        test_type_parse_print("memref<1 x 2 x 3 x int<32>>", "memref<1 x 2 x 3 x int<32>>");
+        test_ty_parse_print("memref<1 x 2 x 3 x int<32>>", "memref<1 x 2 x 3 x int<32>>");
     }
 }

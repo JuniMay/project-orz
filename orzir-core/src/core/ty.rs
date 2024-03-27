@@ -10,7 +10,7 @@ use crate::{
     Parse, Print, PrintState, TokenStream, Verify,
 };
 
-pub trait Type: Downcast + GetUniqueArenaHash + Print + Verify {
+pub trait Ty: Downcast + GetUniqueArenaHash + Print + Verify {
     /// Get the mnemonic of the type.
     fn mnemonic(&self) -> Mnemonic;
     /// Get the mnemonic of the type statically.
@@ -18,41 +18,41 @@ pub trait Type: Downcast + GetUniqueArenaHash + Print + Verify {
     where
         Self: Sized;
     /// Check if the type is equal to another type.
-    fn eq(&self, other: &dyn Type) -> bool;
+    fn eq(&self, other: &dyn Ty) -> bool;
 
-    fn register(ctx: &mut Context, parse_fn: TypeParseFn)
+    fn register(ctx: &mut Context, parse_fn: TyParseFn)
     where
         Self: Sized;
 }
 
-impl_downcast!(Type);
+impl_downcast!(Ty);
 
-pub struct TypeObj(Box<dyn Type>);
+pub struct TyObj(Box<dyn Ty>);
 
-impl GetUniqueArenaHash for TypeObj {
+impl GetUniqueArenaHash for TyObj {
     fn unique_arena_hash(&self) -> UniqueArenaHash { self.as_inner().unique_arena_hash() }
 }
 
 pub trait Typed {
-    fn ty(&self, ctx: &Context) -> ArenaPtr<TypeObj>;
+    fn ty(&self, ctx: &Context) -> ArenaPtr<TyObj>;
 }
 
-impl<T> From<T> for TypeObj
+impl<T> From<T> for TyObj
 where
-    T: Type,
+    T: Ty,
 {
-    fn from(t: T) -> Self { TypeObj(Box::new(t)) }
+    fn from(t: T) -> Self { TyObj(Box::new(t)) }
 }
 
-impl TypeObj {
+impl TyObj {
     /// Get the inside trait object.
-    pub fn as_inner(&self) -> &dyn Type { &*self.0 }
+    pub fn as_inner(&self) -> &dyn Ty { &*self.0 }
 
     /// Check if the type object is a concrete type.
-    pub fn is_a<T: Type>(&self) -> bool { self.as_inner().is::<T>() }
+    pub fn is_a<T: Ty>(&self) -> bool { self.as_inner().is::<T>() }
 
     /// Try to downcast the type object to a concrete type.
-    pub fn as_a<T: Type>(&self) -> Option<&T> { self.as_inner().downcast_ref() }
+    pub fn as_a<T: Ty>(&self) -> Option<&T> { self.as_inner().downcast_ref() }
 
     /// Check if the type object implements a trait.
     pub fn impls<T: ?Sized + 'static>(&self, ctx: &Context) -> bool {
@@ -65,15 +65,15 @@ impl TypeObj {
     }
 }
 
-impl PartialEq for TypeObj {
+impl PartialEq for TyObj {
     fn eq(&self, other: &Self) -> bool { self.as_inner().eq(other.as_inner()) }
 }
 
-impl Eq for TypeObj {}
+impl Eq for TyObj {}
 
-impl Parse for TypeObj {
+impl Parse for TyObj {
     type Arg = ();
-    type Item = ArenaPtr<TypeObj>;
+    type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
         let mnemonic = Mnemonic::parse((), ctx, stream)?;
@@ -81,7 +81,7 @@ impl Parse for TypeObj {
             .dialects
             .get(mnemonic.primary())
             .unwrap_or_else(|| panic!("dialect {} not found", mnemonic.primary().as_str()))
-            .get_type_parse_fn(&mnemonic)
+            .get_ty_parse_fn(&mnemonic)
             .unwrap_or_else(|| {
                 panic!(
                     "type {}.{} not found",
@@ -93,9 +93,9 @@ impl Parse for TypeObj {
     }
 }
 
-pub type TypeParseFn = ParseFn<(), ArenaPtr<TypeObj>>;
+pub type TyParseFn = ParseFn<(), ArenaPtr<TyObj>>;
 
-impl Print for TypeObj {
+impl Print for TyObj {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         self.as_inner().mnemonic().print(ctx, state)?;
         self.as_inner().print(ctx, state)?;

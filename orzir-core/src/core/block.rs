@@ -5,7 +5,7 @@ use anyhow::{anyhow, Result};
 use super::value::Value;
 use crate::{
     core::parse::TokenKind, support::storage::ArenaPtr, Context, OpObj, Parse, Print, PrintState,
-    Region, TokenStream, TypeObj, Typed, Verify, VerifyInterfaces,
+    Region, TokenStream, TyObj, Typed, Verify, VerifyInterfaces,
 };
 
 /// The block in the region.
@@ -187,7 +187,7 @@ impl Parse for Block {
                                 // the argument ptr will be fetched in the builder.
                                 let _arg = Value::parse((), ctx, stream)?;
                                 stream.expect(TokenKind::Char(':'))?;
-                                let ty = TypeObj::parse((), ctx, stream)?;
+                                let ty = TyObj::parse((), ctx, stream)?;
 
                                 // the `build` function will automatically add the argument to
                                 // the block and set the index of the argument in the block.
@@ -260,7 +260,7 @@ impl Print for Block {
                     let arg = arg.deref(&ctx.values);
                     write!(state.buffer, "{}:", arg.name(ctx))?;
                     let ty = arg.ty(ctx);
-                    ty.deref(&ctx.types).print(ctx, state)?;
+                    ty.deref(&ctx.tys).print(ctx, state)?;
                     if i != self.args.len() - 1 {
                         write!(state.buffer, ", ")?;
                     }
