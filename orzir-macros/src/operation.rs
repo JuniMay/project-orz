@@ -148,16 +148,16 @@ impl OpInfo {
             syn::Data::Struct(s) => match &s.fields {
                 syn::Fields::Named(fields) => {
                     for field in fields.named.iter() {
-                        let mut is_ctor_field = true;
-                        let mut is_ctor_default_field = true;
+                        let mut is_derived_field = false;
+                        let mut is_metadata = false;
                         for attr in field.attrs.iter() {
                             let ident = attr.path().get_ident();
                             if let Some(ident) = ident {
                                 match ident.to_string().as_str() {
                                     "metadata" => {
                                         info.metadata = field.ident.clone();
-                                        is_ctor_field = false;
-                                        is_ctor_default_field = false;
+                                        is_derived_field = true;
+                                        is_metadata = true;
                                     }
                                     "result" => {
                                         // `#[result(0)]` or `#[result(...)]`
@@ -165,31 +165,49 @@ impl OpInfo {
                                         let meta = attr.parse_args::<OpFieldMeta>()?;
                                         meta.append(&mut info.results, field, attr)?;
                                         // result should be built and added with the builder.
-                                        is_ctor_field = false;
+                                        is_derived_field = true;
                                     }
                                     "operand" => {
                                         let meta = attr.parse_args::<OpFieldMeta>()?;
                                         meta.append(&mut info.operands, field, attr)?;
-                                        is_ctor_field = false;
+                                        is_derived_field = true;
                                     }
                                     "region" => {
                                         let meta = attr.parse_args::<OpFieldMeta>()?;
                                         meta.append(&mut info.regions, field, attr)?;
-                                        is_ctor_field = false;
+                                        is_derived_field = true;
                                     }
                                     "successor" => {
                                         let meta = attr.parse_args::<OpFieldMeta>()?;
                                         meta.append(&mut info.successors, field, attr)?;
-                                        is_ctor_field = false;
+                                        is_derived_field = true;
                                     }
                                     _ => {}
                                 }
                             }
                         }
-                        if is_ctor_field {
+                        if !is_derived_field {
                             info.ctor_fields.push(field.clone());
-                        } else if is_ctor_default_field {
+                        } else if !is_metadata {
                             info.ctor_default_fields.push(field.clone());
+                        }
+
+                        let ty = &field.ty;
+
+                        // check if ty starts with `HoldVec` or `Vec` for non-ctor fields.
+
+                        // TODO: More fine-grained check for multi/single and the types.
+                        if is_derived_field && !is_metadata {
+                            if let syn::Type::Path(ref path) = ty {
+                                if let Some(segment) = path.path.segments.last() {
+                                    if segment.ident != "HoldVec" && segment.ident != "Hold" {
+                                        return Err(syn::Error::new_spanned(
+                                            ty,
+                                            "only `HoldVec` or `Vec` is supported for derived fields",
+                                        ));
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -255,7 +273,7 @@ impl OpInfo {
                     } else {
                         quote! {
                             if index == 0 {
-                                self.#ident
+                                self.#ident.copied().into()
                             } else {
                                 None
                             }
@@ -286,7 +304,7 @@ impl OpInfo {
                             }
                         } else {
                             quote! {
-                                #i => self.#ident
+                                #i => self.#ident.copied().into()
                             }
                         }
                     }
@@ -316,7 +334,7 @@ impl OpInfo {
                     let ident = ident.clone();
                     quote! {
                         if index == 0 {
-                            Ok(std::mem::replace(&mut self.#ident, Some(value)))
+                            Ok(std::mem::replace(&mut self.#ident, Some(value).into()).into())
                         } else {
                             Err(::anyhow::anyhow!("index out of bounds"))
                         }
@@ -325,17 +343,15 @@ impl OpInfo {
                 OpEntityKind::Multi(ident) => {
                     let ident = ident.clone();
                     quote! {
-                        if index < self.#ident.len() {
-                            // let old = self.#ident[index];
-                            // self.#ident[index] = value;
-                            // Ok(Some(old))
-                            Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
-                        } else if index == self.#ident.len() {
-                            self.#ident.push(value);
-                            Ok(None)
-                        } else {
-                            Err(::anyhow::anyhow!("index out of bounds"))
-                        }
+                        // if index < self.#ident.len() {
+                        //     Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
+                        // } else if index == self.#ident.len() {
+                        //     self.#ident.push(value);
+                        //     Ok(None)
+                        // } else {
+                        //     Err(::anyhow::anyhow!("index out of bounds"))
+                        // }
+                        Ok(self.#ident.set(index, value))
                     }
                 }
                 _ => unreachable!(),
@@ -346,7 +362,7 @@ impl OpInfo {
                         let ident = ident.clone();
                         quote! {
                             #i => {
-                                Ok(std::mem::replace(&mut self.#ident, Some(value)))
+                                Ok(std::mem::replace(&mut self.#ident, Some(value).into()).into())
                             }
                         }
                     }
@@ -657,17 +673,24 @@ mod tests {
     #[test]
     fn test_0() {
         let src = quote! {
-            #[derive(Default, Op)]
-            #[mnemonic = "cf.jump"]
-            pub struct Jump {
+            #[derive(Op)]
+            #[mnemonic = "arith.iadd"]
+            // #[verifiers(
+            //     NumResults<1>, NumOperands<2>, NumRegions<0>,
+            //     SameResultTys, SameOperandTys, SameOperandAndResultTys
+            // )]
+            pub struct IAddOp {
                 #[metadata]
                 metadata: OpMetadata,
 
-                #[parent_block]
-                parent: Option<ArenaPtr<Block>>,
+                #[result(0)]
+                result: Hold<ArenaPtr<Value>>,
 
-                #[successor(0)]
-                succ: Option<Successor>,
+                #[operand(0)]
+                lhs: Hold<ArenaPtr<Value>>,
+
+                #[operand(1)]
+                rhs: Hold<ArenaPtr<Value>>,
             }
         };
 

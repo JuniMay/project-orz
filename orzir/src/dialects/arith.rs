@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
+    ArenaPtr, Block, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
     PrintState, TokenKind, TyObj, Value, Verify,
 };
 use orzir_macros::Op;
@@ -57,7 +57,7 @@ pub struct IConstOp {
     metadata: OpMetadata,
 
     #[result(0)]
-    result: Option<ArenaPtr<Value>>,
+    result: Hold<ArenaPtr<Value>>,
 
     value: BigInt,
 }
@@ -136,13 +136,13 @@ pub struct IAddOp {
     metadata: OpMetadata,
 
     #[result(0)]
-    result: Option<ArenaPtr<Value>>,
+    result: Hold<ArenaPtr<Value>>,
 
     #[operand(0)]
-    lhs: Option<ArenaPtr<Value>>,
+    lhs: Hold<ArenaPtr<Value>>,
 
     #[operand(1)]
-    rhs: Option<ArenaPtr<Value>>,
+    rhs: Hold<ArenaPtr<Value>>,
 }
 
 impl Verify for IAddOp {}

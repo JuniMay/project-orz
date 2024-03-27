@@ -17,6 +17,7 @@ pub use crate::{
     },
     support::{
         cast::{Caster, CasterStorage},
+        placeholder::{Hold, HoldEntry, HoldVec},
         storage::{Arena, ArenaBase, ArenaPtr, UniqueArena},
     },
 };

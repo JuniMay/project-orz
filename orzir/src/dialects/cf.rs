@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
+    ArenaPtr, Block, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
     PrintState, Successor, TokenKind, TokenStream, Value, Verify,
 };
 use orzir_macros::Op;
@@ -20,7 +20,7 @@ pub struct Jump {
     metadata: OpMetadata,
 
     #[successor(0)]
-    succ: Option<Successor>,
+    succ: Hold<Successor>,
 }
 
 impl Verify for Jump {}
@@ -65,13 +65,13 @@ pub struct Branch {
     metadata: OpMetadata,
 
     #[operand(0)]
-    cond: Option<ArenaPtr<Value>>,
+    cond: Hold<ArenaPtr<Value>>,
 
     #[successor(0)]
-    then_succ: Option<Successor>,
+    then_succ: Hold<Successor>,
 
     #[successor(1)]
-    else_succ: Option<Successor>,
+    else_succ: Hold<Successor>,
 }
 
 impl Verify for Branch {}

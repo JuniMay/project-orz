@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
+    ArenaPtr, Block, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
     PrintState, Region, RegionKind, TokenKind, TokenStream, Ty, TyObj, Verify, VerifyInterfaces,
 };
 use orzir_macros::{Op, Ty};
@@ -21,7 +21,7 @@ pub struct ModuleOp {
     metadata: OpMetadata,
 
     #[region(0)]
-    region: Option<ArenaPtr<Region>>,
+    region: Hold<ArenaPtr<Region>>,
 
     symbol: Option<String>,
 }

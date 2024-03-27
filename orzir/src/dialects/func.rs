@@ -2,8 +2,9 @@ use std::fmt::Write;
 
 use anyhow::{Ok, Result};
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream, TyObj, Value, Verify, VerifyInterfaces,
+    ArenaPtr, Block, Context, Dialect, Hold, HoldVec, Op, OpMetadata, OpObj, OpResultBuilder,
+    Parse, Print, PrintState, Region, RegionKind, TokenKind, TokenStream, TyObj, Value, Verify,
+    VerifyInterfaces,
 };
 use orzir_macros::Op;
 
@@ -22,7 +23,7 @@ pub struct FuncOp {
     metadata: OpMetadata,
 
     #[region(0)]
-    region: Option<ArenaPtr<Region>>,
+    region: Hold<ArenaPtr<Region>>,
 
     symbol: String,
 
@@ -95,7 +96,7 @@ pub struct ReturnOp {
     metadata: OpMetadata,
 
     #[operand(...)]
-    operands: Vec<ArenaPtr<Value>>,
+    operands: HoldVec<ArenaPtr<Value>>,
 }
 
 impl Verify for ReturnOp {}
@@ -163,10 +164,10 @@ pub struct CallOp {
     metadata: OpMetadata,
 
     #[result(...)]
-    results: Vec<ArenaPtr<Value>>,
+    results: HoldVec<ArenaPtr<Value>>,
 
     #[operand(...)]
-    operands: Vec<ArenaPtr<Value>>,
+    operands: HoldVec<ArenaPtr<Value>>,
 
     callee: String,
     ret_ty: ArenaPtr<TyObj>,
