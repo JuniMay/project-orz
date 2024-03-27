@@ -55,7 +55,7 @@ impl VerifyInterfaces for Value {
 
 impl Verify for Value {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        self.ty(ctx).deref(&ctx.tys).as_inner().verify(ctx)
+        self.ty(ctx).deref(&ctx.tys).as_ref().verify(ctx)
     }
 }
 
@@ -84,7 +84,7 @@ impl Value {
         match self {
             Value::OpResult { op, .. } => op
                 .deref(&ctx.ops)
-                .as_inner()
+                .as_ref()
                 .parent_region(ctx)
                 .expect("OpResult should be embraced by a region."),
             Value::BlockArgument { block, .. } => block.deref(&ctx.blocks).parent_region(),
@@ -141,7 +141,7 @@ impl OpResultBuilder {
         } else {
             ctx.values.reserve()
         };
-        let index = op.deref_mut(&mut ctx.ops).as_inner_mut().add_result(self_ptr);
+        let index = op.deref_mut(&mut ctx.ops).as_mut().add_result(self_ptr);
 
         let instance = Value::OpResult {
             self_ptr,

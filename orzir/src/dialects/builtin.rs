@@ -53,7 +53,7 @@ impl Parse for ModuleOp {
         };
 
         let op = ModuleOp::new(ctx, symbol);
-        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
 
         let region_builder = Region::builder().parent_op(op).kind(RegionKind::Graph);
         // the region will be added in the parser.

@@ -53,7 +53,7 @@ impl Verify for Region {
         for block in self.layout().iter_blocks() {
             block.deref(&ctx.blocks).verify(ctx)?;
             for op in self.layout().iter_ops(block) {
-                op.deref(&ctx.ops).as_inner().verify(ctx)?;
+                op.deref(&ctx.ops).as_ref().verify(ctx)?;
             }
         }
         Ok(())
@@ -76,7 +76,7 @@ impl Region {
     pub fn self_ptr(&self) -> ArenaPtr<Self> { self.self_ptr }
 
     pub fn parent_region(&self, ctx: &Context) -> Option<ArenaPtr<Region>> {
-        self.parent_op.deref(&ctx.ops).as_inner().parent_region(ctx)
+        self.parent_op.deref(&ctx.ops).as_ref().parent_region(ctx)
     }
 
     /// Check if this region is an ancestor of the other region.
@@ -114,13 +114,13 @@ impl RegionBuilder {
         let kind = self.kind.ok_or_else(|| anyhow!("missing kind"))?;
         let parent_op = self.parent_op.ok_or_else(|| anyhow!("missing parent_op"))?;
 
-        let above = parent_op.deref(&ctx.ops).as_inner().parent_region(ctx).map(|region| {
+        let above = parent_op.deref(&ctx.ops).as_ref().parent_region(ctx).map(|region| {
             let region = region.deref(&ctx.regions);
             Rc::downgrade(&region.symbol_table)
         });
 
         let self_ptr = ctx.regions.reserve();
-        let index = parent_op.deref_mut(&mut ctx.ops).as_inner_mut().add_region(self_ptr);
+        let index = parent_op.deref_mut(&mut ctx.ops).as_mut().add_region(self_ptr);
         let symbol_table = Rc::new(RefCell::new(SymbolTable::new(above)));
         let region = Region {
             self_ptr,

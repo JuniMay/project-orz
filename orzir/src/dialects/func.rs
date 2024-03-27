@@ -29,7 +29,7 @@ impl RegionKindInterface for FuncOp {}
 impl Verify for FuncOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
         self.verify_interfaces(ctx)?;
-        self.ty.deref(&ctx.tys).as_inner().verify(ctx)?;
+        self.ty.deref(&ctx.tys).as_ref().verify(ctx)?;
         self.get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
         Ok(())
     }
@@ -55,7 +55,7 @@ impl Parse for FuncOp {
         let region_builder = Region::builder().parent_op(op).kind(RegionKind::SsaCfg);
         let _region = Region::parse(region_builder, ctx, stream)?;
 
-        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
         // register the symbol in the parent region.
         parent_block
             .expect("FuncOp should be embraced by a region.")
@@ -103,7 +103,7 @@ impl Parse for ReturnOp {
 
         while let TokenKind::ValueName(_) = stream.peek()?.kind {
             let operand = Value::parse((), ctx, stream)?;
-            op.deref_mut(&mut ctx.ops).as_inner_mut().add_operand(operand);
+            op.deref_mut(&mut ctx.ops).as_mut().add_operand(operand);
 
             if let TokenKind::Char(',') = stream.peek()?.kind {
                 stream.consume()?;
@@ -112,7 +112,7 @@ impl Parse for ReturnOp {
             }
         }
 
-        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
 
         Ok(op)
     }
@@ -189,7 +189,7 @@ impl Parse for CallOp {
         let op = CallOp::new(ctx, callee, ret_ty);
 
         for operand in operands {
-            op.deref_mut(&mut ctx.ops).as_inner_mut().add_operand(operand);
+            op.deref_mut(&mut ctx.ops).as_mut().add_operand(operand);
         }
 
         for result_builder in result_builders {
@@ -197,7 +197,7 @@ impl Parse for CallOp {
             let _result = result_builder.op(op).ty(ret_ty).build(ctx)?;
         }
 
-        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
 
         Ok(op)
     }

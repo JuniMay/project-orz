@@ -38,8 +38,8 @@ impl Parse for Jump {
         let successor = Successor::parse(parent_region, ctx, stream)?;
 
         let op = Jump::new(ctx);
-        op.deref_mut(&mut ctx.ops).as_inner_mut().set_successor(0, successor)?;
-        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_successor(0, successor)?;
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
 
         Ok(op)
     }
@@ -87,7 +87,7 @@ impl Parse for Branch {
         let else_block = Successor::parse(parent_region, ctx, stream)?;
 
         let op = Branch::new(ctx);
-        let op_inner = op.deref_mut(&mut ctx.ops).as_inner_mut();
+        let op_inner = op.deref_mut(&mut ctx.ops).as_mut();
 
         op_inner.set_operand(0, cond)?;
         op_inner.set_successor(0, then_block)?;

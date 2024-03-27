@@ -434,30 +434,33 @@ where
     fn from(t: T) -> Self { OpObj(Box::new(t)) }
 }
 
+impl AsRef<dyn Op> for OpObj {
+    fn as_ref(&self) -> &dyn Op { &*self.0 }
+}
+
+impl AsMut<dyn Op> for OpObj {
+    fn as_mut(&mut self) -> &mut dyn Op { &mut *self.0 }
+}
+
 impl OpObj {
-    /// Get the inside trait object.
-    pub fn as_inner(&self) -> &dyn Op { &*self.0 }
-
-    pub fn as_inner_mut(&mut self) -> &mut dyn Op { &mut *self.0 }
-
     /// Check if the type object is a concrete type.
-    pub fn is_a<T: Op>(&self) -> bool { self.as_inner().is::<T>() }
+    pub fn is_a<T: Op>(&self) -> bool { self.as_ref().is::<T>() }
 
     /// Try to downcast the type object to a concrete type.
-    pub fn as_a<T: Op>(&self) -> Option<&T> { self.as_inner().downcast_ref() }
+    pub fn as_a<T: Op>(&self) -> Option<&T> { self.as_ref().downcast_ref() }
 
     /// Check if the type object implements a trait.
     pub fn impls<T: ?Sized + 'static>(&self, ctx: &Context) -> bool {
-        self.as_inner().impls::<T>(&ctx.casters)
+        self.as_ref().impls::<T>(&ctx.casters)
     }
 
     /// Try to cast the type object to another trait.
     pub fn cast_ref<T: ?Sized + 'static>(&self, ctx: &Context) -> Option<&T> {
-        self.as_inner().cast_ref(&ctx.casters)
+        self.as_ref().cast_ref(&ctx.casters)
     }
 
     pub fn cast_mut<T: ?Sized + 'static>(&mut self, ctx: &Context) -> Option<&mut T> {
-        self.as_inner_mut().cast_mut(&ctx.casters)
+        self.as_mut().cast_mut(&ctx.casters)
     }
 }
 
@@ -529,8 +532,8 @@ impl Parse for OpObj {
 
         let op = parse_fn((result_builders, parent), ctx, stream)?;
 
-        if op.deref(&ctx.ops).as_inner().as_base().parent_block().is_none() {
-            op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().set_parent_block(parent);
+        if op.deref(&ctx.ops).as_ref().as_base().parent_block().is_none() {
+            op.deref_mut(&mut ctx.ops).as_mut().as_base_mut().set_parent_block(parent);
         }
 
         Ok(op)
@@ -548,7 +551,7 @@ impl Print for OpObj {
     ///
     /// This is actually symmetric to the parsing process.
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        let results = self.as_inner().as_base().results();
+        let results = self.as_ref().as_base().results();
 
         if !results.is_empty() {
             for (i, result) in results.iter().enumerate() {
@@ -560,8 +563,8 @@ impl Print for OpObj {
             write!(state.buffer, " = ")?;
         }
 
-        self.as_inner().mnemonic().print(ctx, state)?;
-        self.as_inner().print(ctx, state)?;
+        self.as_ref().mnemonic().print(ctx, state)?;
+        self.as_ref().print(ctx, state)?;
         Ok(())
     }
 }

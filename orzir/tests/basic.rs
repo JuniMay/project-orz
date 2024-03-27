@@ -41,8 +41,8 @@ fn test_basic_0() -> Result<()> {
     let mut print_state = PrintState::new("    ");
     module_op.deref(&ctx.ops).print(&ctx, &mut print_state)?;
 
-    module_op.deref(&ctx.ops).as_inner().verify(&ctx)?;
-    func_op.deref(&ctx.ops).as_inner().verify(&ctx)?;
+    module_op.deref(&ctx.ops).as_ref().verify(&ctx)?;
+    func_op.deref(&ctx.ops).as_ref().verify(&ctx)?;
 
     println!("{}", print_state.buffer);
 

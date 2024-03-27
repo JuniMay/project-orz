@@ -30,7 +30,7 @@ impl_downcast!(Ty);
 pub struct TyObj(Box<dyn Ty>);
 
 impl GetUniqueArenaHash for TyObj {
-    fn unique_arena_hash(&self) -> UniqueArenaHash { self.as_inner().unique_arena_hash() }
+    fn unique_arena_hash(&self) -> UniqueArenaHash { self.as_ref().unique_arena_hash() }
 }
 
 pub trait Typed {
@@ -44,29 +44,30 @@ where
     fn from(t: T) -> Self { TyObj(Box::new(t)) }
 }
 
-impl TyObj {
-    /// Get the inside trait object.
-    pub fn as_inner(&self) -> &dyn Ty { &*self.0 }
+impl AsRef<dyn Ty> for TyObj {
+    fn as_ref(&self) -> &dyn Ty { &*self.0 }
+}
 
+impl TyObj {
     /// Check if the type object is a concrete type.
-    pub fn is_a<T: Ty>(&self) -> bool { self.as_inner().is::<T>() }
+    pub fn is_a<T: Ty>(&self) -> bool { self.as_ref().is::<T>() }
 
     /// Try to downcast the type object to a concrete type.
-    pub fn as_a<T: Ty>(&self) -> Option<&T> { self.as_inner().downcast_ref() }
+    pub fn as_a<T: Ty>(&self) -> Option<&T> { self.as_ref().downcast_ref() }
 
     /// Check if the type object implements a trait.
     pub fn impls<T: ?Sized + 'static>(&self, ctx: &Context) -> bool {
-        self.as_inner().impls::<T>(&ctx.casters)
+        self.as_ref().impls::<T>(&ctx.casters)
     }
 
     /// Try to cast the type object to another trait.
     pub fn cast_ref<T: ?Sized + 'static>(&self, ctx: &Context) -> Option<&T> {
-        self.as_inner().cast_ref(&ctx.casters)
+        self.as_ref().cast_ref(&ctx.casters)
     }
 }
 
 impl PartialEq for TyObj {
-    fn eq(&self, other: &Self) -> bool { self.as_inner().eq(other.as_inner()) }
+    fn eq(&self, other: &Self) -> bool { self.as_ref().eq(other.as_ref()) }
 }
 
 impl Eq for TyObj {}
@@ -97,8 +98,8 @@ pub type TyParseFn = ParseFn<(), ArenaPtr<TyObj>>;
 
 impl Print for TyObj {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        self.as_inner().mnemonic().print(ctx, state)?;
-        self.as_inner().print(ctx, state)?;
+        self.as_ref().mnemonic().print(ctx, state)?;
+        self.as_ref().print(ctx, state)?;
         Ok(())
     }
 }

@@ -29,7 +29,7 @@ fn parse_binary(
     // the result will be added to the parent operation when building the result
     let _result = result_builder.op(op).ty(ty).build(ctx)?;
 
-    let op_inner = op.deref_mut(&mut ctx.ops).as_inner_mut();
+    let op_inner = op.deref_mut(&mut ctx.ops).as_mut();
 
     op_inner.set_operand(0, lhs)?;
     op_inner.set_operand(1, rhs)?;
@@ -105,7 +105,7 @@ impl Parse for IConstOp {
         let result_builder = result_builders.pop().unwrap();
         let _result = result_builder.op(op).ty(ty).build(ctx)?;
 
-        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
 
         Ok(op)
     }
