@@ -197,14 +197,14 @@ pub trait VariadicSuccessors: Op {
 /// Verifier `IsTerminator` for `Ty`.
 ///
 /// This verifier indicates that the type is float-like.
-pub trait FloatLikeType: Ty {
+pub trait FloatLikeTy: Ty {
     fn verify(&self, _ctx: &Context) -> Result<()> { Ok(()) }
 }
 
 /// Verifier `IsTerminator` for `Ty`.
 ///
 /// This verifier indicates that the type is integer-like.
-pub trait IntegerLikeType: Ty {
+pub trait IntegerLikeTy: Ty {
     fn verify(&self, _ctx: &Context) -> Result<()> { Ok(()) }
 }
 
@@ -215,7 +215,7 @@ pub trait FloatLikeOperands: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
         for operand in self.as_base().operands() {
             let operand_ty = operand.deref(&ctx.values).ty(ctx);
-            if !operand_ty.deref(&ctx.tys).impls::<dyn FloatLikeType>(ctx) {
+            if !operand_ty.deref(&ctx.tys).impls::<dyn FloatLikeTy>(ctx) {
                 anyhow::bail!("operand is not a float-like type");
             }
         }
@@ -230,7 +230,7 @@ pub trait IntegerLikeOperands: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
         for operand in self.as_base().operands() {
             let operand_ty = operand.deref(&ctx.values).ty(ctx);
-            if !operand_ty.deref(&ctx.tys).impls::<dyn IntegerLikeType>(ctx) {
+            if !operand_ty.deref(&ctx.tys).impls::<dyn IntegerLikeTy>(ctx) {
                 anyhow::bail!("operand is not an integer-like type");
             }
         }
@@ -238,10 +238,10 @@ pub trait IntegerLikeOperands: Op {
     }
 }
 
-/// Verifier `SameOperandsType` for `Op`
+/// Verifier `SameOperandTys` for `Op`
 ///
 /// This verifier indicates that the operands are all the same types.
-pub trait SameOperandsType: Op {
+pub trait SameOperandTys: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
         let operand_tys = self.as_base().operand_tys(ctx);
 
@@ -261,10 +261,10 @@ pub trait SameOperandsType: Op {
     }
 }
 
-/// Verifier `SameResultsType` for `Op`
+/// Verifier `SameResultTys` for `Op`
 ///
 /// This verifier indicates that the results are all the same type.
-pub trait SameResultsType: Op {
+pub trait SameResultTys: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
         let result_tys = self.as_base().result_tys(ctx);
 
@@ -283,15 +283,15 @@ pub trait SameResultsType: Op {
     }
 }
 
-/// Verifier `SameOperandsAndResultsType` for `Op`.
+/// Verifier `SameOperandAndResultTys` for `Op`.
 ///
 /// This verifier indicates that the results and the operands all share the same
 /// type. Note that the numbers of results and operands are not necessarily the
 /// same.
-pub trait SameOperandsAndResultsType: SameOperandsType + SameResultsType {
+pub trait SameOperandAndResultTys: SameOperandTys + SameResultTys {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        <Self as SameOperandsType>::verify(self, ctx)?;
-        <Self as SameResultsType>::verify(self, ctx)?;
+        <Self as SameOperandTys>::verify(self, ctx)?;
+        <Self as SameResultTys>::verify(self, ctx)?;
 
         let operand_tys = self.as_base().operand_tys(ctx);
         let result_tys = self.as_base().result_tys(ctx);

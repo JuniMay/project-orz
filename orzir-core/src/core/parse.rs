@@ -87,7 +87,7 @@ pub enum TokenKind {
     /// A block name starting with `%`.
     ValueName(String),
     /// A type alias starting with `!`.
-    TypeAlias(String),
+    TyAlias(String),
     /// A symbol name starting with `@`.
     SymbolName(String),
     /// A string literal.
@@ -108,7 +108,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Arrow => write!(f, "->"),
             TokenKind::BlockLabel(s) => write!(f, "^{}", s),
             TokenKind::ValueName(s) => write!(f, "%{}", s),
-            TokenKind::TypeAlias(s) => write!(f, "!{}", s),
+            TokenKind::TyAlias(s) => write!(f, "!{}", s),
             TokenKind::SymbolName(s) => write!(f, "@{}", s),
             TokenKind::Quoted(s) => write!(f, "Quoted({})", s),
             TokenKind::Tokenized(s) => write!(f, "Tokenized({})", s),
@@ -323,7 +323,7 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('!')
                 } else {
-                    TokenKind::TypeAlias(s)
+                    TokenKind::TyAlias(s)
                 }
             }
             Some('@') => {

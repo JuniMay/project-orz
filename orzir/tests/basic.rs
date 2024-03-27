@@ -2,7 +2,7 @@ use anyhow::Result;
 use orzir::{
     dialects::{
         arith,
-        builtin::{self, FloatType, FunctionType, IntType, ModuleOp},
+        builtin::{self, FloatTy, FunctionTy, IntTy, ModuleOp},
         cf,
         func::{self, FuncOp},
     },
@@ -22,9 +22,9 @@ fn test_basic_0() -> Result<()> {
 
     let module_op = ModuleOp::new(&mut ctx, None);
 
-    let int = IntType::get(&mut ctx, 32);
-    let float = FloatType::get(&mut ctx);
-    let func_ty = FunctionType::get(&mut ctx, vec![int, float], vec![int]);
+    let int = IntTy::get(&mut ctx, 32);
+    let float = FloatTy::get(&mut ctx);
+    let func_ty = FunctionTy::get(&mut ctx, vec![int, float], vec![int]);
     let func_op = FuncOp::new(&mut ctx, "foo".into(), func_ty);
 
     let region = Region::builder().kind(RegionKind::Graph).parent_op(module_op).build(&mut ctx)?;

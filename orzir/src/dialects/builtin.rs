@@ -80,12 +80,12 @@ impl Print for ModuleOp {
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.int"]
-#[verifiers(IntegerLikeType)]
-pub struct IntType(usize);
+#[verifiers(IntegerLikeTy)]
+pub struct IntTy(usize);
 
-impl Verify for IntType {}
+impl Verify for IntTy {}
 
-impl Parse for IntType {
+impl Parse for IntTy {
     type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
@@ -98,11 +98,11 @@ impl Parse for IntType {
             anyhow::bail!("expect a number")
         };
         stream.expect(TokenKind::Char('>'))?;
-        Ok(IntType::get(ctx, size))
+        Ok(IntTy::get(ctx, size))
     }
 }
 
-impl Print for IntType {
+impl Print for IntTy {
     fn print(&self, _ct_sx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, "<{}>", self.0)?;
         Ok(())
@@ -111,53 +111,53 @@ impl Print for IntType {
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.float"]
-#[verifiers(FloatLikeType)]
-pub struct FloatType;
+#[verifiers(FloatLikeTy)]
+pub struct FloatTy;
 
-impl Verify for FloatType {}
+impl Verify for FloatTy {}
 
-impl Parse for FloatType {
+impl Parse for FloatTy {
     type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
-        Ok(FloatType::get(ctx))
+        Ok(FloatTy::get(ctx))
     }
 }
 
-impl Print for FloatType {
+impl Print for FloatTy {
     fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.double"]
-#[verifiers(FloatLikeType)]
-pub struct DoubleType;
+#[verifiers(FloatLikeTy)]
+pub struct DoubleTy;
 
-impl Verify for DoubleType {}
+impl Verify for DoubleTy {}
 
-impl Parse for DoubleType {
+impl Parse for DoubleTy {
     type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
-        Ok(DoubleType::get(ctx))
+        Ok(DoubleTy::get(ctx))
     }
 }
 
-impl Print for DoubleType {
+impl Print for DoubleTy {
     fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.tuple"]
-pub struct TupleType {
+pub struct TupleTy {
     elems: Vec<ArenaPtr<TyObj>>,
 }
 
-impl Verify for TupleType {}
+impl Verify for TupleTy {}
 
-impl Parse for TupleType {
+impl Parse for TupleTy {
     type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
@@ -174,11 +174,11 @@ impl Parse for TupleType {
                 _ => anyhow::bail!("expect ',' or '>', got {:?}", token.kind),
             }
         }
-        Ok(TupleType::get(ctx, elems))
+        Ok(TupleTy::get(ctx, elems))
     }
 }
 
-impl Print for TupleType {
+impl Print for TupleTy {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, "<")?;
         for (i, ty) in self.elems.iter().enumerate() {
@@ -194,14 +194,14 @@ impl Print for TupleType {
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.fn"]
-pub struct FunctionType {
+pub struct FunctionTy {
     args: Vec<ArenaPtr<TyObj>>,
     rets: Vec<ArenaPtr<TyObj>>,
 }
 
-impl Verify for FunctionType {}
+impl Verify for FunctionTy {}
 
-impl Parse for FunctionType {
+impl Parse for FunctionTy {
     type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
@@ -243,11 +243,11 @@ impl Parse for FunctionType {
             }
         }
 
-        Ok(FunctionType::get(ctx, args, rets))
+        Ok(FunctionTy::get(ctx, args, rets))
     }
 }
 
-impl Print for FunctionType {
+impl Print for FunctionTy {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, "(")?;
         for (i, ty) in self.args.iter().enumerate() {
@@ -275,14 +275,14 @@ impl Print for FunctionType {
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.memref"]
-pub struct MemRefType {
+pub struct MemRefTy {
     shape: Vec<usize>,
     elem: ArenaPtr<TyObj>,
 }
 
-impl Verify for MemRefType {}
+impl Verify for MemRefTy {}
 
-impl Parse for MemRefType {
+impl Parse for MemRefTy {
     type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
@@ -313,11 +313,11 @@ impl Parse for MemRefType {
             }
         }
 
-        Ok(MemRefType::get(ctx, shape, elem.unwrap()))
+        Ok(MemRefTy::get(ctx, shape, elem.unwrap()))
     }
 }
 
-impl Print for MemRefType {
+impl Print for MemRefTy {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, "<")?;
         for dim in self.shape.iter() {
@@ -332,20 +332,20 @@ impl Print for MemRefType {
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.unit"]
-pub struct UnitType;
+pub struct UnitTy;
 
-impl Verify for UnitType {}
+impl Verify for UnitTy {}
 
-impl Parse for UnitType {
+impl Parse for UnitTy {
     type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
     fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
-        Ok(UnitType::get(ctx))
+        Ok(UnitTy::get(ctx))
     }
 }
 
-impl Print for UnitType {
+impl Print for UnitTy {
     fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
 }
 
@@ -355,35 +355,33 @@ pub fn register(ctx: &mut Context) {
 
     ModuleOp::register(ctx, ModuleOp::parse);
 
-    UnitType::register(ctx, UnitType::parse);
-    IntType::register(ctx, IntType::parse);
-    FloatType::register(ctx, FloatType::parse);
-    DoubleType::register(ctx, DoubleType::parse);
-    TupleType::register(ctx, TupleType::parse);
-    FunctionType::register(ctx, FunctionType::parse);
-    MemRefType::register(ctx, MemRefType::parse);
+    UnitTy::register(ctx, UnitTy::parse);
+    IntTy::register(ctx, IntTy::parse);
+    FloatTy::register(ctx, FloatTy::parse);
+    DoubleTy::register(ctx, DoubleTy::parse);
+    TupleTy::register(ctx, TupleTy::parse);
+    FunctionTy::register(ctx, FunctionTy::parse);
+    MemRefTy::register(ctx, MemRefTy::parse);
 }
 
 #[cfg(test)]
 mod tests {
     use orzir_core::{Context, Parse, Print, PrintState, TokenStream, TyObj};
 
-    use crate::dialects::builtin::{
-        self, DoubleType, FloatType, FunctionType, IntType, MemRefType, TupleType,
-    };
+    use crate::dialects::builtin::{self, DoubleTy, FloatTy, FunctionTy, IntTy, MemRefTy, TupleTy};
 
     #[test]
     fn test_tys_cmp() {
         let mut ctx = Context::default();
 
-        let int0 = IntType::get(&mut ctx, 32);
-        let int1 = IntType::get(&mut ctx, 64);
-        let int2 = IntType::get(&mut ctx, 32);
-        let float0 = FloatType::get(&mut ctx);
-        let float1 = FloatType::get(&mut ctx);
+        let int0 = IntTy::get(&mut ctx, 32);
+        let int1 = IntTy::get(&mut ctx, 64);
+        let int2 = IntTy::get(&mut ctx, 32);
+        let float0 = FloatTy::get(&mut ctx);
+        let float1 = FloatTy::get(&mut ctx);
 
-        let double0 = DoubleType::get(&mut ctx);
-        let double1 = DoubleType::get(&mut ctx);
+        let double0 = DoubleTy::get(&mut ctx);
+        let double1 = DoubleTy::get(&mut ctx);
 
         assert_ne!(int0, float0);
         assert_ne!(int0, int1);
@@ -392,24 +390,24 @@ mod tests {
         assert_ne!(float0, double0);
         assert_eq!(double0, double1);
 
-        let tuple0 = TupleType::get(&mut ctx, vec![int0, float0]);
-        let tuple1 = TupleType::get(&mut ctx, vec![int0, float0]);
-        let tuple2 = TupleType::get(&mut ctx, vec![int0, float0, double0]);
+        let tuple0 = TupleTy::get(&mut ctx, vec![int0, float0]);
+        let tuple1 = TupleTy::get(&mut ctx, vec![int0, float0]);
+        let tuple2 = TupleTy::get(&mut ctx, vec![int0, float0, double0]);
 
         assert_eq!(tuple0, tuple1);
         assert_ne!(tuple0, tuple2);
 
-        let fn0 = FunctionType::get(&mut ctx, vec![int0, float0], vec![double0]);
-        let fn1 = FunctionType::get(&mut ctx, vec![int0, float0], vec![double0]);
-        let fn2 = FunctionType::get(&mut ctx, vec![int0, float0], vec![double0, int0]);
+        let fn0 = FunctionTy::get(&mut ctx, vec![int0, float0], vec![double0]);
+        let fn1 = FunctionTy::get(&mut ctx, vec![int0, float0], vec![double0]);
+        let fn2 = FunctionTy::get(&mut ctx, vec![int0, float0], vec![double0, int0]);
 
         assert_eq!(fn0, fn1);
         assert_ne!(fn0, fn2);
 
-        let memref0 = MemRefType::get(&mut ctx, vec![1, 2, 3], int0);
-        let memref1 = MemRefType::get(&mut ctx, vec![1, 2, 3], int0);
-        let memref2 = MemRefType::get(&mut ctx, vec![1, 2, 3], int1);
-        let memref3 = MemRefType::get(&mut ctx, vec![6, 6, 6], int1);
+        let memref0 = MemRefTy::get(&mut ctx, vec![1, 2, 3], int0);
+        let memref1 = MemRefTy::get(&mut ctx, vec![1, 2, 3], int0);
+        let memref2 = MemRefTy::get(&mut ctx, vec![1, 2, 3], int1);
+        let memref3 = MemRefTy::get(&mut ctx, vec![6, 6, 6], int1);
 
         assert_eq!(memref0, memref1);
         assert_ne!(memref0, memref2);

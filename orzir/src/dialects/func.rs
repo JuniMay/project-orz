@@ -7,7 +7,7 @@ use orzir_core::{
 };
 use orzir_macros::Op;
 
-use super::builtin::FunctionType;
+use super::builtin::FunctionTy;
 use crate::{
     interfaces::*,
     verifiers::{control_flow::*, *},
@@ -48,7 +48,7 @@ impl Parse for FuncOp {
         } else {
             anyhow::bail!("expected symbol name");
         };
-        let ty = FunctionType::parse((), ctx, stream)?;
+        let ty = FunctionTy::parse((), ctx, stream)?;
         let op = FuncOp::new(ctx, symbol.clone(), ty);
 
         // parse the region.
@@ -74,7 +74,7 @@ impl Parse for FuncOp {
 impl Print for FuncOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " @{}", self.symbol)?;
-        let func_ty = self.ty.deref(&ctx.tys).as_a::<FunctionType>().unwrap();
+        let func_ty = self.ty.deref(&ctx.tys).as_a::<FunctionTy>().unwrap();
         func_ty.print(ctx, state)?;
         write!(state.buffer, " ")?;
         self.as_base().get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;

@@ -51,7 +51,7 @@ fn print_binary(ctx: &Context, state: &mut PrintState, op_base: &OpBase) -> Resu
 
 #[derive(Op)]
 #[mnemonic = "arith.iconst"]
-#[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultsType)]
+#[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
 pub struct IConstOp {
     #[base]
     op_base: OpBase,
@@ -128,7 +128,7 @@ impl Print for IConstOp {
 #[mnemonic = "arith.iadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultsType, SameOperandsType, SameOperandsAndResultsType
+    SameResultTys, SameOperandTys, SameOperandAndResultTys
 )]
 pub struct IAddOp {
     #[base]
