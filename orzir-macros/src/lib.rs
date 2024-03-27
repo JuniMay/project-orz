@@ -40,8 +40,23 @@ mod ty;
 /// interfaces can be implemented in a plug-in manner. This can be done by
 /// calling the `register_caster` macro in the `register` function of any
 /// dialect.
-#[proc_macro_derive(Op, attributes(mnemonic, base, verifiers, interfaces))]
-pub fn op(item: TokenStream) -> TokenStream { derive_op(item.into()).unwrap().into() }
+#[proc_macro_derive(
+    Op,
+    attributes(
+        mnemonic,
+        verifiers,
+        interfaces,
+        self_ptr,
+        parent_block,
+        result,
+        operand,
+        successor,
+        region,
+    )
+)]
+pub fn op(item: TokenStream) -> TokenStream {
+    derive_op(item.into()).unwrap_or_else(|err| err.to_compile_error()).into()
+}
 
 /// Implement a [Ty](orzir_core::Ty) for the given struct.
 ///

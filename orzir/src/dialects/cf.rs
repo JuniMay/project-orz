@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Successor, TokenKind, TokenStream, Value, Verify,
+    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
+    Successor, TokenKind, TokenStream, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -12,12 +12,18 @@ use crate::verifiers::{control_flow::*, *};
 /// The jump operation.
 ///
 /// TODO: Make sure the operands number is ok to be zero.
-#[derive(Op)]
+#[derive(Default, Op)]
 #[mnemonic = "cf.jump"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 pub struct Jump {
-    #[base]
-    op_base: OpBase,
+    #[self_ptr]
+    self_ptr: ArenaPtr<OpObj>,
+
+    #[parent_block]
+    parent: Option<ArenaPtr<Block>>,
+
+    #[successor(0)]
+    succ: Option<Successor>,
 }
 
 impl Verify for Jump {}
@@ -39,7 +45,7 @@ impl Parse for Jump {
 
         let op = Jump::new(ctx);
         op.deref_mut(&mut ctx.ops).as_mut().set_successor(0, successor)?;
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
 
         Ok(op)
     }
@@ -54,12 +60,24 @@ impl Print for Jump {
     }
 }
 
-#[derive(Op)]
+#[derive(Default, Op)]
 #[mnemonic = "cf.branch"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
 pub struct Branch {
-    #[base]
-    op_base: OpBase,
+    #[self_ptr]
+    self_ptr: ArenaPtr<OpObj>,
+
+    #[parent_block]
+    parent: Option<ArenaPtr<Block>>,
+
+    #[operand(0)]
+    cond: Option<ArenaPtr<Value>>,
+
+    #[successor(0)]
+    then_succ: Option<Successor>,
+
+    #[successor(1)]
+    else_succ: Option<Successor>,
 }
 
 impl Verify for Branch {}
@@ -92,7 +110,7 @@ impl Parse for Branch {
         op_inner.set_operand(0, cond)?;
         op_inner.set_successor(0, then_block)?;
         op_inner.set_successor(1, else_block)?;
-        op_inner.set_parent_block(parent_block);
+        op_inner.set_parent_block(parent_block)?;
 
         Ok(op)
     }

@@ -3,8 +3,8 @@ use std::fmt::Write;
 use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, TokenKind, TyObj, Value, Verify,
+    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
+    TokenKind, TyObj, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -33,7 +33,7 @@ fn parse_binary(
 
     op_inner.set_operand(0, lhs)?;
     op_inner.set_operand(1, rhs)?;
-    op_inner.set_parent_block(parent_block);
+    op_inner.set_parent_block(parent_block)?;
 
     Ok(op)
 }
@@ -49,13 +49,20 @@ fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> Res
     Ok(())
 }
 
-#[derive(Op)]
+#[derive(Default, Op)]
 #[mnemonic = "arith.iconst"]
 #[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
 pub struct IConstOp {
-    #[base]
-    op_base: OpBase,
+    #[self_ptr]
+    self_ptr: ArenaPtr<OpObj>,
+
+    #[result(0)]
+    result: Option<ArenaPtr<Value>>,
+
     value: BigInt,
+
+    #[parent_block]
+    parent: Option<ArenaPtr<Block>>,
 }
 
 impl Verify for IConstOp {}
@@ -105,7 +112,7 @@ impl Parse for IConstOp {
         let result_builder = result_builders.pop().unwrap();
         let _result = result_builder.op(op).ty(ty).build(ctx)?;
 
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
 
         Ok(op)
     }
@@ -121,15 +128,27 @@ impl Print for IConstOp {
     }
 }
 
-#[derive(Op)]
+#[derive(Default, Op)]
 #[mnemonic = "arith.iadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys
 )]
 pub struct IAddOp {
-    #[base]
-    op_base: OpBase,
+    #[self_ptr]
+    self_ptr: ArenaPtr<OpObj>,
+
+    #[result(0)]
+    result: Option<ArenaPtr<Value>>,
+
+    #[operand(0)]
+    lhs: Option<ArenaPtr<Value>>,
+
+    #[operand(1)]
+    rhs: Option<ArenaPtr<Value>>,
+
+    #[parent_block]
+    parent: Option<ArenaPtr<Block>>,
 }
 
 impl Verify for IAddOp {}

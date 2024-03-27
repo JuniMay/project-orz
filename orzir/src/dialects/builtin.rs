@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream, Ty, TyObj, Verify, VerifyInterfaces,
+    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
+    Region, RegionKind, TokenKind, TokenStream, Ty, TyObj, Verify, VerifyInterfaces,
 };
 use orzir_macros::{Op, Ty};
 
@@ -12,13 +12,20 @@ use crate::{
     verifiers::{control_flow::*, *},
 };
 
-#[derive(Op)]
+#[derive(Default, Op)]
 #[mnemonic = "builtin.module"]
 #[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
 pub struct ModuleOp {
-    #[base]
-    op_base: OpBase,
+    #[self_ptr]
+    self_ptr: ArenaPtr<OpObj>,
+
+    #[region(0)]
+    region: Option<ArenaPtr<Region>>,
+
+    #[parent_block]
+    parent: Option<ArenaPtr<Block>>,
+
     symbol: Option<String>,
 }
 
@@ -53,7 +60,7 @@ impl Parse for ModuleOp {
         };
 
         let op = ModuleOp::new(ctx, symbol);
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
 
         let _region = Region::builder()
             .parent_op(op)

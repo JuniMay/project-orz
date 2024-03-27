@@ -168,7 +168,8 @@ impl OpResultBuilder {
     ///
     /// # Errors
     ///
-    /// This function will return an error if the type, operation, or index is not
+    /// This function will return an error if the type, operation, or index is
+    /// not
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
         let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
         let op = self.op.ok_or_else(|| anyhow!("missing op"))?;
@@ -229,7 +230,8 @@ impl BlockArgumentBuilder {
     ///
     /// # Errors
     ///
-    /// This function will return an error if the type, block, or index is not set.
+    /// This function will return an error if the type, block, or index is not
+    /// set.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
         let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
         let block = self.block.ok_or_else(|| anyhow!("missing block"))?;

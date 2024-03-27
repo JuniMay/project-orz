@@ -93,176 +93,6 @@ impl Print for Successor {
     }
 }
 
-/// The common struct of all operations.
-///
-/// All operation should wrap this struct to provide basic operations.
-pub struct OpBase {
-    /// The self ptr.
-    self_ptr: ArenaPtr<OpObj>,
-    /// The results of the operation.
-    results: Vec<ArenaPtr<Value>>,
-    /// The operands of the operation.
-    operands: Vec<ArenaPtr<Value>>,
-    /// The regions attached to the operation.
-    regions: Vec<ArenaPtr<Region>>,
-    /// The successors of the operation.
-    ///
-    /// Successors represents the control-flow destinations.
-    successors: Vec<Successor>,
-    /// The parent block of the operation.
-    ///
-    /// TODO: Make sure this field is always maintained.
-    parent_block: Option<ArenaPtr<Block>>,
-}
-
-impl OpBase {
-    pub fn new(self_ptr: ArenaPtr<OpObj>) -> Self {
-        Self {
-            self_ptr,
-            results: Vec::new(),
-            operands: Vec::new(),
-            regions: Vec::new(),
-            successors: Vec::new(),
-            parent_block: None,
-        }
-    }
-
-    fn self_ptr(&self) -> ArenaPtr<OpObj> { self.self_ptr }
-
-    /// Get the results of the operation.
-    fn results(&self) -> &[ArenaPtr<Value>] { &self.results }
-
-    /// Get the operands of the operation.
-    fn operands(&self) -> &[ArenaPtr<Value>] { &self.operands }
-
-    /// Get the successors of the operation.
-    fn successors(&self) -> &[Successor] { &self.successors }
-
-    /// Collect the types of the operands.
-    fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
-        self.operands.iter().map(|ptr| ptr.deref(&ctx.values).ty(ctx)).collect()
-    }
-
-    /// Collect the types of the results.
-    fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
-        self.results.iter().map(|ptr| ptr.deref(&ctx.values).ty(ctx)).collect()
-    }
-
-    /// Get the regions of the operation.
-    fn regions(&self) -> &[ArenaPtr<Region>] { &self.regions }
-
-    /// Get a result by index.
-    fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>> {
-        self.results.get(index).copied()
-    }
-
-    /// Get an operand by index.
-    fn get_operand(&self, index: usize) -> Option<ArenaPtr<Value>> {
-        self.operands.get(index).copied()
-    }
-
-    /// Get a region by index.
-    fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>> {
-        self.regions.get(index).copied()
-    }
-
-    /// Get a successor by index.
-    fn get_successor(&self, index: usize) -> Option<&Successor> { self.successors.get(index) }
-
-    /// Add an operand to the operation.
-    fn add_operand(&mut self, operand: ArenaPtr<Value>) -> usize {
-        self.operands.push(operand);
-        self.operands.len() - 1
-    }
-
-    /// Add a successor to the operation.
-    fn add_successor(&mut self, successor: Successor) { self.successors.push(successor); }
-
-    /// Add a result to the operation.
-    ///
-    /// This should only be used by the
-    /// [`OpResultBuilder`](crate::core::value::OpResultBuilder), which will
-    /// automatically set the result index.
-    fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
-        self.results.push(result);
-        self.results.len() - 1
-    }
-
-    /// Add a region to the operation.
-    ///
-    /// This should only be used by the
-    /// [`RegionBuilder`](crate::core::region::RegionBuilder), which will
-    /// automatically set the region index.
-    fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
-        self.regions.push(region);
-        self.regions.len() - 1
-    }
-
-    fn set_operand(
-        &mut self,
-        index: usize,
-        operand: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>> {
-        if index > self.operands.len() {
-            anyhow::bail!("operand index out of range");
-        }
-        if index == self.operands.len() {
-            self.operands.push(operand);
-            return Ok(None);
-        }
-        Ok(std::mem::replace(&mut self.operands[index], operand).into())
-    }
-
-    fn set_result(
-        &mut self,
-        index: usize,
-        result: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>> {
-        if index > self.results.len() {
-            anyhow::bail!("result index out of range");
-        }
-        if index == self.results.len() {
-            self.results.push(result);
-            return Ok(None);
-        }
-        Ok(std::mem::replace(&mut self.results[index], result).into())
-    }
-
-    fn set_region(
-        &mut self,
-        index: usize,
-        region: ArenaPtr<Region>,
-    ) -> Result<Option<ArenaPtr<Region>>> {
-        if index > self.regions.len() {
-            anyhow::bail!("region index out of range");
-        }
-        if index == self.regions.len() {
-            self.regions.push(region);
-            return Ok(None);
-        }
-        Ok(std::mem::replace(&mut self.regions[index], region).into())
-    }
-
-    fn set_successor(&mut self, index: usize, successor: Successor) -> Result<Option<Successor>> {
-        if index > self.successors.len() {
-            anyhow::bail!("successor index out of range");
-        }
-        if index == self.successors.len() {
-            self.successors.push(successor);
-            return Ok(None);
-        }
-        Ok(std::mem::replace(&mut self.successors[index], successor).into())
-    }
-
-    /// Get the parent block of the operation.
-    fn parent_block(&self) -> Option<ArenaPtr<Block>> { self.parent_block }
-
-    /// Set the parent block of the operation.
-    fn set_parent_block(&mut self, parent_block: Option<ArenaPtr<Block>>) {
-        self.parent_block = parent_block;
-    }
-}
-
 /// The trait of all operations.
 pub trait Op: Downcast + Print + Verify {
     /// Get the mnemonic of the type.
@@ -273,12 +103,6 @@ pub trait Op: Downcast + Print + Verify {
     where
         Self: Sized;
 
-    /// Get the operation base.
-    fn as_base(&self) -> &OpBase;
-
-    /// Get the mutable operation base.
-    fn as_base_mut(&mut self) -> &mut OpBase;
-
     /// Register the operation to the context.
     ///
     /// The [`Parse`](crate::core::parse::Parse) trait is not object-safe, so
@@ -288,45 +112,31 @@ pub trait Op: Downcast + Print + Verify {
         Self: Sized;
 
     /// Get the self ptr.
-    fn self_ptr(&self) -> ArenaPtr<OpObj> { self.as_base().self_ptr() }
-
-    /// Get the types of operands.
-    fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> { self.as_base().operand_tys(ctx) }
-
-    /// Get the types of the results.
-    fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> { self.as_base().result_tys(ctx) }
+    fn self_ptr(&self) -> ArenaPtr<OpObj>;
 
     /// Get the number of operands.
-    fn num_operands(&self) -> usize { self.as_base().operands().len() }
+    fn num_operands(&self) -> usize;
 
     /// Get the number of results.
-    fn num_results(&self) -> usize { self.as_base().results().len() }
+    fn num_results(&self) -> usize;
 
     /// Get the number of regions.
-    fn num_regions(&self) -> usize { self.as_base().regions().len() }
+    fn num_regions(&self) -> usize;
 
     /// Get the number of successors.
-    fn num_successors(&self) -> usize { self.as_base().successors().len() }
+    fn num_successors(&self) -> usize;
 
     /// Get the operand by index.
-    fn get_operand(&self, index: usize) -> Option<ArenaPtr<Value>> {
-        self.as_base().get_operand(index)
-    }
+    fn get_operand(&self, index: usize) -> Option<ArenaPtr<Value>>;
 
     /// Get the result by index.
-    fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>> {
-        self.as_base().get_result(index)
-    }
+    fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>>;
 
     /// Get the region by index.
-    fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>> {
-        self.as_base().get_region(index)
-    }
+    fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>>;
 
     /// Get the successor by index.
-    fn get_successor(&self, index: usize) -> Option<&Successor> {
-        self.as_base().get_successor(index)
-    }
+    fn get_successor(&self, index: usize) -> Option<&Successor>;
 
     /// Get the operands
     fn operands(&self) -> Vec<ArenaPtr<Value>> {
@@ -372,9 +182,7 @@ pub trait Op: Downcast + Print + Verify {
         &mut self,
         index: usize,
         operand: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>> {
-        self.as_base_mut().set_operand(index, operand)
-    }
+    ) -> Result<Option<ArenaPtr<Value>>>;
 
     /// Set the result by index.
     ///
@@ -384,9 +192,7 @@ pub trait Op: Downcast + Print + Verify {
         &mut self,
         index: usize,
         result: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>> {
-        self.as_base_mut().set_result(index, result)
-    }
+    ) -> Result<Option<ArenaPtr<Value>>>;
 
     /// Set the region by index.
     ///
@@ -396,24 +202,47 @@ pub trait Op: Downcast + Print + Verify {
         &mut self,
         index: usize,
         region: ArenaPtr<Region>,
-    ) -> Result<Option<ArenaPtr<Region>>> {
-        self.as_base_mut().set_region(index, region)
-    }
+    ) -> Result<Option<ArenaPtr<Region>>>;
 
     /// Set the successor by index.
     ///
     /// If success, return the original successor, if any. Otherwise, return an
     /// error.
-    fn set_successor(&mut self, index: usize, successor: Successor) -> Result<Option<Successor>> {
-        self.as_base_mut().set_successor(index, successor)
-    }
+    fn set_successor(&mut self, index: usize, successor: Successor) -> Result<Option<Successor>>;
 
     /// Get the parent block of the operation.
-    fn parent_block(&self) -> Option<ArenaPtr<Block>> { self.as_base().parent_block() }
+    fn parent_block(&self) -> Option<ArenaPtr<Block>>;
 
     /// Set the parent block of the operation.
-    fn set_parent_block(&mut self, parent_block: Option<ArenaPtr<Block>>) {
-        self.as_base_mut().set_parent_block(parent_block);
+    fn set_parent_block(
+        &mut self,
+        parent_block: Option<ArenaPtr<Block>>,
+    ) -> Result<Option<ArenaPtr<Block>>>;
+
+    /// Get the types of operands.
+    fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
+        let mut tys = Vec::new();
+        for i in 0..self.num_operands() {
+            if let Some(operand) = self.get_operand(i) {
+                tys.push(operand.deref(&ctx.values).ty(ctx));
+            } else {
+                panic!("operand {} not found", i);
+            }
+        }
+        tys
+    }
+
+    /// Get the types of the results.
+    fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
+        let mut tys = Vec::new();
+        for i in 0..self.num_results() {
+            if let Some(result) = self.get_result(i) {
+                tys.push(result.deref(&ctx.values).ty(ctx));
+            } else {
+                panic!("result {} not found", i);
+            }
+        }
+        tys
     }
 
     /// Get the parent region of the operation.
@@ -537,8 +366,8 @@ impl Parse for OpObj {
 
         let op = parse_fn((result_builders, parent), ctx, stream)?;
 
-        if op.deref(&ctx.ops).as_ref().as_base().parent_block().is_none() {
-            op.deref_mut(&mut ctx.ops).as_mut().as_base_mut().set_parent_block(parent);
+        if op.deref(&ctx.ops).as_ref().parent_block().is_none() {
+            op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent)?;
         }
 
         Ok(op)
@@ -556,12 +385,16 @@ impl Print for OpObj {
     ///
     /// This is actually symmetric to the parsing process.
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        let results = self.as_ref().as_base().results();
+        let num_results = self.as_ref().num_results();
 
-        if !results.is_empty() {
-            for (i, result) in results.iter().enumerate() {
-                result.deref(&ctx.values).print(ctx, state)?;
-                if i != results.len() - 1 {
+        if num_results > 0 {
+            for i in 0..num_results {
+                if let Some(result) = self.as_ref().get_result(i) {
+                    result.deref(&ctx.values).print(ctx, state)?;
+                } else {
+                    panic!("result {} not found", i);
+                }
+                if i != num_results - 1 {
                     write!(state.buffer, ", ")?;
                 }
             }

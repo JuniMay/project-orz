@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::{Ok, Result};
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream, TyObj, Value, Verify, VerifyInterfaces,
+    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
+    Region, RegionKind, TokenKind, TokenStream, TyObj, Value, Verify, VerifyInterfaces,
 };
 use orzir_macros::Op;
 
@@ -13,14 +13,22 @@ use crate::{
     verifiers::{control_flow::*, *},
 };
 
-#[derive(Op)]
+#[derive(Default, Op)]
 #[mnemonic = "func.func"]
 #[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
 pub struct FuncOp {
-    #[base]
-    op_base: OpBase,
+    #[self_ptr]
+    self_ptr: ArenaPtr<OpObj>,
+
+    #[parent_block]
+    parent: Option<ArenaPtr<Block>>,
+
+    #[region(0)]
+    region: Option<ArenaPtr<Region>>,
+
     symbol: String,
+
     ty: ArenaPtr<TyObj>,
 }
 
@@ -58,7 +66,7 @@ impl Parse for FuncOp {
             .index(0)
             .parse(ctx, stream)?;
 
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
         // register the symbol in the parent region.
         parent_block
             .expect("FuncOp should be embraced by a region.")
@@ -82,12 +90,18 @@ impl Print for FuncOp {
     }
 }
 
-#[derive(Op)]
+#[derive(Default, Op)]
 #[mnemonic = "func.return"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
 pub struct ReturnOp {
-    #[base]
-    op_base: OpBase,
+    #[self_ptr]
+    self_ptr: ArenaPtr<OpObj>,
+
+    #[parent_block]
+    parent: Option<ArenaPtr<Block>>,
+
+    #[operand(...)]
+    operands: Vec<ArenaPtr<Value>>,
 }
 
 impl Verify for ReturnOp {}
@@ -118,7 +132,7 @@ impl Parse for ReturnOp {
             }
         }
 
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
 
         Ok(op)
     }
@@ -147,12 +161,22 @@ impl Print for ReturnOp {
 /// ```text
 /// %result = func.call @callee(%arg1, %arg2) : int<32>
 /// ```
-#[derive(Op)]
+#[derive(Default, Op)]
 #[mnemonic = "func.call"]
 #[verifiers(VariadicResults, VariadicOperands, NumRegions<0>)]
 pub struct CallOp {
-    #[base]
-    op_base: OpBase,
+    #[self_ptr]
+    self_ptr: ArenaPtr<OpObj>,
+
+    #[parent_block]
+    parent: Option<ArenaPtr<Block>>,
+
+    #[result(...)]
+    results: Vec<ArenaPtr<Value>>,
+
+    #[operand(...)]
+    operands: Vec<ArenaPtr<Value>>,
+
     callee: String,
     ret_ty: ArenaPtr<TyObj>,
 }
@@ -203,7 +227,7 @@ impl Parse for CallOp {
             let _result = result_builder.op(op).ty(ret_ty).build(ctx)?;
         }
 
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
 
         Ok(op)
     }
