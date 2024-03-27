@@ -127,78 +127,63 @@ impl OpBase {
         }
     }
 
-    pub fn self_ptr(&self) -> ArenaPtr<OpObj> { self.self_ptr }
+    fn self_ptr(&self) -> ArenaPtr<OpObj> { self.self_ptr }
 
     /// Get the results of the operation.
-    pub fn results(&self) -> &[ArenaPtr<Value>] { &self.results }
+    fn results(&self) -> &[ArenaPtr<Value>] { &self.results }
 
     /// Get the operands of the operation.
-    pub fn operands(&self) -> &[ArenaPtr<Value>] { &self.operands }
+    fn operands(&self) -> &[ArenaPtr<Value>] { &self.operands }
 
     /// Get the successors of the operation.
-    pub fn successors(&self) -> &[Successor] { &self.successors }
+    fn successors(&self) -> &[Successor] { &self.successors }
 
     /// Collect the types of the operands.
-    pub fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
+    fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
         self.operands.iter().map(|ptr| ptr.deref(&ctx.values).ty(ctx)).collect()
     }
 
     /// Collect the types of the results.
-    pub fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
+    fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
         self.results.iter().map(|ptr| ptr.deref(&ctx.values).ty(ctx)).collect()
     }
 
     /// Get the regions of the operation.
-    pub fn regions(&self) -> &[ArenaPtr<Region>] { &self.regions }
-
-    /// Set the results of the operation.
-    ///
-    /// This will replace the original results and return the original results.
-    pub fn set_results(&mut self, results: Vec<ArenaPtr<Value>>) -> Vec<ArenaPtr<Value>> {
-        std::mem::replace(&mut self.results, results)
-    }
-
-    /// Set the operands of the operation.
-    ///
-    /// This will replace the original operands and return the original
-    /// operands.
-    pub fn set_operands(&mut self, operands: Vec<ArenaPtr<Value>>) -> Vec<ArenaPtr<Value>> {
-        std::mem::replace(&mut self.operands, operands)
-    }
+    fn regions(&self) -> &[ArenaPtr<Region>] { &self.regions }
 
     /// Get a result by index.
-    pub fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>> {
+    fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>> {
         self.results.get(index).copied()
     }
 
     /// Get an operand by index.
-    pub fn get_operand(&self, index: usize) -> Option<ArenaPtr<Value>> {
+    fn get_operand(&self, index: usize) -> Option<ArenaPtr<Value>> {
         self.operands.get(index).copied()
     }
 
     /// Get a region by index.
-    pub fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>> {
+    fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>> {
         self.regions.get(index).copied()
     }
 
     /// Get a successor by index.
-    pub fn get_successor(&self, index: usize) -> Option<&Successor> { self.successors.get(index) }
+    fn get_successor(&self, index: usize) -> Option<&Successor> { self.successors.get(index) }
 
     /// Add an operand to the operation.
-    pub fn add_operand(&mut self, operand: ArenaPtr<Value>) -> usize {
+    fn add_operand(&mut self, operand: ArenaPtr<Value>) -> usize {
         self.operands.push(operand);
         self.operands.len() - 1
     }
 
     /// Add a successor to the operation.
-    pub fn add_successor(&mut self, successor: Successor) { self.successors.push(successor); }
+    fn add_successor(&mut self, successor: Successor) { self.successors.push(successor); }
 
     /// Add a result to the operation.
     ///
     /// This should only be used by the
     /// [`OpResultBuilder`](crate::core::value::OpResultBuilder), which will
     /// automatically set the result index.
-    pub(crate) fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
+    fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
         self.results.push(result);
         self.results.len() - 1
     }
@@ -208,27 +193,73 @@ impl OpBase {
     /// This should only be used by the
     /// [`RegionBuilder`](crate::core::region::RegionBuilder), which will
     /// automatically set the region index.
-    pub(crate) fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
+    fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
         self.regions.push(region);
         self.regions.len() - 1
     }
 
-    /// Get the parent block of the operation.
-    pub fn parent_block(&self) -> Option<ArenaPtr<Block>> { self.parent_block }
-
-    /// Set the parent block of the operation.
-    pub fn set_parent_block(&mut self, parent_block: Option<ArenaPtr<Block>>) {
-        self.parent_block = parent_block;
+    fn set_operand(
+        &mut self,
+        index: usize,
+        operand: ArenaPtr<Value>,
+    ) -> Result<Option<ArenaPtr<Value>>> {
+        if index > self.operands.len() {
+            anyhow::bail!("operand index out of range");
+        }
+        if index == self.operands.len() {
+            self.operands.push(operand);
+            return Ok(None);
+        }
+        Ok(std::mem::replace(&mut self.operands[index], operand).into())
     }
 
-    /// Get the parent region of the operation.
-    ///
-    /// If the operation has no parent block, the parent region will be `None`
-    pub fn parent_region(&self, ctx: &Context) -> Option<ArenaPtr<Region>> {
-        self.parent_block.map(|ptr| {
-            let block = ptr.deref(&ctx.blocks);
-            block.parent_region()
-        })
+    fn set_result(
+        &mut self,
+        index: usize,
+        result: ArenaPtr<Value>,
+    ) -> Result<Option<ArenaPtr<Value>>> {
+        if index > self.results.len() {
+            anyhow::bail!("result index out of range");
+        }
+        if index == self.results.len() {
+            self.results.push(result);
+            return Ok(None);
+        }
+        Ok(std::mem::replace(&mut self.results[index], result).into())
+    }
+
+    fn set_region(
+        &mut self,
+        index: usize,
+        region: ArenaPtr<Region>,
+    ) -> Result<Option<ArenaPtr<Region>>> {
+        if index > self.regions.len() {
+            anyhow::bail!("region index out of range");
+        }
+        if index == self.regions.len() {
+            self.regions.push(region);
+            return Ok(None);
+        }
+        Ok(std::mem::replace(&mut self.regions[index], region).into())
+    }
+
+    fn set_successor(&mut self, index: usize, successor: Successor) -> Result<Option<Successor>> {
+        if index > self.successors.len() {
+            anyhow::bail!("successor index out of range");
+        }
+        if index == self.successors.len() {
+            self.successors.push(successor);
+            return Ok(None);
+        }
+        Ok(std::mem::replace(&mut self.successors[index], successor).into())
+    }
+
+    /// Get the parent block of the operation.
+    fn parent_block(&self) -> Option<ArenaPtr<Block>> { self.parent_block }
+
+    /// Set the parent block of the operation.
+    fn set_parent_block(&mut self, parent_block: Option<ArenaPtr<Block>>) {
+        self.parent_block = parent_block;
     }
 }
 
@@ -255,6 +286,141 @@ pub trait Op: Downcast + Print + Verify {
     fn register(ctx: &mut Context, parse_fn: OpParseFn)
     where
         Self: Sized;
+
+    /// Get the self ptr.
+    fn self_ptr(&self) -> ArenaPtr<OpObj> { self.as_base().self_ptr() }
+
+    /// Get the types of operands.
+    fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> { self.as_base().operand_tys(ctx) }
+
+    /// Get the types of the results.
+    fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> { self.as_base().result_tys(ctx) }
+
+    /// Get the regions of the operation.
+    fn regions(&self) -> &[ArenaPtr<Region>] { self.as_base().regions() }
+
+    /// Get the results of the operation.
+    fn results(&self) -> &[ArenaPtr<Value>] { self.as_base().results() }
+
+    /// Get the operands of the operation.
+    fn operands(&self) -> &[ArenaPtr<Value>] { self.as_base().operands() }
+
+    /// Get the successors of the operation.
+    fn successors(&self) -> &[Successor] { self.as_base().successors() }
+
+    /// Get the number of operands.
+    fn num_operands(&self) -> usize { self.as_base().operands().len() }
+
+    /// Get the number of results.
+    fn num_results(&self) -> usize { self.as_base().results().len() }
+
+    /// Get the number of regions.
+    fn num_regions(&self) -> usize { self.as_base().regions().len() }
+
+    /// Get the number of successors.
+    fn num_successors(&self) -> usize { self.as_base().successors().len() }
+
+    /// Get the operand by index.
+    fn get_operand(&self, index: usize) -> Option<ArenaPtr<Value>> {
+        self.as_base().get_operand(index)
+    }
+
+    /// Get the result by index.
+    fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>> {
+        self.as_base().get_result(index)
+    }
+
+    /// Get the region by index.
+    fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>> {
+        self.as_base().get_region(index)
+    }
+
+    /// Get the successor by index.
+    fn get_successor(&self, index: usize) -> Option<&Successor> {
+        self.as_base().get_successor(index)
+    }
+
+    /// Add an operand to the operation.
+    fn add_operand(&mut self, operand: ArenaPtr<Value>) -> usize {
+        self.as_base_mut().add_operand(operand)
+    }
+
+    /// Add a successor to the operation.
+    fn add_successor(&mut self, successor: Successor) {
+        self.as_base_mut().add_successor(successor)
+    }
+
+    /// Add a result to the operation.
+    fn add_result(&mut self, result: ArenaPtr<Value>) -> usize {
+        self.as_base_mut().add_result(result)
+    }
+
+    /// Add a region to the operation.
+    fn add_region(&mut self, region: ArenaPtr<Region>) -> usize {
+        self.as_base_mut().add_region(region)
+    }
+
+    /// Set the operand by index.
+    ///
+    /// If success, return the original operand, if any. Otherwise, return an
+    /// error.
+    fn set_operand(
+        &mut self,
+        index: usize,
+        operand: ArenaPtr<Value>,
+    ) -> Result<Option<ArenaPtr<Value>>> {
+        self.as_base_mut().set_operand(index, operand)
+    }
+
+    /// Set the result by index.
+    ///
+    /// If success, return the original result, if any. Otherwise, return an
+    /// error.
+    fn set_result(
+        &mut self,
+        index: usize,
+        result: ArenaPtr<Value>,
+    ) -> Result<Option<ArenaPtr<Value>>> {
+        self.as_base_mut().set_result(index, result)
+    }
+
+    /// Set the region by index.
+    ///
+    /// If success, return the original region, if any. Otherwise, return an
+    /// error.
+    fn set_region(
+        &mut self,
+        index: usize,
+        region: ArenaPtr<Region>,
+    ) -> Result<Option<ArenaPtr<Region>>> {
+        self.as_base_mut().set_region(index, region)
+    }
+
+    /// Set the successor by index.
+    ///
+    /// If success, return the original successor, if any. Otherwise, return an
+    /// error.
+    fn set_successor(&mut self, index: usize, successor: Successor) -> Result<Option<Successor>> {
+        self.as_base_mut().set_successor(index, successor)
+    }
+
+    /// Get the parent block of the operation.
+    fn parent_block(&self) -> Option<ArenaPtr<Block>> { self.as_base().parent_block() }
+
+    /// Set the parent block of the operation.
+    fn set_parent_block(&mut self, parent_block: Option<ArenaPtr<Block>>) {
+        self.as_base_mut().set_parent_block(parent_block);
+    }
+
+    /// Get the parent region of the operation.
+    ///
+    /// If the operation has no parent block, the parent region will be `None`.
+    fn parent_region(&self, ctx: &Context) -> Option<ArenaPtr<Region>> {
+        self.parent_block().map(|ptr| {
+            let block = ptr.deref(&ctx.blocks);
+            block.parent_region()
+        })
+    }
 }
 
 impl_downcast!(Op);

@@ -27,7 +27,7 @@ impl RegionKindInterface for ModuleOp {}
 impl Verify for ModuleOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
         self.verify_interfaces(ctx)?;
-        self.as_base().get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
+        self.get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
         Ok(())
     }
 }
@@ -53,10 +53,7 @@ impl Parse for ModuleOp {
         };
 
         let op = ModuleOp::new(ctx, symbol);
-        op.deref_mut(&mut ctx.ops)
-            .as_inner_mut()
-            .as_base_mut()
-            .set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
 
         let region_builder = Region::builder().parent_op(op).kind(RegionKind::Graph);
         // the region will be added in the parser.
@@ -72,7 +69,7 @@ impl Print for ModuleOp {
             write!(state.buffer, "@{}", symbol)?;
         }
         write!(state.buffer, " ")?;
-        self.as_base().get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
+        self.get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
 
         Ok(())
     }

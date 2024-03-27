@@ -38,12 +38,8 @@ impl Parse for Jump {
         let successor = Successor::parse(parent_region, ctx, stream)?;
 
         let op = Jump::new(ctx);
-        op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_successor(successor);
-
-        op.deref_mut(&mut ctx.ops)
-            .as_inner_mut()
-            .as_base_mut()
-            .set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_inner_mut().set_successor(0, successor)?;
+        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
 
         Ok(op)
     }
@@ -51,8 +47,7 @@ impl Parse for Jump {
 
 impl Print for Jump {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        let op_base = self.as_base();
-        let successor = op_base.get_successor(0).unwrap();
+        let successor = self.get_successor(0).unwrap();
         write!(state.buffer, " ")?;
         successor.print(ctx, state)?;
         Ok(())
@@ -92,12 +87,12 @@ impl Parse for Branch {
         let else_block = Successor::parse(parent_region, ctx, stream)?;
 
         let op = Branch::new(ctx);
-        let op_base = op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut();
+        let op_inner = op.deref_mut(&mut ctx.ops).as_inner_mut();
 
-        op_base.add_operand(cond);
-        op_base.add_successor(then_block);
-        op_base.add_successor(else_block);
-        op_base.set_parent_block(parent_block);
+        op_inner.set_operand(0, cond)?;
+        op_inner.set_successor(0, then_block)?;
+        op_inner.set_successor(1, else_block)?;
+        op_inner.set_parent_block(parent_block);
 
         Ok(op)
     }
@@ -106,12 +101,11 @@ impl Parse for Branch {
 impl Print for Branch {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " ")?;
-        let op_base = self.as_base();
-        op_base.get_operand(0).unwrap().deref(&ctx.values).print(ctx, state)?;
+        self.get_operand(0).unwrap().deref(&ctx.values).print(ctx, state)?;
         write!(state.buffer, ", ")?;
-        op_base.get_successor(0).unwrap().print(ctx, state)?;
+        self.get_successor(0).unwrap().print(ctx, state)?;
         write!(state.buffer, ", ")?;
-        op_base.get_successor(1).unwrap().print(ctx, state)?;
+        self.get_successor(1).unwrap().print(ctx, state)?;
         Ok(())
     }
 }
@@ -171,7 +165,6 @@ mod tests {
 
         let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
         assert!(module_op
-            .as_base()
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
@@ -219,7 +212,6 @@ mod tests {
 
         let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
         assert!(module_op
-            .as_base()
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)

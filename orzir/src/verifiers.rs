@@ -11,15 +11,14 @@ pub mod control_flow;
 /// Note that symbols can be used.
 pub trait IsIsolatedFromAbove: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        let op_base = self.as_base();
         let mut pending_regions = Vec::new();
-        for region in op_base.regions().iter() {
+        for region in self.regions().iter() {
             pending_regions.push(region);
 
             while !pending_regions.is_empty() {
                 let pending_region = pending_regions.pop().unwrap().deref(&ctx.regions);
                 for op in pending_region.layout().iter_ops_chained() {
-                    for operand in op.deref(&ctx.ops).as_inner().as_base().operands() {
+                    for operand in op.deref(&ctx.ops).as_inner().operands() {
                         let operand_region = operand.deref(&ctx.values).parent_region(ctx);
                         if !region.deref(&ctx.regions).is_ancestor(ctx, operand_region) {
                             // not isolated from above
@@ -27,10 +26,10 @@ pub trait IsIsolatedFromAbove: Op {
                         }
                     }
 
-                    if !op.deref(&ctx.ops).as_inner().as_base().regions().is_empty()
+                    if !op.deref(&ctx.ops).as_inner().regions().is_empty()
                         && !op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>(ctx)
                     {
-                        for sub_region in op.deref(&ctx.ops).as_inner().as_base().regions() {
+                        for sub_region in op.deref(&ctx.ops).as_inner().regions() {
                             pending_regions.push(sub_region);
                         }
                     }
@@ -47,9 +46,8 @@ pub trait IsIsolatedFromAbove: Op {
 /// A verifier indicating that the operation has excatly `N` results.
 pub trait NumResults<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        let op_base = self.as_base();
-        if op_base.results().len() != N {
-            anyhow::bail!("expected {} results, got {}", N, op_base.results().len());
+        if self.num_results() != N {
+            anyhow::bail!("expected {} results, got {}", N, self.num_results());
         }
         Ok(())
     }
@@ -60,9 +58,8 @@ pub trait NumResults<const N: usize>: Op {
 /// A trait indicating that the operation has excatly `N` operands.
 pub trait NumOperands<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        let op_base = self.as_base();
-        if op_base.operands().len() != N {
-            anyhow::bail!("expected {} operands, got {}", N, op_base.operands().len());
+        if self.num_operands() != N {
+            anyhow::bail!("expected {} operands, got {}", N, self.num_operands());
         }
         Ok(())
     }
@@ -73,9 +70,8 @@ pub trait NumOperands<const N: usize>: Op {
 /// A verifier indicating that the operation has excatly `N` regions.
 pub trait NumRegions<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        let op_base = self.as_base();
-        if op_base.regions().len() != N {
-            anyhow::bail!("expected {} regions, got {}", N, op_base.regions().len());
+        if self.regions().len() != N {
+            anyhow::bail!("expected {} regions, got {}", N, self.regions().len());
         }
         Ok(())
     }
@@ -86,13 +82,8 @@ pub trait NumRegions<const N: usize>: Op {
 /// A verifier indicating that the operation has exactly `N` successors.
 pub trait NumSuccessors<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        let op_base = self.as_base();
-        if op_base.successors().len() != N {
-            anyhow::bail!(
-                "expected {} successors, got {}",
-                N,
-                op_base.successors().len()
-            );
+        if self.successors().len() != N {
+            anyhow::bail!("expected {} successors, got {}", N, self.successors().len());
         }
         Ok(())
     }
@@ -103,12 +94,11 @@ pub trait NumSuccessors<const N: usize>: Op {
 /// A verifier indicating that the operation has at least `N` results.
 pub trait AtLeastNumResults<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        let op_base = self.as_base();
-        if op_base.results().len() < N {
+        if self.num_results() < N {
             anyhow::bail!(
                 "expected at least {} results, got {}",
                 N,
-                op_base.results().len()
+                self.num_results()
             );
         }
         Ok(())
@@ -120,12 +110,11 @@ pub trait AtLeastNumResults<const N: usize>: Op {
 /// A verifier indicating that the operation has at least `N` operands.
 pub trait AtLeastNumOperands<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        let op_base = self.as_base();
-        if op_base.operands().len() < N {
+        if self.num_operands() < N {
             anyhow::bail!(
                 "expected at least {} operands, got {}",
                 N,
-                op_base.operands().len()
+                self.num_operands()
             );
         }
         Ok(())
@@ -137,12 +126,11 @@ pub trait AtLeastNumOperands<const N: usize>: Op {
 /// A verifier indicating that the operation has at least `N` regions.
 pub trait AtLeastNumRegions<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        let op_base = self.as_base();
-        if op_base.regions().len() < N {
+        if self.regions().len() < N {
             anyhow::bail!(
                 "expected at least {} regions, got {}",
                 N,
-                op_base.regions().len()
+                self.regions().len()
             );
         }
         Ok(())
@@ -154,12 +142,11 @@ pub trait AtLeastNumRegions<const N: usize>: Op {
 /// A verifier indicating that the operation has at least `N` successors.
 pub trait AtLeastNumSuccessors<const N: usize>: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        let op_base = self.as_base();
-        if op_base.successors().len() < N {
+        if self.successors().len() < N {
             anyhow::bail!(
                 "expected at least {} successors, got {}",
                 N,
-                op_base.successors().len()
+                self.successors().len()
             );
         }
         Ok(())
@@ -213,7 +200,7 @@ pub trait IntegerLikeTy: Ty {
 /// This verifier indicates that the operation has float-like operands.
 pub trait FloatLikeOperands: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        for operand in self.as_base().operands() {
+        for operand in self.operands() {
             let operand_ty = operand.deref(&ctx.values).ty(ctx);
             if !operand_ty.deref(&ctx.tys).impls::<dyn FloatLikeTy>(ctx) {
                 anyhow::bail!("operand is not a float-like type");
@@ -228,7 +215,7 @@ pub trait FloatLikeOperands: Op {
 /// This verifier indicates that the operation has integer-like operands.
 pub trait IntegerLikeOperands: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        for operand in self.as_base().operands() {
+        for operand in self.operands() {
             let operand_ty = operand.deref(&ctx.values).ty(ctx);
             if !operand_ty.deref(&ctx.tys).impls::<dyn IntegerLikeTy>(ctx) {
                 anyhow::bail!("operand is not an integer-like type");
@@ -243,7 +230,7 @@ pub trait IntegerLikeOperands: Op {
 /// This verifier indicates that the operands are all the same types.
 pub trait SameOperandTys: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        let operand_tys = self.as_base().operand_tys(ctx);
+        let operand_tys = self.operand_tys(ctx);
 
         if operand_tys.is_empty() {
             return Ok(());
@@ -266,7 +253,7 @@ pub trait SameOperandTys: Op {
 /// This verifier indicates that the results are all the same type.
 pub trait SameResultTys: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        let result_tys = self.as_base().result_tys(ctx);
+        let result_tys = self.result_tys(ctx);
 
         if result_tys.is_empty() {
             return Ok(());
@@ -293,8 +280,8 @@ pub trait SameOperandAndResultTys: SameOperandTys + SameResultTys {
         <Self as SameOperandTys>::verify(self, ctx)?;
         <Self as SameResultTys>::verify(self, ctx)?;
 
-        let operand_tys = self.as_base().operand_tys(ctx);
-        let result_tys = self.as_base().result_tys(ctx);
+        let operand_tys = self.operand_tys(ctx);
+        let result_tys = self.result_tys(ctx);
 
         if operand_tys.is_empty() {
             return Ok(());
@@ -322,7 +309,7 @@ pub trait SameOperandAndResultTys: SameOperandTys + SameResultTys {
 /// same.
 pub trait SameOperandsAndResultsNum: Op {
     fn verify(&self, _: &Context) -> Result<()> {
-        if self.as_base().operands().len() != self.as_base().results().len() {
+        if self.num_operands() != self.num_results() {
             anyhow::bail!("results and operands have different numbers");
         }
         Ok(())

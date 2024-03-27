@@ -85,7 +85,6 @@ impl Value {
             Value::OpResult { op, .. } => op
                 .deref(&ctx.ops)
                 .as_inner()
-                .as_base()
                 .parent_region(ctx)
                 .expect("OpResult should be embraced by a region."),
             Value::BlockArgument { block, .. } => block.deref(&ctx.blocks).parent_region(),
@@ -142,7 +141,7 @@ impl OpResultBuilder {
         } else {
             ctx.values.reserve()
         };
-        let index = op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_result(self_ptr);
+        let index = op.deref_mut(&mut ctx.ops).as_inner_mut().add_result(self_ptr);
 
         let instance = Value::OpResult {
             self_ptr,

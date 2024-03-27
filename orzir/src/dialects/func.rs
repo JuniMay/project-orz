@@ -30,7 +30,7 @@ impl Verify for FuncOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
         self.verify_interfaces(ctx)?;
         self.ty.deref(&ctx.tys).as_inner().verify(ctx)?;
-        self.as_base().get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
+        self.get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
         Ok(())
     }
 }
@@ -55,10 +55,7 @@ impl Parse for FuncOp {
         let region_builder = Region::builder().parent_op(op).kind(RegionKind::SsaCfg);
         let _region = Region::parse(region_builder, ctx, stream)?;
 
-        op.deref_mut(&mut ctx.ops)
-            .as_inner_mut()
-            .as_base_mut()
-            .set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
         // register the symbol in the parent region.
         parent_block
             .expect("FuncOp should be embraced by a region.")
@@ -77,7 +74,7 @@ impl Print for FuncOp {
         let func_ty = self.ty.deref(&ctx.tys).as_a::<FunctionTy>().unwrap();
         func_ty.print(ctx, state)?;
         write!(state.buffer, " ")?;
-        self.as_base().get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
+        self.get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
         Ok(())
     }
 }
@@ -106,7 +103,7 @@ impl Parse for ReturnOp {
 
         while let TokenKind::ValueName(_) = stream.peek()?.kind {
             let operand = Value::parse((), ctx, stream)?;
-            op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_operand(operand);
+            op.deref_mut(&mut ctx.ops).as_inner_mut().add_operand(operand);
 
             if let TokenKind::Char(',') = stream.peek()?.kind {
                 stream.consume()?;
@@ -115,10 +112,7 @@ impl Parse for ReturnOp {
             }
         }
 
-        op.deref_mut(&mut ctx.ops)
-            .as_inner_mut()
-            .as_base_mut()
-            .set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
 
         Ok(op)
     }
@@ -126,7 +120,7 @@ impl Parse for ReturnOp {
 
 impl Print for ReturnOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        let operations = self.as_base().operands();
+        let operations = self.operands();
         if !operations.is_empty() {
             write!(state.buffer, " ")?;
             for (i, operand) in operations.iter().enumerate() {
@@ -195,7 +189,7 @@ impl Parse for CallOp {
         let op = CallOp::new(ctx, callee, ret_ty);
 
         for operand in operands {
-            op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut().add_operand(operand);
+            op.deref_mut(&mut ctx.ops).as_inner_mut().add_operand(operand);
         }
 
         for result_builder in result_builders {
@@ -203,10 +197,7 @@ impl Parse for CallOp {
             let _result = result_builder.op(op).ty(ret_ty).build(ctx)?;
         }
 
-        op.deref_mut(&mut ctx.ops)
-            .as_inner_mut()
-            .as_base_mut()
-            .set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
 
         Ok(op)
     }
@@ -216,7 +207,7 @@ impl Print for CallOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " @{}", self.callee)?;
         write!(state.buffer, "(")?;
-        let operands = self.as_base().operands();
+        let operands = self.operands();
         for (i, operand) in operands.iter().enumerate() {
             operand.deref(&ctx.values).print(ctx, state)?;
             if i != operands.len() - 1 {
@@ -281,7 +272,6 @@ mod tests {
         let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
 
         assert!(module_op
-            .as_base()
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
@@ -326,7 +316,6 @@ mod tests {
         let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
 
         assert!(module_op
-            .as_base()
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
@@ -334,7 +323,6 @@ mod tests {
             .is_some());
 
         assert!(module_op
-            .as_base()
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)

@@ -29,21 +29,21 @@ fn parse_binary(
     // the result will be added to the parent operation when building the result
     let _result = result_builder.op(op).ty(ty).build(ctx)?;
 
-    let op_base = op.deref_mut(&mut ctx.ops).as_inner_mut().as_base_mut();
+    let op_inner = op.deref_mut(&mut ctx.ops).as_inner_mut();
 
-    op_base.add_operand(lhs);
-    op_base.add_operand(rhs);
-    op_base.set_parent_block(parent_block);
+    op_inner.set_operand(0, lhs)?;
+    op_inner.set_operand(1, rhs)?;
+    op_inner.set_parent_block(parent_block);
 
     Ok(op)
 }
 
-fn print_binary(ctx: &Context, state: &mut PrintState, op_base: &OpBase) -> Result<()> {
-    op_base.get_operand(0).unwrap().deref(&ctx.values).print(ctx, state)?;
+fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> Result<()> {
+    op_inner.get_operand(0).unwrap().deref(&ctx.values).print(ctx, state)?;
     write!(state.buffer, ", ")?;
-    op_base.get_operand(1).unwrap().deref(&ctx.values).print(ctx, state)?;
+    op_inner.get_operand(1).unwrap().deref(&ctx.values).print(ctx, state)?;
     write!(state.buffer, ": ")?;
-    let result_tys = op_base.result_tys(ctx);
+    let result_tys = op_inner.result_tys(ctx);
     assert!(result_tys.len() == 1);
     result_tys[0].deref(&ctx.tys).print(ctx, state)?;
     Ok(())
@@ -105,10 +105,7 @@ impl Parse for IConstOp {
         let result_builder = result_builders.pop().unwrap();
         let _result = result_builder.op(op).ty(ty).build(ctx)?;
 
-        op.deref_mut(&mut ctx.ops)
-            .as_inner_mut()
-            .as_base_mut()
-            .set_parent_block(parent_block);
+        op.deref_mut(&mut ctx.ops).as_inner_mut().set_parent_block(parent_block);
 
         Ok(op)
     }
@@ -117,7 +114,7 @@ impl Parse for IConstOp {
 impl Print for IConstOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " {} : ", self.value)?;
-        let result_tys = self.as_base().result_tys(ctx);
+        let result_tys = self.result_tys(ctx);
         assert!(result_tys.len() == 1);
         result_tys[0].deref(&ctx.tys).print(ctx, state)?;
         Ok(())
@@ -154,7 +151,7 @@ impl Parse for IAddOp {
 impl Print for IAddOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " ")?;
-        let op_base = self.as_base();
+        let op_base = self;
         print_binary(ctx, state, op_base)
     }
 }
@@ -229,7 +226,6 @@ mod tests {
 
         let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
         assert!(module_op
-            .as_base()
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)

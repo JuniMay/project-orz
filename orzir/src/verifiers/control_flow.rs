@@ -6,7 +6,7 @@ use orzir_core::{Context, Op};
 /// This verifier indicates that the operation is a terminator.
 pub trait IsTerminator: Op {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        let parent_region = self.as_base().parent_region(ctx);
+        let parent_region = self.parent_region(ctx);
 
         if parent_region.is_none() {
             anyhow::bail!("terminator must be in a region");
@@ -16,8 +16,8 @@ pub trait IsTerminator: Op {
             .unwrap()
             .deref(&ctx.regions)
             .layout()
-            .exit_op_at(self.as_base().parent_block().unwrap())
-            != Some(self.as_base().self_ptr())
+            .exit_op_at(self.parent_block().unwrap())
+            != Some(self.self_ptr())
         {
             anyhow::bail!("terminator is not the last operation in the block");
         }
