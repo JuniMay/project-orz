@@ -175,7 +175,10 @@ pub trait Op: Downcast + Print + Verify {
     fn operands(&self) -> Vec<ArenaPtr<Value>> {
         let mut operands = Vec::new();
         for i in 0..self.num_operands() {
-            operands.push(self.get_operand(i).unwrap());
+            operands.push(
+                self.get_operand(i)
+                    .unwrap_or_else(|| panic!("operand at index {} not found", i)),
+            );
         }
         operands
     }
@@ -184,7 +187,9 @@ pub trait Op: Downcast + Print + Verify {
     fn results(&self) -> Vec<ArenaPtr<Value>> {
         let mut results = Vec::new();
         for i in 0..self.num_results() {
-            results.push(self.get_result(i).unwrap());
+            results.push(
+                self.get_result(i).unwrap_or_else(|| panic!("result at index {} not found", i)),
+            );
         }
         results
     }
@@ -193,7 +198,9 @@ pub trait Op: Downcast + Print + Verify {
     fn regions(&self) -> Vec<ArenaPtr<Region>> {
         let mut regions = Vec::new();
         for i in 0..self.num_regions() {
-            regions.push(self.get_region(i).unwrap());
+            regions.push(
+                self.get_region(i).unwrap_or_else(|| panic!("region at index {} not found", i)),
+            );
         }
         regions
     }
@@ -202,7 +209,10 @@ pub trait Op: Downcast + Print + Verify {
     fn successors(&self) -> Vec<&Successor> {
         let mut successors = Vec::new();
         for i in 0..self.num_successors() {
-            successors.push(self.get_successor(i).unwrap());
+            successors.push(
+                self.get_successor(i)
+                    .unwrap_or_else(|| panic!("successor at index {} not found", i)),
+            );
         }
         successors
     }

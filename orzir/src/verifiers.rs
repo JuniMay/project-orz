@@ -1,5 +1,5 @@
 use anyhow::Result;
-use orzir_core::{Context, Op, Ty, Typed};
+use orzir_core::{Context, Op, Ty};
 
 pub mod control_flow;
 

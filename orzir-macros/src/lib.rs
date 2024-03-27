@@ -13,10 +13,6 @@ mod ty;
 /// This will first generate a `new` constructor for the struct, which returns
 /// an `ArenaPtr<OpObj>` object.
 ///
-/// To make the target struct valid for deriving, it must have a field with type
-/// [`OpBase`](orzir_core::OpBase), and marked with the `#[base]` attribute.
-/// This field is used to store the basic operation informations.
-///
 /// The `#[mnemonic = "..."]` attribute is used to specify the mnemonic of the
 /// operation. The mnemonic string will be split by the first dot character. The
 /// first part will be used as the dialect mnemonic, and the second part will be
@@ -40,6 +36,27 @@ mod ty;
 /// interfaces can be implemented in a plug-in manner. This can be done by
 /// calling the `register_caster` macro in the `register` function of any
 /// dialect.
+///
+/// To make a struct valid for the `Op` derive, the `#[metadata]` attribute must
+/// be specified for the metadata field of the struct, which contains the
+/// `self_ptr` and `parent_block` fields.
+///
+/// For entities like results, operands, successors, and regions, the
+/// corresponding fields must be specified. There are currently two ways to
+/// specify these fields:
+///
+/// 1. Using the `#[result(n)]`, `#[operand(n)]`, `#[successor(n)]`, and
+///   `#[region(n)]` attributes, where `n` is the index of the field.
+/// 2. Using the `#[result(...)]`, `#[operand(...)]`, `#[successor(...)]`, and
+///   `#[region(...)]` attributes, which means the field is a vector of the
+///   corresponding type.
+///
+/// For the first way, the field should be a `Hold<T>` type, where `T` is an
+/// arena pointer of an entity (like successor). For the second way, the field
+/// should be a `HoldVec<T>` type.
+///
+/// The `Hold` of `HoldVec` is used for the `set_xxx` methods in the
+/// [Op](orzir_core::Op) trait.
 #[proc_macro_derive(
     Op,
     attributes(

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use proc_macro2::TokenStream;
 use quote::quote;
 
@@ -21,62 +23,71 @@ impl syn::parse::Parse for OpFieldMeta {
     }
 }
 
-impl OpFieldMeta {
-    fn append(
-        self,
-        seq: &mut Vec<OpEntityKind>,
-        field: &syn::Field,
-        attr: &syn::Attribute,
-    ) -> syn::Result<()> {
-        match self {
-            OpFieldMeta::Index(index) => {
-                // check if the first element is a multi entity, if
-                // so, return an error.
-                // Otherwise, just push the single entity.
-                if seq.len() == 1 {
-                    if let OpEntityKind::Multi(_) = &seq[0] {
-                        return Err(syn::Error::new_spanned(
-                            attr,
-                            "cannot have sequential and discrete `result` field at the same time.",
-                        ));
-                    }
-                }
-                if seq.len() <= index {
-                    seq.resize(index + 1, OpEntityKind::Reserved);
-                }
+/// The deriving kind of an entity in the operation.
+///
+/// i.e. result, operand, region, successor
+enum OpEntityKind {
+    /// The field contains multiple entities.
+    ///
+    /// i.e. `#[result(...)]`
+    Combined(syn::Ident),
+    /// The field contains a single entity with the index.
+    ///
+    /// i.e. `#[result(0)]`
+    Distributed { fields: HashMap<usize, syn::Ident> },
+}
 
-                if let OpEntityKind::Reserved = seq[index] {
-                    seq[index] = OpEntityKind::Single(field.ident.clone().unwrap());
-                } else {
+impl Default for OpEntityKind {
+    fn default() -> Self {
+        Self::Distributed {
+            fields: HashMap::new(),
+        }
+    }
+}
+
+impl OpEntityKind {
+    fn append(
+        &mut self,
+        attr: &syn::Attribute,
+        field: &syn::Field,
+        meta: OpFieldMeta,
+    ) -> syn::Result<()> {
+        match meta {
+            OpFieldMeta::Index(index) => match self {
+                OpEntityKind::Distributed { fields } => {
+                    fields.insert(
+                        index,
+                        syn::Ident::new(
+                            &field.ident.as_ref().unwrap().to_string(),
+                            proc_macro2::Span::call_site(),
+                        ),
+                    );
+                }
+                _ => {
                     return Err(syn::Error::new_spanned(
-                        attr,
-                        "index already used in `result` field.",
+                            attr,
+                            "cannot have combined (`#[xxx(...)]`) and distributed (`#[xxx(0)]`) entities together",
+                        ));
+                }
+            },
+            OpFieldMeta::Multi => match self {
+                OpEntityKind::Distributed { fields } if fields.is_empty() => {
+                    *self = OpEntityKind::Combined(syn::Ident::new(
+                        &field.ident.as_ref().unwrap().to_string(),
+                        proc_macro2::Span::call_site(),
                     ));
                 }
-            }
-            OpFieldMeta::Multi => {
-                if !seq.is_empty() {
+                _ => {
                     return Err(syn::Error::new_spanned(
                         attr,
-                        "cannot have sequential and discrete or multiple sequential `result` field at the same time.",
+                        "cannot have multiple combined entities",
                     ));
                 }
-                seq.push(OpEntityKind::Multi(field.ident.clone().unwrap()));
-            }
+            },
         }
 
         Ok(())
     }
-}
-
-#[derive(Clone)]
-enum OpEntityKind {
-    /// The field contains multiple entities.
-    Multi(syn::Ident),
-    /// The field contains a single entity with the index.
-    Single(syn::Ident),
-    /// Reserved
-    Reserved,
 }
 
 #[derive(Default)]
@@ -90,15 +101,15 @@ struct OpInfo {
     /// The field of the metadata.
     metadata: Option<syn::Ident>,
     /// Results
-    results: Vec<OpEntityKind>,
+    results: OpEntityKind,
     /// Operands
-    operands: Vec<OpEntityKind>,
+    operands: OpEntityKind,
     /// Regions
-    regions: Vec<OpEntityKind>,
+    regions: OpEntityKind,
     /// Successors
-    successors: Vec<OpEntityKind>,
+    successors: OpEntityKind,
     /// Other fields to build the operation.
-    ctor_fields: Vec<syn::Field>,
+    ctor_arg_fields: Vec<syn::Field>,
     /// The default fields to build the operation.
     ctor_default_fields: Vec<syn::Field>,
 }
@@ -160,26 +171,23 @@ impl OpInfo {
                                         is_metadata = true;
                                     }
                                     "result" => {
-                                        // `#[result(0)]` or `#[result(...)]`
-                                        // the inside can be an index, or three dots representing
                                         let meta = attr.parse_args::<OpFieldMeta>()?;
-                                        meta.append(&mut info.results, field, attr)?;
-                                        // result should be built and added with the builder.
+                                        info.results.append(attr, field, meta)?;
                                         is_derived_field = true;
                                     }
                                     "operand" => {
                                         let meta = attr.parse_args::<OpFieldMeta>()?;
-                                        meta.append(&mut info.operands, field, attr)?;
+                                        info.operands.append(attr, field, meta)?;
                                         is_derived_field = true;
                                     }
                                     "region" => {
                                         let meta = attr.parse_args::<OpFieldMeta>()?;
-                                        meta.append(&mut info.regions, field, attr)?;
+                                        info.regions.append(attr, field, meta)?;
                                         is_derived_field = true;
                                     }
                                     "successor" => {
                                         let meta = attr.parse_args::<OpFieldMeta>()?;
-                                        meta.append(&mut info.successors, field, attr)?;
+                                        info.successors.append(attr, field, meta)?;
                                         is_derived_field = true;
                                     }
                                     _ => {}
@@ -187,7 +195,7 @@ impl OpInfo {
                             }
                         }
                         if !is_derived_field {
-                            info.ctor_fields.push(field.clone());
+                            info.ctor_arg_fields.push(field.clone());
                         } else if !is_metadata {
                             info.ctor_default_fields.push(field.clone());
                         }
@@ -229,24 +237,14 @@ impl OpInfo {
         Ok(info)
     }
 
-    fn num_entity_method(entities: &Vec<OpEntityKind>) -> syn::Result<TokenStream> {
-        let result = match entities.len() {
-            0 => quote! { 0 },
-            1 => {
-                let num = match &entities[0] {
-                    OpEntityKind::Single(_) => {
-                        quote! { 1 }
-                    }
-                    OpEntityKind::Multi(ident) => {
-                        let ident = ident.clone();
-                        quote! { self.#ident.len() }
-                    }
-                    _ => unreachable!(),
-                };
-                quote! { #num }
+    fn num_entity_method(entities: &OpEntityKind) -> syn::Result<TokenStream> {
+        let result = match entities {
+            OpEntityKind::Combined(ident) => {
+                let ident = ident.clone();
+                quote! { self.#ident.len() }
             }
-            _ => {
-                let num = entities.len();
+            OpEntityKind::Distributed { fields } => {
+                let num = fields.len();
                 quote! { #num }
             }
         };
@@ -254,65 +252,36 @@ impl OpInfo {
         Ok(result)
     }
 
-    fn get_entity_method(entities: &Vec<OpEntityKind>, by_ref: bool) -> syn::Result<TokenStream> {
-        let result = match entities.len() {
-            0 => quote! {
-                None
-            },
-            1 => match &entities[0] {
-                OpEntityKind::Single(ident) => {
+    fn get_entity_method(entities: &OpEntityKind, by_ref: bool) -> syn::Result<TokenStream> {
+        let result = match entities {
+            OpEntityKind::Combined(ident) => {
+                let ident = ident.clone();
+                if by_ref {
+                    quote! {
+                        self.#ident.get(index)
+                    }
+                } else {
+                    quote! {
+                        self.#ident.get(index).copied()
+                    }
+                }
+            }
+            OpEntityKind::Distributed { fields } => {
+                let match_arms = fields.iter().map(|(i, ident)| {
                     let ident = ident.clone();
                     if by_ref {
                         quote! {
-                            if index == 0 {
-                                self.#ident.as_ref()
-                            } else {
-                                None
-                            }
+                            #i => self.#ident.as_ref()
                         }
                     } else {
                         quote! {
-                            if index == 0 {
-                                self.#ident.copied().into()
-                            } else {
-                                None
-                            }
+                            #i => self.#ident.copied().into()
                         }
                     }
-                }
-                OpEntityKind::Multi(ident) => {
-                    let ident = ident.clone();
-                    if by_ref {
-                        quote! {
-                            self.#ident.get(index)
-                        }
-                    } else {
-                        quote! {
-                            self.#ident.get(index).copied()
-                        }
-                    }
-                }
-                _ => unreachable!(),
-            },
-            _ => {
-                let match_arms = entities.iter().enumerate().map(|(i, entity)| match entity {
-                    OpEntityKind::Single(ident) => {
-                        let ident = ident.clone();
-                        if by_ref {
-                            quote! {
-                                #i => self.#ident.as_ref()
-                            }
-                        } else {
-                            quote! {
-                                #i => self.#ident.copied().into()
-                            }
-                        }
-                    }
-                    _ => unreachable!(),
                 });
                 quote! {
                     match index {
-                        #(#match_arms),*,
+                        #(#match_arms,)*
                         _ => None
                     }
                 }
@@ -322,55 +291,24 @@ impl OpInfo {
         Ok(result)
     }
 
-    fn set_entity_method(entities: &Vec<OpEntityKind>) -> syn::Result<TokenStream> {
-        let result = match entities.len() {
-            0 => {
+    fn set_entity_method(entities: &OpEntityKind) -> syn::Result<TokenStream> {
+        let result = match entities {
+            OpEntityKind::Combined(ident) => {
+                let ident = ident.clone();
                 quote! {
-                    ::anyhow::bail!("index out of bounds")
+                    Ok(self.#ident.set(index, value))
                 }
             }
-            1 => match &entities[0] {
-                OpEntityKind::Single(ident) => {
+            OpEntityKind::Distributed { fields } => {
+                let match_arms = fields.iter().map(|(i, ident)| {
                     let ident = ident.clone();
                     quote! {
-                        if index == 0 {
-                            Ok(std::mem::replace(&mut self.#ident, Some(value).into()).into())
-                        } else {
-                            Err(::anyhow::anyhow!("index out of bounds"))
-                        }
+                        #i => Ok(std::mem::replace(&mut self.#ident, Some(value).into()).into())
                     }
-                }
-                OpEntityKind::Multi(ident) => {
-                    let ident = ident.clone();
-                    quote! {
-                        // if index < self.#ident.len() {
-                        //     Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
-                        // } else if index == self.#ident.len() {
-                        //     self.#ident.push(value);
-                        //     Ok(None)
-                        // } else {
-                        //     Err(::anyhow::anyhow!("index out of bounds"))
-                        // }
-                        Ok(self.#ident.set(index, value))
-                    }
-                }
-                _ => unreachable!(),
-            },
-            _ => {
-                let match_arms = entities.iter().enumerate().map(|(i, entity)| match entity {
-                    OpEntityKind::Single(ident) => {
-                        let ident = ident.clone();
-                        quote! {
-                            #i => {
-                                Ok(std::mem::replace(&mut self.#ident, Some(value).into()).into())
-                            }
-                        }
-                    }
-                    _ => unreachable!(),
                 });
                 quote! {
                     match index {
-                        #(#match_arms)*
+                        #(#match_arms,)*
                         _ => Err(::anyhow::anyhow!("index out of bounds"))
                     }
                 }
@@ -385,6 +323,7 @@ impl OpInfo {
             .metadata
             .as_ref()
             .ok_or_else(|| syn::Error::new_spanned(ast, "missing metadata field"))?;
+
         let metadata_methods = quote! {
             fn metadata(&self) -> &::orzir_core::OpMetadata {
                 &self.#metadata_ident
@@ -544,7 +483,7 @@ pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
         .ok_or_else(|| syn::Error::new_spanned(&ast, "missing mnemonic"))?;
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
 
-    let ctor_args = info.ctor_fields.iter().map(|field| {
+    let ctor_args = info.ctor_arg_fields.iter().map(|field| {
         let ident = field.ident.clone().unwrap();
         let ty = field.ty.clone();
         quote! {
@@ -552,7 +491,7 @@ pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
         }
     });
 
-    let ctor_arg_names = info.ctor_fields.iter().map(|field| field.ident.clone().unwrap());
+    let ctor_arg_names = info.ctor_arg_fields.iter().map(|field| field.ident.clone().unwrap());
     let ctor_default_names =
         info.ctor_default_fields.iter().map(|field| field.ident.clone().unwrap());
     let metadata_ident = info.metadata.as_ref().unwrap();
@@ -675,10 +614,10 @@ mod tests {
         let src = quote! {
             #[derive(Op)]
             #[mnemonic = "arith.iadd"]
-            // #[verifiers(
-            //     NumResults<1>, NumOperands<2>, NumRegions<0>,
-            //     SameResultTys, SameOperandTys, SameOperandAndResultTys
-            // )]
+            #[verifiers(
+                NumResults<1>, NumOperands<2>, NumRegions<0>,
+                SameResultTys, SameOperandTys, SameOperandAndResultTys
+            )]
             pub struct IAddOp {
                 #[metadata]
                 metadata: OpMetadata,

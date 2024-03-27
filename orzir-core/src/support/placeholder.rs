@@ -1,18 +1,29 @@
+/// An entry in a `HoldVec`.
 #[derive(Debug, Clone)]
 pub enum HoldEntry<T> {
     Vacant,
     Occupied(T),
 }
 
+/// A vector that can hold values at arbitrary indices.
+///
+/// This is similar to `Vec<Option<T>>` or `HashMap<usize, T>`.
 pub struct HoldVec<T> {
     entries: Vec<HoldEntry<T>>,
 }
 
 impl<T> HoldVec<T> {
+    /// Resize the vector.
+    ///
+    /// If the new length is greater than the current length, the new elements
+    /// are initialized with `HoldEntry::Vacant`.
     pub fn resize(&mut self, new_len: usize) {
         self.entries.resize_with(new_len, || HoldEntry::Vacant);
     }
 
+    /// Set the value at the index.
+    ///
+    /// If the index is out of bounds, the vector is resized.
     pub fn set(&mut self, index: usize, value: T) -> Option<T> {
         if index >= self.entries.len() {
             self.entries.resize_with(index + 1, || HoldEntry::Vacant);
@@ -27,6 +38,9 @@ impl<T> HoldVec<T> {
         }
     }
 
+    /// Get the value at the index.
+    ///
+    /// If the index is out of bounds, `None` is returned.
     pub fn get(&self, index: usize) -> Option<&T> {
         if index >= self.entries.len() {
             return None;
@@ -37,8 +51,10 @@ impl<T> HoldVec<T> {
         }
     }
 
+    /// Get the value at the index.
     pub fn len(&self) -> usize { self.entries.len() }
 
+    /// Check if the vector is empty.
     pub fn is_empty(&self) -> bool { self.entries.is_empty() }
 }
 
@@ -61,6 +77,13 @@ impl<T> std::ops::Index<usize> for HoldVec<T> {
     }
 }
 
+/// A placeholder for a value that may or may not be present.
+///
+/// This is similar to `Option<T>`, but with a different meaning. When deriving
+/// [Op](crate::Op), `Hold` should always be used for the deriving fields.
+/// 
+/// Option can be easily misunderstood as `valid to be None`, but `Hold` stands
+/// for `not yet determined`.
 pub struct Hold<T> {
     entry: HoldEntry<T>,
 }
