@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
-    Successor, TokenKind, TokenStream, Value, Verify,
+    ArenaPtr, Block, Context, Dialect, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
+    PrintState, Successor, TokenKind, TokenStream, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -12,15 +12,12 @@ use crate::verifiers::{control_flow::*, *};
 /// The jump operation.
 ///
 /// TODO: Make sure the operands number is ok to be zero.
-#[derive(Default, Op)]
+#[derive(Op)]
 #[mnemonic = "cf.jump"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 pub struct Jump {
-    #[self_ptr]
-    self_ptr: ArenaPtr<OpObj>,
-
-    #[parent_block]
-    parent: Option<ArenaPtr<Block>>,
+    #[metadata]
+    metadata: OpMetadata,
 
     #[successor(0)]
     succ: Option<Successor>,
@@ -60,15 +57,12 @@ impl Print for Jump {
     }
 }
 
-#[derive(Default, Op)]
+#[derive(Op)]
 #[mnemonic = "cf.branch"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
 pub struct Branch {
-    #[self_ptr]
-    self_ptr: ArenaPtr<OpObj>,
-
-    #[parent_block]
-    parent: Option<ArenaPtr<Block>>,
+    #[metadata]
+    metadata: OpMetadata,
 
     #[operand(0)]
     cond: Option<ArenaPtr<Value>>,

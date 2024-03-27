@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
-    Region, RegionKind, TokenKind, TokenStream, Ty, TyObj, Verify, VerifyInterfaces,
+    ArenaPtr, Block, Context, Dialect, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
+    PrintState, Region, RegionKind, TokenKind, TokenStream, Ty, TyObj, Verify, VerifyInterfaces,
 };
 use orzir_macros::{Op, Ty};
 
@@ -12,19 +12,16 @@ use crate::{
     verifiers::{control_flow::*, *},
 };
 
-#[derive(Default, Op)]
+#[derive(Op)]
 #[mnemonic = "builtin.module"]
 #[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
 pub struct ModuleOp {
-    #[self_ptr]
-    self_ptr: ArenaPtr<OpObj>,
+    #[metadata]
+    metadata: OpMetadata,
 
     #[region(0)]
     region: Option<ArenaPtr<Region>>,
-
-    #[parent_block]
-    parent: Option<ArenaPtr<Block>>,
 
     symbol: Option<String>,
 }

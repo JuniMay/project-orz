@@ -43,15 +43,7 @@ mod ty;
 #[proc_macro_derive(
     Op,
     attributes(
-        mnemonic,
-        verifiers,
-        interfaces,
-        self_ptr,
-        parent_block,
-        result,
-        operand,
-        successor,
-        region,
+        mnemonic, verifiers, interfaces, metadata, result, operand, successor, region,
     )
 )]
 pub fn op(item: TokenStream) -> TokenStream {

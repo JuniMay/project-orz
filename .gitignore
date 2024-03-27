@@ -3,4 +3,5 @@ vendor/
 .vscode/*
 !.vscode/settings.json
 
+/test.rs
 .DS_Store

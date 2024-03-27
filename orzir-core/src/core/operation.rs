@@ -93,6 +93,22 @@ impl Print for Successor {
     }
 }
 
+pub struct OpMetadata {
+    /// The self ptr.
+    self_ptr: ArenaPtr<OpObj>,
+    /// The parent block of the operation.
+    parent_block: Option<ArenaPtr<Block>>,
+}
+
+impl OpMetadata {
+    pub fn new(self_ptr: ArenaPtr<OpObj>) -> Self {
+        Self {
+            self_ptr,
+            parent_block: None,
+        }
+    }
+}
+
 /// The trait of all operations.
 pub trait Op: Downcast + Print + Verify {
     /// Get the mnemonic of the type.
@@ -111,8 +127,25 @@ pub trait Op: Downcast + Print + Verify {
     where
         Self: Sized;
 
+    fn metadata(&self) -> &OpMetadata;
+
+    fn metadata_mut(&mut self) -> &mut OpMetadata;
+
     /// Get the self ptr.
-    fn self_ptr(&self) -> ArenaPtr<OpObj>;
+    fn self_ptr(&self) -> ArenaPtr<OpObj> { self.metadata().self_ptr }
+
+    /// Get the parent block of the operation.
+    fn parent_block(&self) -> Option<ArenaPtr<Block>> { self.metadata().parent_block }
+
+    /// Set the parent block of the operation.
+    fn set_parent_block(
+        &mut self,
+        parent_block: Option<ArenaPtr<Block>>,
+    ) -> Result<Option<ArenaPtr<Block>>> {
+        let old = self.metadata_mut().parent_block.take();
+        self.metadata_mut().parent_block = parent_block;
+        Ok(old)
+    }
 
     /// Get the number of operands.
     fn num_operands(&self) -> usize;
@@ -209,15 +242,6 @@ pub trait Op: Downcast + Print + Verify {
     /// If success, return the original successor, if any. Otherwise, return an
     /// error.
     fn set_successor(&mut self, index: usize, successor: Successor) -> Result<Option<Successor>>;
-
-    /// Get the parent block of the operation.
-    fn parent_block(&self) -> Option<ArenaPtr<Block>>;
-
-    /// Set the parent block of the operation.
-    fn set_parent_block(
-        &mut self,
-        parent_block: Option<ArenaPtr<Block>>,
-    ) -> Result<Option<ArenaPtr<Block>>>;
 
     /// Get the types of operands.
     fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {

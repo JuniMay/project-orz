@@ -3,8 +3,8 @@ use std::fmt::Write;
 use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpObj, OpResultBuilder, Parse, Print, PrintState,
-    TokenKind, TyObj, Value, Verify,
+    ArenaPtr, Block, Context, Dialect, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
+    PrintState, TokenKind, TyObj, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -49,20 +49,17 @@ fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> Res
     Ok(())
 }
 
-#[derive(Default, Op)]
+#[derive(Op)]
 #[mnemonic = "arith.iconst"]
 #[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
 pub struct IConstOp {
-    #[self_ptr]
-    self_ptr: ArenaPtr<OpObj>,
+    #[metadata]
+    metadata: OpMetadata,
 
     #[result(0)]
     result: Option<ArenaPtr<Value>>,
 
     value: BigInt,
-
-    #[parent_block]
-    parent: Option<ArenaPtr<Block>>,
 }
 
 impl Verify for IConstOp {}
@@ -128,15 +125,15 @@ impl Print for IConstOp {
     }
 }
 
-#[derive(Default, Op)]
+#[derive(Op)]
 #[mnemonic = "arith.iadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys
 )]
 pub struct IAddOp {
-    #[self_ptr]
-    self_ptr: ArenaPtr<OpObj>,
+    #[metadata]
+    metadata: OpMetadata,
 
     #[result(0)]
     result: Option<ArenaPtr<Value>>,
@@ -146,9 +143,6 @@ pub struct IAddOp {
 
     #[operand(1)]
     rhs: Option<ArenaPtr<Value>>,
-
-    #[parent_block]
-    parent: Option<ArenaPtr<Block>>,
 }
 
 impl Verify for IAddOp {}

@@ -87,10 +87,8 @@ struct OpInfo {
     verifiers: Vec<syn::Path>,
     /// The interfaces of the operation.
     interfaces: Vec<syn::Path>,
-    /// The field of the self_ptr.
-    self_ptr: Option<syn::Ident>,
-    /// The field of the parent_block.
-    parent_block: Option<syn::Ident>,
+    /// The field of the metadata.
+    metadata: Option<syn::Ident>,
     /// Results
     results: Vec<OpEntityKind>,
     /// Operands
@@ -101,6 +99,8 @@ struct OpInfo {
     successors: Vec<OpEntityKind>,
     /// Other fields to build the operation.
     ctor_fields: Vec<syn::Field>,
+    /// The default fields to build the operation.
+    ctor_default_fields: Vec<syn::Field>,
 }
 
 impl OpInfo {
@@ -149,13 +149,15 @@ impl OpInfo {
                 syn::Fields::Named(fields) => {
                     for field in fields.named.iter() {
                         let mut is_ctor_field = true;
+                        let mut is_ctor_default_field = true;
                         for attr in field.attrs.iter() {
                             let ident = attr.path().get_ident();
                             if let Some(ident) = ident {
                                 match ident.to_string().as_str() {
-                                    "self_ptr" => {
-                                        info.self_ptr = field.ident.clone();
+                                    "metadata" => {
+                                        info.metadata = field.ident.clone();
                                         is_ctor_field = false;
+                                        is_ctor_default_field = false;
                                     }
                                     "result" => {
                                         // `#[result(0)]` or `#[result(...)]`
@@ -180,16 +182,14 @@ impl OpInfo {
                                         meta.append(&mut info.successors, field, attr)?;
                                         is_ctor_field = false;
                                     }
-                                    "parent_block" => {
-                                        info.parent_block = field.ident.clone();
-                                        is_ctor_field = false;
-                                    }
                                     _ => {}
                                 }
                             }
                         }
                         if is_ctor_field {
                             info.ctor_fields.push(field.clone());
+                        } else if is_ctor_default_field {
+                            info.ctor_default_fields.push(field.clone());
                         }
                     }
                 }
@@ -365,13 +365,17 @@ impl OpInfo {
     }
 
     fn op_trait_impl(&self, ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
-        let self_ptr_ident = self
-            .self_ptr
+        let metadata_ident = self
+            .metadata
             .as_ref()
-            .ok_or_else(|| syn::Error::new_spanned(ast, "missing self_ptr field"))?;
-        let self_ptr_method = quote! {
-            fn self_ptr(&self) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
-                self.#self_ptr_ident
+            .ok_or_else(|| syn::Error::new_spanned(ast, "missing metadata field"))?;
+        let metadata_methods = quote! {
+            fn metadata(&self) -> &::orzir_core::OpMetadata {
+                &self.#metadata_ident
+            }
+
+            fn metadata_mut(&mut self) -> &mut ::orzir_core::OpMetadata {
+                &mut self.#metadata_ident
             }
         };
 
@@ -489,35 +493,8 @@ impl OpInfo {
             }
         };
 
-        let parent_block_method = match &self.parent_block {
-            Some(ident) => {
-                quote! {
-                    fn parent_block(&self) -> Option<::orzir_core::ArenaPtr<::orzir_core::Block>> {
-                        self.#ident
-                    }
-                }
-            }
-            _ => return Err(syn::Error::new_spanned(ast, "missing parent_block field")),
-        };
-
-        let set_parent_block_method = match &self.parent_block {
-            Some(ident) => {
-                quote! {
-                    fn set_parent_block(
-                        &mut self,
-                        value: Option<::orzir_core::ArenaPtr<::orzir_core::Block>>
-                    ) -> ::anyhow::Result<Option<::orzir_core::ArenaPtr<::orzir_core::Block>>> {
-                        let old = self.#ident;
-                        self.#ident = value;
-                        Ok(old)
-                    }
-                }
-            }
-            _ => return Err(syn::Error::new_spanned(ast, "missing parent_block field")),
-        };
-
         let result = quote! {
-            #self_ptr_method
+            #metadata_methods
 
             #num_operands_method
             #num_results_method
@@ -533,9 +510,6 @@ impl OpInfo {
             #set_result_method
             #set_region_method
             #set_successor_method
-
-            #parent_block_method
-            #set_parent_block_method
         };
 
         Ok(result)
@@ -563,6 +537,9 @@ pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
     });
 
     let ctor_arg_names = info.ctor_fields.iter().map(|field| field.ident.clone().unwrap());
+    let ctor_default_names =
+        info.ctor_default_fields.iter().map(|field| field.ident.clone().unwrap());
+    let metadata_ident = info.metadata.as_ref().unwrap();
 
     let ctor = quote! {
         fn new(
@@ -571,8 +548,9 @@ pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
         ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
             let self_ptr = ctx.ops.reserve();
             let instance = Self {
+                #metadata_ident: ::orzir_core::OpMetadata::new(self_ptr),
                 #(#ctor_arg_names,)*
-                ..Default::default()
+                #(#ctor_default_names: Default::default(),)*
             };
             let instance = ::orzir_core::OpObj::from(instance);
             ctx.ops.fill(self_ptr, instance);
@@ -682,8 +660,8 @@ mod tests {
             #[derive(Default, Op)]
             #[mnemonic = "cf.jump"]
             pub struct Jump {
-                #[self_ptr]
-                self_ptr: ArenaPtr<OpObj>,
+                #[metadata]
+                metadata: OpMetadata,
 
                 #[parent_block]
                 parent: Option<ArenaPtr<Block>>,
