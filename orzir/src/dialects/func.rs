@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::{Ok, Result};
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Hold, HoldVec, Op, OpMetadata, OpObj, Parse, ParseState, Print,
-    PrintState, Region, RegionKind, TokenKind, TyObj, Value, Verify, VerifyInterfaces,
+    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
+    Region, RegionKind, TokenKind, TyObj, Value, Verify, VerifyInterfaces,
 };
 use orzir_macros::Op;
 
@@ -22,7 +22,7 @@ pub struct FuncOp {
     metadata: OpMetadata,
 
     #[region(0)]
-    region: Hold<ArenaPtr<Region>>,
+    region: ArenaPtr<Region>,
 
     symbol: String,
 
@@ -52,7 +52,7 @@ impl Parse for FuncOp {
             anyhow::bail!("expected symbol name");
         };
         let ty = FunctionTy::parse(ctx, state)?;
-        let op = FuncOp::new(ctx, symbol.clone(), ty);
+        let op = ctx.ops.reserve();
 
         // register the symbol in the parent region.
         parent_block
@@ -60,17 +60,18 @@ impl Parse for FuncOp {
             .deref(&ctx.blocks)
             .parent_region()
             .deref_mut(&mut ctx.regions)
-            .register_symbol(symbol, op);
+            .register_symbol(symbol.clone(), op);
 
         state.enter_region_from(op, RegionKind::SsaCfg, 0);
-        let _region = Region::parse(ctx, state)?;
+        let region = Region::parse(ctx, state)?;
         state.exit_region();
 
         let result_names = state.pop_result_names();
-
         if !result_names.is_empty() {
             anyhow::bail!("expected 0 result name, got {}", result_names.len());
         }
+
+        let op = FuncOp::new(ctx, op, region, symbol, ty);
 
         Ok(op)
     }
@@ -95,7 +96,7 @@ pub struct ReturnOp {
     metadata: OpMetadata,
 
     #[operand(...)]
-    operands: HoldVec<ArenaPtr<Value>>,
+    operands: Vec<ArenaPtr<Value>>,
 }
 
 impl Verify for ReturnOp {}
@@ -106,14 +107,12 @@ impl Parse for ReturnOp {
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         // func.return %1, %2
         // func.return
-        let op = ReturnOp::new(ctx);
+        let op = ctx.ops.reserve();
 
-        let mut cnt = 0;
+        let mut operands = Vec::new();
         while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
             let operand = Value::parse(ctx, state)?;
-
-            op.deref_mut(&mut ctx.ops).as_mut().set_operand(cnt, operand)?;
-            cnt += 1;
+            operands.push(operand);
 
             if let TokenKind::Char(',') = state.stream.peek()?.kind {
                 state.stream.consume()?;
@@ -127,6 +126,8 @@ impl Parse for ReturnOp {
         if !result_names.is_empty() {
             anyhow::bail!("expected 0 result name, got {}", result_names.len());
         }
+
+        let op = ReturnOp::new(ctx, op, operands);
 
         Ok(op)
     }
@@ -163,13 +164,13 @@ pub struct CallOp {
     metadata: OpMetadata,
 
     #[result(...)]
-    results: HoldVec<ArenaPtr<Value>>,
+    results: Vec<ArenaPtr<Value>>,
 
     #[operand(...)]
-    operands: HoldVec<ArenaPtr<Value>>,
+    operands: Vec<ArenaPtr<Value>>,
 
     callee: String,
-    ret_ty: ArenaPtr<TyObj>,
+    ret_ty: Vec<ArenaPtr<TyObj>>,
 }
 
 impl Verify for CallOp {}
@@ -202,21 +203,47 @@ impl Parse for CallOp {
 
         state.stream.expect(TokenKind::Char(')'))?;
         state.stream.expect(TokenKind::Char(':'))?;
-        let ret_ty = TyObj::parse(ctx, state)?;
 
-        let op = CallOp::new(ctx, callee, ret_ty);
+        let mut ret_tys = Vec::new();
 
-        for (i, operand) in operands.iter().enumerate() {
-            op.deref_mut(&mut ctx.ops).as_mut().set_operand(i, *operand)?;
+        // (tys...) or ty
+        if let TokenKind::Char('(') = state.stream.peek()?.kind {
+            state.stream.consume()?;
+            loop {
+                let ty = TyObj::parse(ctx, state)?;
+                ret_tys.push(ty);
+
+                if let TokenKind::Char(')') = state.stream.peek()?.kind {
+                    state.stream.consume()?;
+                    break;
+                } else {
+                    state.stream.expect(TokenKind::Char(','))?;
+                }
+            }
+        } else {
+            let ty = TyObj::parse(ctx, state)?;
+            ret_tys.push(ty);
         }
 
-        let result_names = state.pop_result_names();
-        for (i, name) in result_names.into_iter().enumerate() {
-            // the value will be added to the parent operation when building the result
-            let _result =
-                Value::op_result_builder().op(op).ty(ret_ty).name(name).index(i).build(ctx)?;
+        let op = ctx.ops.reserve();
+
+        let mut result_names = state.pop_result_names();
+        let mut results = Vec::new();
+
+        if !result_names.len() == ret_tys.len() {
+            anyhow::bail!(
+                "expected {} result name, got {}",
+                ret_tys.len(),
+                result_names.len()
+            );
         }
 
+        for (i, (result_name, ret_ty)) in result_names.drain(..).zip(ret_tys.iter()).enumerate() {
+            let result = Value::new_op_result(ctx, *ret_ty, op, i, Some(result_name))?;
+            results.push(result);
+        }
+
+        let op = CallOp::new(ctx, op, results, operands, callee, ret_tys);
         Ok(op)
     }
 }
@@ -233,7 +260,22 @@ impl Print for CallOp {
             }
         }
         write!(state.buffer, ") : ")?;
-        self.ret_ty.deref(&ctx.tys).print(ctx, state)?;
+
+        if self.ret_ty.len() > 1 {
+            write!(state.buffer, "(")?;
+        }
+
+        for (i, ty) in self.ret_ty.iter().enumerate() {
+            ty.deref(&ctx.tys).print(ctx, state)?;
+            if i != self.ret_ty.len() - 1 {
+                write!(state.buffer, ", ")?;
+            }
+        }
+
+        if self.ret_ty.len() > 1 {
+            write!(state.buffer, ")")?;
+        }
+
         Ok(())
     }
 }
@@ -297,7 +339,7 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol("foo")
+            .lookup_symbol(&ctx, "foo")
             .is_some());
     }
 
@@ -342,14 +384,14 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol("foo")
+            .lookup_symbol(&ctx, "foo")
             .is_some());
 
         assert!(module_op
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol("bar")
+            .lookup_symbol(&ctx, "bar")
             .is_some());
 
         assert!(module_op.get_region_kind(&ctx, 0) == RegionKind::Graph);

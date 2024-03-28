@@ -1,13 +1,13 @@
-use std::{cell::RefCell, fmt::Write, rc::Rc};
+use std::{cell::RefCell, fmt::Write};
 
 use anyhow::Result;
 
 use super::{
     block::Block,
-    layout::Layout,
+    layout::BlockList,
     operation::OpObj,
     parse::ParseState,
-    symbol::{NameManager, SymbolTable, SymbolTableOwned},
+    symbol::{NameManager, SymbolTable},
 };
 use crate::{
     core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState, Verify,
@@ -28,9 +28,9 @@ pub struct Region {
     /// The kind of the region.
     kind: RegionKind,
     /// The layout of the region.
-    layout: Layout,
+    layout: BlockList,
     /// The symbol table of the region.
-    symbol_table: SymbolTableOwned,
+    symbol_table: SymbolTable,
     /// The block names of the region.
     pub(crate) block_names: RefCell<NameManager<Block>>,
     /// The parent operation of the region.
@@ -45,20 +45,39 @@ impl VerifyInterfaces for Region {
 
 impl Verify for Region {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        for block in self.layout().iter_blocks() {
+        for block in self.layout().iter() {
             block.deref(&ctx.blocks).verify(ctx)?;
-            for op in self.layout().iter_ops(block) {
-                op.deref(&ctx.ops).as_ref().verify(ctx)?;
-            }
         }
         Ok(())
     }
 }
 
 impl Region {
-    pub fn layout(&self) -> &Layout { &self.layout }
+    pub fn new(
+        ctx: &mut Context,
+        kind: RegionKind,
+        parent_op: ArenaPtr<OpObj>,
+        index: usize,
+    ) -> ArenaPtr<Region> {
+        let self_ptr = ctx.regions.reserve();
 
-    pub fn layout_mut(&mut self) -> &mut Layout { &mut self.layout }
+        let symbol_table = SymbolTable::new(self_ptr);
+        let region = Region {
+            self_ptr,
+            kind,
+            layout: BlockList::default(),
+            symbol_table,
+            block_names: RefCell::new(NameManager::default()),
+            parent_op,
+            index,
+        };
+        ctx.regions.fill(self_ptr, region);
+        self_ptr
+    }
+
+    pub fn layout(&self) -> &BlockList { &self.layout }
+
+    pub fn layout_mut(&mut self) -> &mut BlockList { &mut self.layout }
 
     pub fn kind(&self) -> RegionKind { self.kind }
 
@@ -88,107 +107,13 @@ impl Region {
         }
         false
     }
-}
 
-/// The builder of the region.
-///
-/// This builder requires the kind, parent operation, and index to be set.
-///
-/// The index is used to attach the region to the parent operation, and if
-/// it is not set, the build function will return an error.
-#[derive(Debug, Default)]
-pub struct RegionBuilder<
-    const KIND: bool = false,
-    const PARENT_OP: bool = false,
-    const INDEX: bool = false,
-> {
-    kind: Option<RegionKind>,
-    parent_op: Option<ArenaPtr<OpObj>>,
-    index: Option<usize>,
-}
-
-impl<const PARENT_OP: bool, const INDEX: bool> RegionBuilder<false, PARENT_OP, INDEX> {
-    /// Set the kind of the region.
-    pub fn kind(mut self, kind: RegionKind) -> RegionBuilder<true, PARENT_OP, INDEX> {
-        self.kind = Some(kind);
-        RegionBuilder {
-            kind: self.kind,
-            parent_op: self.parent_op,
-            index: self.index,
-        }
-    }
-}
-
-impl<const KIND: bool, const INDEX: bool> RegionBuilder<KIND, false, INDEX> {
-    /// Set the parent operation of the region.
-    pub fn parent_op(mut self, parent_op: ArenaPtr<OpObj>) -> RegionBuilder<KIND, true, INDEX> {
-        self.parent_op = Some(parent_op);
-        RegionBuilder {
-            kind: self.kind,
-            parent_op: self.parent_op,
-            index: self.index,
-        }
-    }
-}
-
-impl<const KIND: bool, const PARENT_OP: bool> RegionBuilder<KIND, PARENT_OP, false> {
-    /// Set the index of the region in the parent operation.
-    pub fn index(mut self, index: usize) -> RegionBuilder<KIND, PARENT_OP, true> {
-        self.index = Some(index);
-        RegionBuilder {
-            kind: self.kind,
-            parent_op: self.parent_op,
-            index: self.index,
-        }
-    }
-}
-
-impl RegionBuilder<true, true, true> {
-    /// Build the region and consume the builder.
-    ///
-    /// This will add the region to the parent operation, and store the index in
-    /// the parent operation.
-    ///
-    /// # Errors
-    ///
-    /// This function will return an error if the kind, parent operation, or
-    /// index is not set.
-    pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Region>> {
-        let kind = self.kind.unwrap();
-        let parent_op = self.parent_op.unwrap();
-        let index = self.index.unwrap();
-
-        let above = parent_op.deref(&ctx.ops).as_ref().parent_region(ctx).map(|region| {
-            let region = region.deref(&ctx.regions);
-            Rc::downgrade(&region.symbol_table)
-        });
-
-        let self_ptr = ctx.regions.reserve();
-        parent_op.deref_mut(&mut ctx.ops).as_mut().set_region(index, self_ptr)?;
-        let symbol_table = Rc::new(RefCell::new(SymbolTable::new(above)));
-        let region = Region {
-            self_ptr,
-            kind,
-            layout: Layout::default(),
-            symbol_table,
-            block_names: RefCell::new(NameManager::default()),
-            parent_op,
-            index,
-        };
-        ctx.regions.fill(self_ptr, region);
-        Ok(self_ptr)
-    }
-}
-
-impl Region {
-    pub fn builder() -> RegionBuilder { RegionBuilder::default() }
-
-    pub fn register_symbol(&self, name: String, op: ArenaPtr<OpObj>) {
-        self.symbol_table.borrow_mut().insert(name, op);
+    pub fn register_symbol(&mut self, name: String, op: ArenaPtr<OpObj>) {
+        self.symbol_table.insert(name, op);
     }
 
-    pub fn lookup_symbol(&self, name: &str) -> Option<ArenaPtr<OpObj>> {
-        self.symbol_table.borrow().lookup(name)
+    pub fn lookup_symbol(&self, ctx: &Context, name: &str) -> Option<ArenaPtr<OpObj>> {
+        self.symbol_table.lookup(ctx, name)
     }
 }
 
@@ -204,11 +129,7 @@ impl Parse for Region {
         // build the region at the beginning because the blocks may reference it.
         let (region_kind, index) = state.curr_region_info();
         let parent_op = state.curr_op();
-        let region = Region::builder()
-            .parent_op(parent_op)
-            .kind(region_kind)
-            .index(index)
-            .build(ctx)?;
+        let region = Region::new(ctx, region_kind, parent_op, index);
         // parse the blocks inside the region.
         state.enter_block_from(region);
         loop {
@@ -220,7 +141,9 @@ impl Parse for Region {
                     break;
                 }
                 _ => {
-                    let _block = Block::parse(ctx, state)?;
+                    let block = Block::parse(ctx, state)?;
+                    // TODO: error handling.
+                    region.deref_mut(&mut ctx.regions).layout_mut().append(block).unwrap();
                 }
             }
         }
@@ -231,7 +154,7 @@ impl Parse for Region {
 impl Print for Region {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         writeln!(state.buffer, "{{")?;
-        for block in self.layout.iter_blocks() {
+        for block in self.layout.iter() {
             block.deref(&ctx.blocks).print(ctx, state)?;
         }
         state.write_indent()?;

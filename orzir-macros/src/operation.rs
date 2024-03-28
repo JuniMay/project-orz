@@ -1,93 +1,49 @@
-use std::collections::HashMap;
-
 use proc_macro2::TokenStream;
 use quote::quote;
 
-/// The contents inside the attribute.
-enum OpFieldMeta {
-    /// An index number
-    Index(usize),
-    /// Three dots representing multiple entities.
-    Multi,
+#[derive(Debug, Clone, Copy)]
+enum IndexKind {
+    All,
+    Single(usize),
 }
 
-impl syn::parse::Parse for OpFieldMeta {
+impl syn::parse::Parse for IndexKind {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         if input.peek(syn::Token![...]) {
             input.parse::<syn::Token![...]>()?;
-            Ok(Self::Multi)
+            Ok(Self::All)
         } else {
             let index = input.parse::<syn::LitInt>()?.base10_parse::<usize>()?;
-            Ok(Self::Index(index))
+            Ok(Self::Single(index))
         }
     }
 }
 
-/// The deriving kind of an entity in the operation.
-///
-/// i.e. result, operand, region, successor
-enum OpEntityKind {
-    /// The field contains multiple entities.
-    ///
-    /// i.e. `#[result(...)]`
-    Combined(syn::Ident),
-    /// The field contains a single entity with the index.
-    ///
-    /// i.e. `#[result(0)]`
-    Distributed { fields: HashMap<usize, syn::Ident> },
-}
-
-impl Default for OpEntityKind {
-    fn default() -> Self {
-        Self::Distributed {
-            fields: HashMap::new(),
-        }
-    }
-}
-
-impl OpEntityKind {
-    fn append(
-        &mut self,
-        attr: &syn::Attribute,
-        field: &syn::Field,
-        meta: OpFieldMeta,
-    ) -> syn::Result<()> {
-        match meta {
-            OpFieldMeta::Index(index) => match self {
-                OpEntityKind::Distributed { fields } => {
-                    fields.insert(
-                        index,
-                        syn::Ident::new(
-                            &field.ident.as_ref().unwrap().to_string(),
-                            proc_macro2::Span::call_site(),
-                        ),
-                    );
-                }
-                _ => {
-                    return Err(syn::Error::new_spanned(
-                            attr,
-                            "cannot have combined (`#[xxx(...)]`) and distributed (`#[xxx(0)]`) entities together",
-                        ));
-                }
-            },
-            OpFieldMeta::Multi => match self {
-                OpEntityKind::Distributed { fields } if fields.is_empty() => {
-                    *self = OpEntityKind::Combined(syn::Ident::new(
-                        &field.ident.as_ref().unwrap().to_string(),
-                        proc_macro2::Span::call_site(),
-                    ));
-                }
-                _ => {
-                    return Err(syn::Error::new_spanned(
-                        attr,
-                        "cannot have multiple combined entities",
-                    ));
-                }
-            },
-        }
-
-        Ok(())
-    }
+enum OpFieldMeta {
+    Metadata {
+        ident: syn::Ident,
+    },
+    Result {
+        ident: syn::Ident,
+        index: IndexKind,
+    },
+    Operand {
+        ident: syn::Ident,
+        index: IndexKind,
+    },
+    Region {
+        ident: syn::Ident,
+        index: IndexKind,
+    },
+    Successor {
+        ident: syn::Ident,
+        index: IndexKind,
+    },
+    Other {
+        optional: bool,
+        ident: syn::Ident,
+        ty: syn::Type,
+    },
 }
 
 #[derive(Default)]
@@ -98,20 +54,30 @@ struct OpInfo {
     verifiers: Vec<syn::Path>,
     /// The interfaces of the operation.
     interfaces: Vec<syn::Path>,
-    /// The field of the metadata.
-    metadata: Option<syn::Ident>,
-    /// Results
-    results: OpEntityKind,
-    /// Operands
-    operands: OpEntityKind,
-    /// Regions
-    regions: OpEntityKind,
-    /// Successors
-    successors: OpEntityKind,
-    /// Other fields to build the operation.
-    ctor_arg_fields: Vec<syn::Field>,
-    /// The default fields to build the operation.
-    ctor_default_fields: Vec<syn::Field>,
+    /// Fields
+    fields: Vec<OpFieldMeta>,
+
+    metadata_artifact: TokenStream,
+
+    num_operands_artifact: Vec<TokenStream>,
+    num_results_artifact: Vec<TokenStream>,
+    num_regions_artifact: Vec<TokenStream>,
+    num_successors_artifact: Vec<TokenStream>,
+
+    get_operand_artifact: Vec<TokenStream>,
+    get_result_artifact: Vec<TokenStream>,
+    get_region_artifact: Vec<TokenStream>,
+    get_successor_artifact: Vec<TokenStream>,
+
+    set_operand_artifact: Vec<TokenStream>,
+    set_result_artifact: Vec<TokenStream>,
+    set_region_artifact: Vec<TokenStream>,
+    set_successor_artifact: Vec<TokenStream>,
+
+    is_operand_match: bool,
+    is_result_match: bool,
+    is_region_match: bool,
+    is_successor_match: bool,
 }
 
 impl OpInfo {
@@ -159,64 +125,160 @@ impl OpInfo {
             syn::Data::Struct(s) => match &s.fields {
                 syn::Fields::Named(fields) => {
                     for field in fields.named.iter() {
-                        let mut is_derived_field = false;
-                        let mut is_metadata = false;
+                        let mut field_meta = OpFieldMeta::Other {
+                            ident: field.ident.clone().unwrap(),
+                            optional: false,
+                            ty: field.ty.clone(),
+                        };
+
                         for attr in field.attrs.iter() {
                             let ident = attr.path().get_ident();
                             if let Some(ident) = ident {
                                 match ident.to_string().as_str() {
                                     "metadata" => {
-                                        info.metadata = field.ident.clone();
-                                        is_derived_field = true;
-                                        is_metadata = true;
+                                        field_meta = OpFieldMeta::Metadata {
+                                            ident: field.ident.clone().unwrap(),
+                                        };
+                                        break;
                                     }
                                     "result" => {
-                                        let meta = attr.parse_args::<OpFieldMeta>()?;
-                                        info.results.append(attr, field, meta)?;
-                                        is_derived_field = true;
+                                        let index = attr.parse_args::<IndexKind>()?;
+                                        field_meta = OpFieldMeta::Result {
+                                            ident: field.ident.clone().unwrap(),
+                                            index,
+                                        };
                                     }
                                     "operand" => {
-                                        let meta = attr.parse_args::<OpFieldMeta>()?;
-                                        info.operands.append(attr, field, meta)?;
-                                        is_derived_field = true;
+                                        let index = attr.parse_args::<IndexKind>()?;
+                                        field_meta = OpFieldMeta::Operand {
+                                            ident: field.ident.clone().unwrap(),
+                                            index,
+                                        };
                                     }
                                     "region" => {
-                                        let meta = attr.parse_args::<OpFieldMeta>()?;
-                                        info.regions.append(attr, field, meta)?;
-                                        is_derived_field = true;
+                                        let index = attr.parse_args::<IndexKind>()?;
+                                        field_meta = OpFieldMeta::Region {
+                                            ident: field.ident.clone().unwrap(),
+                                            index,
+                                        };
                                     }
                                     "successor" => {
-                                        let meta = attr.parse_args::<OpFieldMeta>()?;
-                                        info.successors.append(attr, field, meta)?;
-                                        is_derived_field = true;
+                                        let index = attr.parse_args::<IndexKind>()?;
+                                        field_meta = OpFieldMeta::Successor {
+                                            ident: field.ident.clone().unwrap(),
+                                            index,
+                                        };
                                     }
                                     _ => {}
                                 }
                             }
                         }
-                        if !is_derived_field {
-                            info.ctor_arg_fields.push(field.clone());
-                        } else if !is_metadata {
-                            info.ctor_default_fields.push(field.clone());
-                        }
 
                         let ty = &field.ty;
 
-                        // check if ty starts with `HoldVec` or `Vec` for non-ctor fields.
+                        match field_meta {
+                            OpFieldMeta::Metadata { .. } => {
+                                // type should be `OpMetadata`
+                                if let syn::Type::Path(ref path) = ty {
+                                    if let Some(segment) = path.path.segments.last() {
+                                        if segment.ident != "OpMetadata" {
+                                            return Err(syn::Error::new_spanned(
+                                                ty,
+                                                "metadata field should be of type `OpMetadata`",
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                            OpFieldMeta::Result { index, .. }
+                            | OpFieldMeta::Operand { index, .. }
+                            | OpFieldMeta::Region { index, .. } => {
+                                let ty_str = match field_meta {
+                                    OpFieldMeta::Result { .. } | OpFieldMeta::Operand { .. } => {
+                                        "Value"
+                                    }
+                                    OpFieldMeta::Region { .. } => "Region",
+                                    _ => unreachable!(),
+                                };
 
-                        // TODO: More fine-grained check for multi/single and the types.
-                        if is_derived_field && !is_metadata {
-                            if let syn::Type::Path(ref path) = ty {
-                                if let Some(segment) = path.path.segments.last() {
-                                    if segment.ident != "HoldVec" && segment.ident != "Hold" {
-                                        return Err(syn::Error::new_spanned(
-                                            ty,
-                                            "only `HoldVec` or `Vec` is supported for derived fields",
-                                        ));
+                                match index {
+                                    IndexKind::All => {
+                                        if let syn::Type::Path(ref path) = ty {
+                                            if let Some(segment) = path.path.segments.last() {
+                                                if segment.ident != "Vec" {
+                                                    return Err(syn::Error::new_spanned(
+                                                        ty,
+                                                        format!(
+                                                            "expect type `Vec<ArenaPtr<{}>>`",
+                                                            ty_str
+                                                        ),
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    IndexKind::Single(_) => {
+                                        if let syn::Type::Path(ref path) = ty {
+                                            if let Some(segment) = path.path.segments.last() {
+                                                if segment.ident != "ArenaPtr" {
+                                                    return Err(syn::Error::new_spanned(
+                                                        ty,
+                                                        format!(
+                                                            "expect type `ArenaPtr<{}>`",
+                                                            ty_str
+                                                        ),
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            OpFieldMeta::Successor { .. } => {
+                                // type should be `Successor`
+                                if let syn::Type::Path(ref path) = ty {
+                                    if let Some(segment) = path.path.segments.last() {
+                                        if segment.ident != "Successor" {
+                                            return Err(syn::Error::new_spanned(
+                                                ty,
+                                                "expect type `Successor`",
+                                            ));
+                                        }
+                                    }
+                                }
+                            }
+                            OpFieldMeta::Other {
+                                ref mut optional,
+                                ref mut ty,
+                                ..
+                            } => {
+                                // if the field has `Option` type, it is optional
+                                if let syn::Type::Path(ref path) = ty {
+                                    if let Some(segment) = path.path.segments.last() {
+                                        if segment.ident == "Option" {
+                                            *optional = true;
+                                            if let syn::PathArguments::AngleBracketed(ref args) =
+                                                segment.arguments
+                                            {
+                                                if let Some(syn::GenericArgument::Type(
+                                                    ref inside,
+                                                )) = args.args.first()
+                                                {
+                                                    *ty = inside.clone();
+                                                }
+                                            } else {
+                                                return Err(syn::Error::new_spanned(
+                                                    ty,
+                                                    "expected type arguments for `Option`",
+                                                ));
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
+
+                        info.fields.push(field_meta);
                     }
                 }
                 _ => {
@@ -237,113 +299,297 @@ impl OpInfo {
         Ok(info)
     }
 
-    fn num_entity_method(entities: &OpEntityKind) -> syn::Result<TokenStream> {
-        let result = match entities {
-            OpEntityKind::Combined(ident) => {
-                let ident = ident.clone();
-                quote! { self.#ident.len() }
-            }
-            OpEntityKind::Distributed { fields } => {
-                let num = fields.len();
-                quote! { #num }
-            }
-        };
+    /// To verify the indices of entities are valid
+    fn verify(&self) -> syn::Result<()> {
+        // for each entity kind, only one `All` can be present
+        // and only one metadata field can be present
+        let mut metadata = None;
+        let mut result = None;
+        let mut operand = None;
+        let mut region = None;
+        let mut successor = None;
 
-        Ok(result)
+        for field in &self.fields {
+            match field {
+                OpFieldMeta::Metadata { ident } => {
+                    if metadata.is_some() {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "only one metadata field is allowed",
+                        ));
+                    }
+                    metadata = Some(ident);
+                }
+                OpFieldMeta::Result { ident, index } => match (result, index) {
+                    (None, _) => result = Some(*index),
+                    (Some(IndexKind::All), _) => {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "only one `...` index is allowed",
+                        ));
+                    }
+                    (Some(IndexKind::Single(_)), IndexKind::All) => {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "single index and `...` index cannot be mixed",
+                        ));
+                    }
+                    _ => {}
+                },
+                OpFieldMeta::Operand { ident, index } => match (operand, index) {
+                    (None, _) => operand = Some(*index),
+                    (Some(IndexKind::All), _) => {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "only one `...` index is allowed",
+                        ));
+                    }
+                    (Some(IndexKind::Single(_)), IndexKind::All) => {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "single index and `...` index cannot be mixed",
+                        ));
+                    }
+                    _ => {}
+                },
+                OpFieldMeta::Region { ident, index } => match (region, index) {
+                    (None, _) => region = Some(*index),
+                    (Some(IndexKind::All), _) => {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "only one `...` index is allowed",
+                        ));
+                    }
+                    (Some(IndexKind::Single(_)), IndexKind::All) => {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "single index and `...` index cannot be mixed",
+                        ));
+                    }
+                    _ => {}
+                },
+                OpFieldMeta::Successor { ident, index } => match (successor, index) {
+                    (None, _) => successor = Some(*index),
+                    (Some(IndexKind::All), _) => {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "only one `...` index is allowed",
+                        ));
+                    }
+                    (Some(IndexKind::Single(_)), IndexKind::All) => {
+                        return Err(syn::Error::new_spanned(
+                            ident,
+                            "single index and `...` index cannot be mixed",
+                        ));
+                    }
+                    _ => {}
+                },
+                OpFieldMeta::Other { .. } => {}
+            }
+        }
+
+        Ok(())
     }
 
-    fn get_entity_method(entities: &OpEntityKind, by_ref: bool) -> syn::Result<TokenStream> {
-        let result = match entities {
-            OpEntityKind::Combined(ident) => {
-                let ident = ident.clone();
-                if by_ref {
-                    quote! {
-                        self.#ident.get(index)
-                    }
-                } else {
-                    quote! {
-                        self.#ident.get(index).copied()
-                    }
-                }
-            }
-            OpEntityKind::Distributed { fields } => {
-                let match_arms = fields.iter().map(|(i, ident)| {
-                    let ident = ident.clone();
-                    if by_ref {
-                        quote! {
-                            #i => self.#ident.as_ref()
+    fn generate_artifacts(&mut self) -> syn::Result<()> {
+        for field in &self.fields {
+            match field {
+                OpFieldMeta::Metadata { ident } => {
+                    self.metadata_artifact = quote! {
+                        fn metadata(&self) -> &::orzir_core::OpMetadata {
+                            &self.#ident
                         }
-                    } else {
-                        quote! {
-                            #i => self.#ident.copied().into()
+
+                        fn metadata_mut(&mut self) -> &mut ::orzir_core::OpMetadata {
+                            &mut self.#ident
                         }
-                    }
-                });
-                quote! {
-                    match index {
-                        #(#match_arms,)*
-                        _ => None
-                    }
+                    };
                 }
+                OpFieldMeta::Operand { ident, index } => match index {
+                    IndexKind::All => {
+                        self.num_operands_artifact = vec![quote! {
+                            self.#ident.len()
+                        }];
+                        self.get_operand_artifact = vec![quote! {
+                            self.#ident.get(index).copied()
+                        }];
+                        self.set_operand_artifact = vec![quote! {
+                            if index > self.#ident.len() {
+                                ::anyhow::bail!("index out of bounds")
+                            }
+                            if index == self.#ident.len() {
+                                self.#ident.push(value);
+                                Ok(None)
+                            } else {
+                                Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
+                            }
+                        }];
+                    }
+                    IndexKind::Single(index) => {
+                        if self.num_operands_artifact.is_empty() {
+                            self.num_operands_artifact = vec![quote!(1)];
+                        } else {
+                            self.num_operands_artifact.push(quote!(+1));
+                        }
+                        self.get_operand_artifact.push(quote! {
+                            #index => Some(self.#ident)
+                        });
+                        self.set_operand_artifact.push(quote! {
+                            #index => Ok(Some(std::mem::replace(&mut self.#ident, value)))
+                        });
+                        self.is_operand_match = true;
+                    }
+                },
+                OpFieldMeta::Result { ident, index } => match index {
+                    IndexKind::All => {
+                        self.num_results_artifact = vec![quote! {
+                            self.#ident.len()
+                        }];
+                        self.get_result_artifact = vec![quote! {
+                            self.#ident.get(index).copied()
+                        }];
+                        self.set_result_artifact = vec![quote! {
+                            if index > self.#ident.len() {
+                                ::anyhow::bail!("index out of bounds")
+                            }
+                            if index == self.#ident.len() {
+                                self.#ident.push(value);
+                                Ok(None)
+                            } else {
+                                Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
+                            }
+                        }];
+                    }
+                    IndexKind::Single(index) => {
+                        if self.num_results_artifact.is_empty() {
+                            self.num_results_artifact = vec![quote!(1)];
+                        } else {
+                            self.num_results_artifact.push(quote!(+1));
+                        }
+                        self.get_result_artifact.push(quote! {
+                            #index => Some(self.#ident)
+                        });
+                        self.set_result_artifact.push(quote! {
+                            #index => Ok(Some(std::mem::replace(&mut self.#ident, value)))
+                        });
+                        self.is_result_match = true;
+                    }
+                },
+                OpFieldMeta::Region { ident, index } => match index {
+                    IndexKind::All => {
+                        self.num_regions_artifact = vec![quote! {
+                            self.#ident.len()
+                        }];
+                        self.get_region_artifact = vec![quote! {
+                            self.#ident.get(index).copied()
+                        }];
+                        self.set_region_artifact = vec![quote! {
+                            if index > self.#ident.len() {
+                                ::anyhow::bail!("index out of bounds")
+                            }
+                            if index == self.#ident.len() {
+                                self.#ident.push(value);
+                                Ok(None)
+                            } else {
+                                Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
+                            }
+                        }];
+                    }
+                    IndexKind::Single(index) => {
+                        if self.num_regions_artifact.is_empty() {
+                            self.num_regions_artifact = vec![quote!(1)];
+                        } else {
+                            self.num_regions_artifact.push(quote!(+1));
+                        }
+                        self.get_region_artifact.push(quote! {
+                            #index => Some(self.#ident)
+                        });
+                        self.set_region_artifact.push(quote! {
+                            #index => Ok(Some(std::mem::replace(&mut self.#ident, value)))
+                        });
+                        self.is_region_match = true;
+                    }
+                },
+                OpFieldMeta::Successor { ident, index } => match index {
+                    IndexKind::All => {
+                        self.num_successors_artifact = vec![quote! {
+                            self.#ident.len()
+                        }];
+                        self.get_successor_artifact = vec![quote! {
+                            self.#ident.get(index).copied()
+                        }];
+                        self.set_successor_artifact = vec![quote! {
+                            if index > self.#ident.len() {
+                                ::anyhow::bail!("index out of bounds")
+                            }
+                            if index == self.#ident.len() {
+                                self.#ident.push(value);
+                                Ok(None)
+                            } else {
+                                Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
+                            }
+                        }];
+                    }
+                    IndexKind::Single(index) => {
+                        if self.num_successors_artifact.is_empty() {
+                            self.num_successors_artifact = vec![quote!(1)];
+                        } else {
+                            self.num_successors_artifact.push(quote!(+1));
+                        }
+                        self.get_successor_artifact.push(quote! {
+                            #index => Some(&self.#ident)
+                        });
+                        self.set_successor_artifact.push(quote! {
+                            #index => Ok(Some(std::mem::replace(&mut self.#ident, value)))
+                        });
+                        self.is_successor_match = true;
+                    }
+                },
+                OpFieldMeta::Other { .. } => {}
             }
-        };
+        }
 
-        Ok(result)
+        Ok(())
     }
 
-    fn set_entity_method(entities: &OpEntityKind) -> syn::Result<TokenStream> {
-        let result = match entities {
-            OpEntityKind::Combined(ident) => {
-                let ident = ident.clone();
-                quote! {
-                    Ok(self.#ident.set(index, value))
+    fn num_operands_method(&mut self) -> TokenStream {
+        let num_operands_method = self.num_operands_artifact.drain(..).collect::<Vec<_>>();
+        if num_operands_method.is_empty() {
+            quote! {
+                fn num_operands(&self) -> usize {
+                    0
                 }
             }
-            OpEntityKind::Distributed { fields } => {
-                let match_arms = fields.iter().map(|(i, ident)| {
-                    let ident = ident.clone();
-                    quote! {
-                        #i => Ok(std::mem::replace(&mut self.#ident, Some(value).into()).into())
-                    }
-                });
-                quote! {
-                    match index {
-                        #(#match_arms,)*
-                        _ => Err(::anyhow::anyhow!("index out of bounds"))
-                    }
+        } else {
+            quote! {
+                fn num_operands(&self) -> usize {
+                    #(#num_operands_method)*
                 }
             }
-        };
-
-        Ok(result)
+        }
     }
 
-    fn op_trait_impl(&self, ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
-        let metadata_ident = self
-            .metadata
-            .as_ref()
-            .ok_or_else(|| syn::Error::new_spanned(ast, "missing metadata field"))?;
-
-        let metadata_methods = quote! {
-            fn metadata(&self) -> &::orzir_core::OpMetadata {
-                &self.#metadata_ident
+    fn get_operand_method(&mut self) -> TokenStream {
+        let get_operand_method = if self.get_operand_artifact.is_empty() {
+            quote! {
+                None
             }
-
-            fn metadata_mut(&mut self) -> &mut ::orzir_core::OpMetadata {
-                &mut self.#metadata_ident
+        } else if self.is_operand_match {
+            let artifact = self.get_operand_artifact.drain(..).collect::<Vec<_>>();
+            quote! {
+                match index {
+                    #(#artifact,)*
+                    _ => None,
+                }
             }
-        };
-
-        let num_operands_method = Self::num_entity_method(&self.operands)?;
-        let num_operands_method = quote! {
-            fn num_operands(&self) -> usize {
-                #num_operands_method
+        } else {
+            let artifact = self.get_operand_artifact.drain(..).collect::<Vec<_>>();
+            let artifact = &artifact[0];
+            quote! {
+                #artifact
             }
         };
 
-        // for single entities, generate arms first and match by index. For multiple
-        // entities, just index by the index.
-        let get_operand_method = Self::get_entity_method(&self.operands, false)?;
         let get_operand_method = quote! {
             fn get_operand(
                 &self,
@@ -353,7 +599,30 @@ impl OpInfo {
             }
         };
 
-        let set_operand_method = Self::set_entity_method(&self.operands)?;
+        get_operand_method
+    }
+
+    fn set_operand_method(&mut self) -> TokenStream {
+        let set_operand_method = if self.set_operand_artifact.is_empty() {
+            quote! {
+                ::anyhow::bail!("index out of bounds");
+            }
+        } else if self.is_operand_match {
+            let artifact = self.set_operand_artifact.drain(..).collect::<Vec<_>>();
+            quote! {
+                match index {
+                    #(#artifact,)*
+                    _ => Err(::anyhow::anyhow!("index out of bounds"))
+                }
+            }
+        } else {
+            let artifact = self.set_operand_artifact.drain(..).collect::<Vec<_>>();
+            let artifact = &artifact[0];
+            quote! {
+                #artifact
+            }
+        };
+
         let set_operand_method = quote! {
             fn set_operand(
                 &mut self,
@@ -364,14 +633,47 @@ impl OpInfo {
             }
         };
 
-        let num_results_method = Self::num_entity_method(&self.results)?;
-        let num_results_method = quote! {
-            fn num_results(&self) -> usize {
-                #num_results_method
+        set_operand_method
+    }
+
+    fn num_results_method(&mut self) -> TokenStream {
+        let num_results_method = self.num_results_artifact.drain(..).collect::<Vec<_>>();
+        if num_results_method.is_empty() {
+            quote! {
+                fn num_results(&self) -> usize {
+                    0
+                }
+            }
+        } else {
+            quote! {
+                fn num_results(&self) -> usize {
+                    #(#num_results_method)*
+                }
+            }
+        }
+    }
+
+    fn get_result_method(&mut self) -> TokenStream {
+        let get_result_method = if self.get_result_artifact.is_empty() {
+            quote! {
+                None
+            }
+        } else if self.is_result_match {
+            let artifact = self.get_result_artifact.drain(..).collect::<Vec<_>>();
+            quote! {
+                match index {
+                    #(#artifact,)*
+                    _ => None,
+                }
+            }
+        } else {
+            let artifact = self.get_result_artifact.drain(..).collect::<Vec<_>>();
+            let artifact = &artifact[0];
+            quote! {
+                #artifact
             }
         };
 
-        let get_result_method = Self::get_entity_method(&self.results, false)?;
         let get_result_method = quote! {
             fn get_result(
                 &self,
@@ -381,7 +683,30 @@ impl OpInfo {
             }
         };
 
-        let set_result_method = Self::set_entity_method(&self.results)?;
+        get_result_method
+    }
+
+    fn set_result_method(&mut self) -> TokenStream {
+        let set_result_method = if self.set_result_artifact.is_empty() {
+            quote! {
+                ::anyhow::bail!("index out of bounds");
+            }
+        } else if self.is_result_match {
+            let artifact = self.set_result_artifact.drain(..).collect::<Vec<_>>();
+            quote! {
+                match index {
+                    #(#artifact,)*
+                    _ => Err(::anyhow::anyhow!("index out of bounds"))
+                }
+            }
+        } else {
+            let artifact = self.set_result_artifact.drain(..).collect::<Vec<_>>();
+            let artifact = &artifact[0];
+            quote! {
+                #artifact
+            }
+        };
+
         let set_result_method = quote! {
             fn set_result(
                 &mut self,
@@ -392,14 +717,47 @@ impl OpInfo {
             }
         };
 
-        let num_regions_method = Self::num_entity_method(&self.regions)?;
-        let num_regions_method = quote! {
-            fn num_regions(&self) -> usize {
-                #num_regions_method
+        set_result_method
+    }
+
+    fn num_regions_method(&mut self) -> TokenStream {
+        let num_regions_method = self.num_regions_artifact.drain(..).collect::<Vec<_>>();
+        if num_regions_method.is_empty() {
+            quote! {
+                fn num_regions(&self) -> usize {
+                    0
+                }
+            }
+        } else {
+            quote! {
+                fn num_regions(&self) -> usize {
+                    #(#num_regions_method)*
+                }
+            }
+        }
+    }
+
+    fn get_region_method(&mut self) -> TokenStream {
+        let get_region_method = if self.get_region_artifact.is_empty() {
+            quote! {
+                None
+            }
+        } else if self.is_region_match {
+            let artifact = self.get_region_artifact.drain(..).collect::<Vec<_>>();
+            quote! {
+                match index {
+                    #(#artifact,)*
+                    _ => None,
+                }
+            }
+        } else {
+            let artifact = self.get_region_artifact.drain(..).collect::<Vec<_>>();
+            let artifact = &artifact[0];
+            quote! {
+                #artifact
             }
         };
 
-        let get_region_method = Self::get_entity_method(&self.regions, false)?;
         let get_region_method = quote! {
             fn get_region(
                 &self,
@@ -409,7 +767,30 @@ impl OpInfo {
             }
         };
 
-        let set_region_method = Self::set_entity_method(&self.regions)?;
+        get_region_method
+    }
+
+    fn set_region_method(&mut self) -> TokenStream {
+        let set_region_method = if self.set_region_artifact.is_empty() {
+            quote! {
+                ::anyhow::bail!("index out of bounds");
+            }
+        } else if self.is_region_match {
+            let artifact = self.set_region_artifact.drain(..).collect::<Vec<_>>();
+            quote! {
+                match index {
+                    #(#artifact,)*
+                    _ => Err(::anyhow::anyhow!("index out of bounds"))
+                }
+            }
+        } else {
+            let artifact = self.set_region_artifact.drain(..).collect::<Vec<_>>();
+            let artifact = &artifact[0];
+            quote! {
+                #artifact
+            }
+        };
+
         let set_region_method = quote! {
             fn set_region(
                 &mut self,
@@ -420,14 +801,47 @@ impl OpInfo {
             }
         };
 
-        let num_successors_method = Self::num_entity_method(&self.successors)?;
-        let num_successors_method = quote! {
-            fn num_successors(&self) -> usize {
-                #num_successors_method
+        set_region_method
+    }
+
+    fn num_successors_method(&mut self) -> TokenStream {
+        let num_successors_method = self.num_successors_artifact.drain(..).collect::<Vec<_>>();
+        if num_successors_method.is_empty() {
+            quote! {
+                fn num_successors(&self) -> usize {
+                    0
+                }
+            }
+        } else {
+            quote! {
+                fn num_successors(&self) -> usize {
+                    #(#num_successors_method)*
+                }
+            }
+        }
+    }
+
+    fn get_successor_method(&mut self) -> TokenStream {
+        let get_successor_method = if self.get_successor_artifact.is_empty() {
+            quote! {
+                None
+            }
+        } else if self.is_successor_match {
+            let artifact = self.get_successor_artifact.drain(..).collect::<Vec<_>>();
+            quote! {
+                match index {
+                    #(#artifact,)*
+                    _ => None,
+                }
+            }
+        } else {
+            let artifact = self.get_successor_artifact.drain(..).collect::<Vec<_>>();
+            let artifact = &artifact[0];
+            quote! {
+                #artifact
             }
         };
 
-        let get_successor_method = Self::get_entity_method(&self.successors, true)?;
         let get_successor_method = quote! {
             fn get_successor(
                 &self,
@@ -437,7 +851,30 @@ impl OpInfo {
             }
         };
 
-        let set_successor_method = Self::set_entity_method(&self.successors)?;
+        get_successor_method
+    }
+
+    fn set_successor_method(&mut self) -> TokenStream {
+        let set_successor_method = if self.set_successor_artifact.is_empty() {
+            quote! {
+                ::anyhow::bail!("index out of bounds");
+            }
+        } else if self.is_successor_match {
+            let artifact = self.set_successor_artifact.drain(..).collect::<Vec<_>>();
+            quote! {
+                match index {
+                    #(#artifact,)*
+                    _ => Err(::anyhow::anyhow!("index out of bounds"))
+                }
+            }
+        } else {
+            let artifact = self.set_successor_artifact.drain(..).collect::<Vec<_>>();
+            let artifact = &artifact[0];
+            quote! {
+                #artifact
+            }
+        };
+
         let set_successor_method = quote! {
             fn set_successor(
                 &mut self,
@@ -447,6 +884,31 @@ impl OpInfo {
                 #set_successor_method
             }
         };
+
+        set_successor_method
+    }
+
+    fn op_trait_impl(&mut self) -> syn::Result<TokenStream> {
+        self.verify()?;
+        self.generate_artifacts()?;
+
+        let num_operands_method = self.num_operands_method();
+        let get_operand_method = self.get_operand_method();
+        let set_operand_method = self.set_operand_method();
+
+        let num_results_method = self.num_results_method();
+        let get_result_method = self.get_result_method();
+        let set_result_method = self.set_result_method();
+
+        let num_regions_method = self.num_regions_method();
+        let get_region_method = self.get_region_method();
+        let set_region_method = self.set_region_method();
+
+        let num_successors_method = self.num_successors_method();
+        let get_successor_method = self.get_successor_method();
+        let set_successor_method = self.set_successor_method();
+
+        let metadata_methods = &self.metadata_artifact;
 
         let result = quote! {
             #metadata_methods
@@ -469,11 +931,96 @@ impl OpInfo {
 
         Ok(result)
     }
+
+    fn op_ctor(&self) -> TokenStream {
+        let ctor_args = self
+            .fields
+            .iter()
+            .filter(|field| !matches!(field, OpFieldMeta::Metadata { .. }))
+            .map(|field| {
+                let ident = match field {
+                    OpFieldMeta::Metadata { ident } => ident,
+                    OpFieldMeta::Result { ident, .. } => ident,
+                    OpFieldMeta::Operand { ident, .. } => ident,
+                    OpFieldMeta::Region { ident, .. } => ident,
+                    OpFieldMeta::Successor { ident, .. } => ident,
+                    OpFieldMeta::Other { ident, .. } => ident,
+                };
+                let ty = match field {
+                    OpFieldMeta::Metadata { .. } => quote! { ::orzir_core::OpMetadata },
+                    OpFieldMeta::Result { index, .. } | OpFieldMeta::Operand { index, .. } => {
+                        match index {
+                            IndexKind::All => {
+                                quote! { Vec<::orzir_core::ArenaPtr<::orzir_core::Value>> }
+                            }
+                            IndexKind::Single(_) => {
+                                quote! { ::orzir_core::ArenaPtr<::orzir_core::Value> }
+                            }
+                        }
+                    }
+                    OpFieldMeta::Region { index, .. } => match index {
+                        IndexKind::All => {
+                            quote! { Vec<::orzir_core::ArenaPtr<::orzir_core::Region>> }
+                        }
+                        IndexKind::Single(_) => {
+                            quote! { ::orzir_core::ArenaPtr<::orzir_core::Region> }
+                        }
+                    },
+                    OpFieldMeta::Successor { index, .. } => match index {
+                        IndexKind::All => quote! { Vec<::orzir_core::Successor> },
+                        IndexKind::Single(_) => quote! { ::orzir_core::Successor },
+                    },
+                    OpFieldMeta::Other {
+                        ty,
+                        optional: false,
+                        ..
+                    } => quote! { #ty },
+                    OpFieldMeta::Other {
+                        ty, optional: true, ..
+                    } => quote! { Option<#ty> },
+                };
+                quote! {
+                    #ident: #ty
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let ctor_arg_names = self
+            .fields
+            .iter()
+            .filter(|field| !matches!(field, OpFieldMeta::Metadata { .. }))
+            .map(|field| match field {
+                OpFieldMeta::Metadata { ident } => ident,
+                OpFieldMeta::Result { ident, .. }
+                | OpFieldMeta::Operand { ident, .. }
+                | OpFieldMeta::Region { ident, .. }
+                | OpFieldMeta::Successor { ident, .. }
+                | OpFieldMeta::Other { ident, .. } => ident,
+            });
+
+        let ctor = quote! {
+            fn new(
+                ctx: &mut ::orzir_core::Context,
+                self_ptr: ::orzir_core::ArenaPtr<::orzir_core::OpObj>,
+                #(#ctor_args),*
+            ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
+                let instance = Self {
+                    metadata: ::orzir_core::OpMetadata::new(self_ptr),
+                    #(#ctor_arg_names,)*
+                };
+                let instance = ::orzir_core::OpObj::from(instance);
+                ctx.ops.fill(self_ptr, instance);
+                self_ptr
+            }
+        };
+
+        ctor
+    }
 }
 
 pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
     let ast = syn::parse2::<syn::DeriveInput>(input).unwrap();
-    let info = OpInfo::from_ast(&ast)?;
+    let mut info = OpInfo::from_ast(&ast)?;
 
     let ident = &ast.ident;
 
@@ -483,35 +1030,7 @@ pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
         .ok_or_else(|| syn::Error::new_spanned(&ast, "missing mnemonic"))?;
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
 
-    let ctor_args = info.ctor_arg_fields.iter().map(|field| {
-        let ident = field.ident.clone().unwrap();
-        let ty = field.ty.clone();
-        quote! {
-            #ident: #ty
-        }
-    });
-
-    let ctor_arg_names = info.ctor_arg_fields.iter().map(|field| field.ident.clone().unwrap());
-    let ctor_default_names =
-        info.ctor_default_fields.iter().map(|field| field.ident.clone().unwrap());
-    let metadata_ident = info.metadata.as_ref().unwrap();
-
-    let ctor = quote! {
-        fn new(
-            ctx: &mut ::orzir_core::Context,
-            #(#ctor_args),*
-        ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
-            let self_ptr = ctx.ops.reserve();
-            let instance = Self {
-                #metadata_ident: ::orzir_core::OpMetadata::new(self_ptr),
-                #(#ctor_arg_names,)*
-                #(#ctor_default_names: Default::default(),)*
-            };
-            let instance = ::orzir_core::OpObj::from(instance);
-            ctx.ops.fill(self_ptr, instance);
-            self_ptr
-        }
-    };
+    let ctor = info.op_ctor();
 
     let interface_register_casters = info
         .interfaces
@@ -562,7 +1081,7 @@ pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
         }
     };
 
-    let op_impl_methods = info.op_trait_impl(&ast)?;
+    let op_impl_methods = info.op_trait_impl()?;
     let op_impl = quote! {
         impl ::orzir_core::Op for #ident {
             fn mnemonic(&self) -> ::orzir_core::Mnemonic {
@@ -613,27 +1132,20 @@ mod tests {
     fn test_0() {
         let src = quote! {
             #[derive(Op)]
-            #[mnemonic = "arith.iadd"]
-            #[verifiers(
-                NumResults<1>, NumOperands<2>, NumRegions<0>,
-                SameResultTys, SameOperandTys, SameOperandAndResultTys
-            )]
-            pub struct IAddOp {
+            #[mnemonic = "func.return"]
+            // #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
+            pub struct ReturnOp {
                 #[metadata]
                 metadata: OpMetadata,
 
-                #[result(0)]
-                result: Hold<ArenaPtr<Value>>,
-
-                #[operand(0)]
-                lhs: Hold<ArenaPtr<Value>>,
-
-                #[operand(1)]
-                rhs: Hold<ArenaPtr<Value>>,
+                #[operand(...)]
+                operands: Vec<ArenaPtr<Value>>,
             }
         };
 
         let output = derive_op(src).unwrap();
+
+        println!("{}", output);
 
         let ast = syn::parse_file(&output.to_string()).unwrap();
 

@@ -20,30 +20,25 @@ fn test_basic_0() -> Result<()> {
     arith::register(&mut ctx);
     cf::register(&mut ctx);
 
-    let module_op = ModuleOp::new(&mut ctx, None);
+    let module_op = ctx.ops.reserve();
+    let func_op = ctx.ops.reserve();
 
     let int = IntTy::get(&mut ctx, 32);
     let float = FloatTy::get(&mut ctx);
     let func_ty = FunctionTy::get(&mut ctx, vec![int, float], vec![int]);
-    let func_op = FuncOp::new(&mut ctx, "foo".into(), func_ty);
 
-    let region = Region::builder()
-        .kind(RegionKind::Graph)
-        .parent_op(module_op)
-        .index(0)
-        .build(&mut ctx)?;
+    let region = Region::new(&mut ctx, RegionKind::Graph, module_op, 0);
+    let block = Block::new(&mut ctx, true, region, None);
+    region.deref_mut(&mut ctx.regions).layout_mut().append(block).unwrap();
+    block.deref_mut(&mut ctx.blocks).layout_mut().append(func_op).unwrap();
 
-    let block = Block::builder().entry(true).parent_region(region).build(&mut ctx)?;
-    region.deref_mut(&mut ctx.regions).layout_mut().append_block(block);
-    region.deref_mut(&mut ctx.regions).layout_mut().append_op(block, func_op);
+    let module_op = ModuleOp::new(&mut ctx, module_op, region, Some("foo".to_string()));
 
-    let func_region = Region::builder()
-        .kind(RegionKind::SsaCfg)
-        .parent_op(func_op)
-        .index(0)
-        .build(&mut ctx)?;
-    let func_block = Block::builder().entry(true).parent_region(func_region).build(&mut ctx)?;
-    func_region.deref_mut(&mut ctx.regions).layout_mut().append_block(func_block);
+    let func_region = Region::new(&mut ctx, RegionKind::SsaCfg, func_op, 0);
+    let func_block = Block::new(&mut ctx, true, func_region, None);
+    func_region.deref_mut(&mut ctx.regions).layout_mut().append(func_block).unwrap();
+
+    let func_op = FuncOp::new(&mut ctx, func_op, func_region, "foo".to_string(), func_ty);
 
     let mut print_state = PrintState::new("    ");
     module_op.deref(&ctx.ops).print(&ctx, &mut print_state)?;

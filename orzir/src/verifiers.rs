@@ -17,20 +17,22 @@ pub trait IsIsolatedFromAbove: Op {
 
             while !pending_regions.is_empty() {
                 let pending_region = pending_regions.pop().unwrap().deref(&ctx.regions);
-                for op in pending_region.layout().iter_ops_chained() {
-                    for operand in op.deref(&ctx.ops).as_ref().operands() {
-                        let operand_region = operand.deref(&ctx.values).parent_region(ctx);
-                        if !region.deref(&ctx.regions).is_ancestor(ctx, operand_region) {
-                            // not isolated from above
-                            anyhow::bail!("operand is not isolated from above");
+                for block in pending_region.layout().iter() {
+                    for op in block.deref(&ctx.blocks).layout().iter() {
+                        for operand in op.deref(&ctx.ops).as_ref().operands() {
+                            let operand_region = operand.deref(&ctx.values).parent_region(ctx);
+                            if !region.deref(&ctx.regions).is_ancestor(ctx, operand_region) {
+                                // not isolated from above
+                                anyhow::bail!("operand is not isolated from above");
+                            }
                         }
-                    }
 
-                    if !op.deref(&ctx.ops).as_ref().regions().is_empty()
-                        && !op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>(ctx)
-                    {
-                        for sub_region in op.deref(&ctx.ops).as_ref().regions() {
-                            pending_regions.push(sub_region);
+                        if !op.deref(&ctx.ops).as_ref().regions().is_empty()
+                            && !op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>(ctx)
+                        {
+                            for sub_region in op.deref(&ctx.ops).as_ref().regions() {
+                                pending_regions.push(sub_region);
+                            }
                         }
                     }
                 }

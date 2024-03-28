@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
+    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
     Region, RegionKind, TokenKind, Ty, TyObj, Verify, VerifyInterfaces,
 };
 use orzir_macros::{Op, Ty};
@@ -21,7 +21,7 @@ pub struct ModuleOp {
     metadata: OpMetadata,
 
     #[region(0)]
-    region: Hold<ArenaPtr<Region>>,
+    region: ArenaPtr<Region>,
 
     symbol: Option<String>,
 }
@@ -49,10 +49,10 @@ impl Parse for ModuleOp {
             None
         };
 
-        let op = ModuleOp::new(ctx, symbol);
+        let op = ctx.ops.reserve();
 
         state.enter_region_from(op, RegionKind::Graph, 0);
-        let _region = Region::parse(ctx, state)?;
+        let region = Region::parse(ctx, state)?;
         state.exit_region();
 
         let result_names = state.pop_result_names();
@@ -61,6 +61,8 @@ impl Parse for ModuleOp {
             anyhow::bail!("expect no result names, got {:?}", result_names);
         }
 
+        let op = ModuleOp::new(ctx, op, region, symbol);
+
         Ok(op)
     }
 }
@@ -68,7 +70,7 @@ impl Parse for ModuleOp {
 impl Print for ModuleOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         if let Some(symbol) = &self.symbol {
-            write!(state.buffer, "@{}", symbol)?;
+            write!(state.buffer, " @{}", symbol)?;
         }
         write!(state.buffer, " ")?;
         self.get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;

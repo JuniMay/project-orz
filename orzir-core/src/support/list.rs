@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 use thiserror::Error;
 
@@ -235,6 +235,18 @@ where
         }
 
         Ok(())
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = K> + '_ { self.into_iter().map(|(key, _)| key) }
+}
+
+impl<K, N> Debug for List<K, N>
+where
+    K: Copy + Eq + Hash + Debug,
+    N: ListNode<K> + Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_map().entries(self.nodes.iter().map(|(k, v)| (k, v))).finish()
     }
 }
 

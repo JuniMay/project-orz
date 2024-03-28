@@ -10,14 +10,13 @@ pub use crate::{
         operation::{Op, OpMetadata, OpObj, OpParseFn, Successor},
         parse::{Parse, ParseState, TokenKind, TokenStream},
         print::{Print, PrintState},
-        region::{Region, RegionBuilder, RegionKind},
+        region::{Region, RegionKind},
         ty::{Ty, TyObj, TyParseFn, Typed},
-        value::{BlockArgumentBuilder, OpResultBuilder, Value},
+        value::Value,
         verify::{Verify, VerifyInterfaces},
     },
     support::{
         cast::{Caster, CasterStorage},
-        placeholder::{Hold, HoldEntry, HoldVec},
         storage::{Arena, ArenaBase, ArenaPtr, UniqueArena},
     },
 };

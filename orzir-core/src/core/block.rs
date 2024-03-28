@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use anyhow::Result;
 
-use super::{parse::ParseState, value::Value};
+use super::{layout::OpList, parse::ParseState, value::Value};
 use crate::{
     core::parse::TokenKind, support::storage::ArenaPtr, Context, OpObj, Parse, Print, PrintState,
     Region, TyObj, Typed, Verify, VerifyInterfaces,
@@ -22,6 +22,8 @@ pub struct Block {
     is_entry: bool,
     /// The parent region.
     parent_region: ArenaPtr<Region>,
+    /// The layout of the block.
+    layout: OpList,
 }
 
 impl VerifyInterfaces for Block {
@@ -33,13 +35,52 @@ impl Verify for Block {
         for arg in &self.args {
             arg.deref(&ctx.values).verify(ctx)?;
         }
+        for op in self.layout().iter() {
+            op.deref(&ctx.ops).as_ref().verify(ctx)?;
+        }
         Ok(())
     }
 }
 
 impl Block {
-    /// Get the builder of the block.
-    pub fn builder() -> BlockBuilder { BlockBuilder::default() }
+    /// Create a new non-entry block.
+    pub fn new(
+        ctx: &mut Context,
+        is_entry: bool,
+        parent_region: ArenaPtr<Region>,
+        name: Option<String>,
+    ) -> ArenaPtr<Block> {
+        let self_ptr = if let Some(name) = name {
+            let self_ptr = parent_region
+                .deref(&ctx.regions)
+                .block_names
+                .borrow()
+                .get_by_name(&name)
+                .unwrap_or_else(|| ctx.blocks.reserve());
+            parent_region
+                .deref(&ctx.regions)
+                .block_names
+                .borrow_mut()
+                .set(self_ptr, name)
+                .unwrap();
+            self_ptr
+        } else {
+            ctx.blocks.reserve()
+        };
+        let instance = Self {
+            self_ptr,
+            args: Vec::new(),
+            is_entry,
+            parent_region,
+            layout: OpList::default(),
+        };
+        ctx.blocks.fill(self_ptr, instance);
+        self_ptr
+    }
+
+    pub fn layout(&self) -> &OpList { &self.layout }
+
+    pub fn layout_mut(&mut self) -> &mut OpList { &mut self.layout }
 
     /// Get the name of the block.
     ///
@@ -68,6 +109,7 @@ impl Block {
             self.args.push(arg);
             return Ok(None);
         }
+
         let old = std::mem::replace(&mut self.args[index], arg);
         Ok(Some(old))
     }
@@ -79,6 +121,8 @@ impl Block {
 
     /// Test if the block is an entry block.
     pub fn is_entry(&self) -> bool { self.is_entry }
+
+    pub fn set_entry(&mut self, is_entry: bool) { self.is_entry = is_entry }
 
     /// Reserve a unknown block with a name, if the name is already used, return
     /// the block.
@@ -101,105 +145,23 @@ impl Block {
     pub fn parent_region(&self) -> ArenaPtr<Region> { self.parent_region }
 }
 
-/// A block builder.
-///
-/// This can be used to perform simple chained style block building.
-///
-/// The block builder will not add the entity to the layout of the parent
-/// region.
-#[derive(Debug, Default)]
-pub struct BlockBuilder<const PARENT: bool = false> {
-    /// The name of the block.
-    name: Option<String>,
-    /// If the block is an entry block.
-    is_entry: Option<bool>,
-    /// The parent region of the block.
-    parent_region: Option<ArenaPtr<Region>>,
-}
-
-impl<const PARENT: bool> BlockBuilder<PARENT> {
-    /// Set the if the block is an entry block.
-    pub fn entry(mut self, is_entry: bool) -> Self {
-        self.is_entry = Some(is_entry);
-        self
-    }
-
-    /// Set the name of the block.
-    pub fn name(mut self, name: String) -> Self {
-        self.name = Some(name);
-        self
-    }
-}
-
-impl BlockBuilder<false> {
-    /// Set the parent region of the block.
-    pub fn parent_region(mut self, parent_region: ArenaPtr<Region>) -> BlockBuilder<true> {
-        self.parent_region = Some(parent_region);
-        BlockBuilder {
-            name: self.name,
-            is_entry: self.is_entry,
-            parent_region: self.parent_region,
-        }
-    }
-}
-
-impl BlockBuilder<true> {
-    /// Build the block.
-    ///
-    /// This will generate a new block, but will **NOT** add it to the layout.
-    pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Block>> {
-        let parent_region = self.parent_region.unwrap();
-        // try to get the reference by the name first.
-        let self_ptr = if let Some(name) = &self.name {
-            parent_region
-                .deref(&ctx.regions)
-                .block_names
-                .borrow()
-                .get_by_name(name)
-                .unwrap_or_else(|| ctx.blocks.reserve())
-        } else {
-            ctx.blocks.reserve()
-        };
-        let block = Block {
-            self_ptr,
-            args: Vec::new(),
-            is_entry: self.is_entry.unwrap_or(false),
-            parent_region,
-        };
-        if let Some(name) = self.name {
-            block.set_name(ctx, name)?;
-        }
-        ctx.blocks.fill(self_ptr, block);
-        Ok(self_ptr)
-    }
-}
-
 impl Parse for Block {
     type Item = ArenaPtr<Block>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let builder = Block::builder().parent_region(state.curr_region());
-
         let token = state.stream.peek()?;
-
         let block = match &token.kind {
             TokenKind::BlockLabel(_) => {
                 let token = state.stream.consume()?;
                 if let TokenKind::BlockLabel(label) = token.kind {
-                    builder.name(label).entry(false).build(ctx)?
+                    // block.deref(&ctx.blocks).set_name(ctx, label)?;
+                    Block::new(ctx, false, state.curr_region(), Some(label))
                 } else {
                     unreachable!()
                 }
             }
-            _ => builder.entry(true).build(ctx)?,
+            _ => Block::new(ctx, true, state.curr_region(), None),
         };
-
-        block
-            .deref(&ctx.blocks)
-            .parent_region
-            .deref_mut(&mut ctx.regions)
-            .layout_mut()
-            .append_block(block);
 
         // parse the block arguments.
         let is_entry = block.deref(&ctx.blocks).is_entry();
@@ -218,19 +180,14 @@ impl Parse for Block {
                             }
                             TokenKind::ValueName(ref name) => {
                                 let name = name.clone();
-                                // the argument ptr will be fetched in the builder.
                                 let _arg = Value::parse(ctx, state)?;
+
                                 state.stream.expect(TokenKind::Char(':'))?;
                                 let ty = TyObj::parse(ctx, state)?;
 
-                                // the `build` function will automatically add the argument to
-                                // the block and set the index of the argument in the block.
-                                let _arg = Value::block_argument_builder()
-                                    .name(name)
-                                    .block(block)
-                                    .ty(ty)
-                                    .index(cnt)
-                                    .build(ctx)?;
+                                let arg =
+                                    Value::new_block_argument(ctx, ty, block, cnt, Some(name))?;
+                                block.deref_mut(&mut ctx.blocks).set_arg(cnt, arg)?;
 
                                 cnt += 1;
 
@@ -265,12 +222,12 @@ impl Parse for Block {
                 TokenKind::ValueName(_) | TokenKind::Tokenized(_) => {
                     // parse an operation
                     let op = OpObj::parse(ctx, state)?;
+                    // TODO: error handling.
                     block
-                        .deref(&ctx.blocks)
-                        .parent_region
-                        .deref_mut(&mut ctx.regions)
+                        .deref_mut(&mut ctx.blocks)
                         .layout_mut()
-                        .append_op(block, op);
+                        .append(op)
+                        .map_err(|_| anyhow::anyhow!("error appending operation"))?;
                 }
                 TokenKind::BlockLabel(_) | TokenKind::Char('}') => {
                     // end of the block
@@ -311,10 +268,8 @@ impl Print for Block {
             writeln!(state.buffer)?;
         }
 
-        let region = self.parent_region.deref(&ctx.regions);
-
         state.indent();
-        for op in region.layout().iter_ops(self.self_ptr) {
+        for op in self.layout().iter() {
             state.write_indent()?;
             op.deref(&ctx.ops).print(ctx, state)?;
             writeln!(state.buffer)?;

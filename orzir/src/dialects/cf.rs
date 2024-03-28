@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
+    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
     Successor, TokenKind, Value, Verify,
 };
 use orzir_macros::Op;
@@ -20,7 +20,7 @@ pub struct Jump {
     metadata: OpMetadata,
 
     #[successor(0)]
-    succ: Hold<Successor>,
+    succ: Successor,
 }
 
 impl Verify for Jump {}
@@ -36,8 +36,8 @@ impl Parse for Jump {
             anyhow::bail!("expected 0 result name, got {}", result_names.len());
         }
 
-        let op = Jump::new(ctx);
-        op.deref_mut(&mut ctx.ops).as_mut().set_successor(0, successor)?;
+        let op = ctx.ops.reserve();
+        let op = Jump::new(ctx, op, successor);
 
         Ok(op)
     }
@@ -60,13 +60,13 @@ pub struct Branch {
     metadata: OpMetadata,
 
     #[operand(0)]
-    cond: Hold<ArenaPtr<Value>>,
+    cond: ArenaPtr<Value>,
 
     #[successor(0)]
-    then_succ: Hold<Successor>,
+    then_succ: Successor,
 
     #[successor(1)]
-    else_succ: Hold<Successor>,
+    else_succ: Successor,
 }
 
 impl Verify for Branch {}
@@ -90,12 +90,8 @@ impl Parse for Branch {
             anyhow::bail!("expected 0 result name, got {}", result_names.len());
         }
 
-        let op = Branch::new(ctx);
-        let op_inner = op.deref_mut(&mut ctx.ops).as_mut();
-
-        op_inner.set_operand(0, cond)?;
-        op_inner.set_successor(0, then_block)?;
-        op_inner.set_successor(1, else_block)?;
+        let op = ctx.ops.reserve();
+        let op = Branch::new(ctx, op, cond, then_block, else_block);
 
         Ok(op)
     }
@@ -172,7 +168,7 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol("foo")
+            .lookup_symbol(&ctx, "foo")
             .is_some());
     }
 
@@ -220,7 +216,7 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol("foo")
+            .lookup_symbol(&ctx, "foo")
             .is_some());
     }
 }

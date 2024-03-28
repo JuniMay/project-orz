@@ -3,7 +3,7 @@ use std::fmt::Write;
 use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
+    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
     TokenKind, TyObj, Value, Verify,
 };
 use orzir_macros::Op;
@@ -13,33 +13,13 @@ use crate::verifiers::*;
 fn parse_binary(
     ctx: &mut Context,
     state: &mut ParseState,
-    op: ArenaPtr<OpObj>,
-) -> Result<ArenaPtr<OpObj>> {
+) -> Result<(ArenaPtr<Value>, ArenaPtr<Value>, ArenaPtr<TyObj>)> {
     let lhs = Value::parse(ctx, state)?;
     state.stream.expect(TokenKind::Char(','))?;
     let rhs = Value::parse(ctx, state)?;
     state.stream.expect(TokenKind::Char(':'))?;
     let ty = TyObj::parse(ctx, state)?;
-
-    let result_names = state.pop_result_names();
-
-    if result_names.len() != 1 {
-        anyhow::bail!("expected 1 result name, got {}", result_names.len());
-    }
-
-    let _result = Value::op_result_builder()
-        .op(op)
-        .ty(ty)
-        .name(result_names[0].clone())
-        .index(0)
-        .build(ctx)?;
-
-    let op_inner = op.deref_mut(&mut ctx.ops).as_mut();
-
-    op_inner.set_operand(0, lhs)?;
-    op_inner.set_operand(1, rhs)?;
-
-    Ok(op)
+    Ok((lhs, rhs, ty))
 }
 
 fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> Result<()> {
@@ -61,7 +41,7 @@ pub struct IConstOp {
     metadata: OpMetadata,
 
     #[result(0)]
-    result: Hold<ArenaPtr<Value>>,
+    result: ArenaPtr<Value>,
 
     value: BigInt,
 }
@@ -101,20 +81,17 @@ impl Parse for IConstOp {
         state.stream.expect(TokenKind::Char(':'))?;
         let ty = TyObj::parse(ctx, state)?;
 
-        let op = IConstOp::new(ctx, value);
+        let op = ctx.ops.reserve();
 
-        let result_names = state.pop_result_names();
+        let mut result_names = state.pop_result_names();
 
         if result_names.len() != 1 {
             anyhow::bail!("expected 1 result name, got {}", result_names.len());
         }
 
-        let _result = Value::op_result_builder()
-            .op(op)
-            .ty(ty)
-            .name(result_names[0].clone())
-            .index(0)
-            .build(ctx)?;
+        let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop())?;
+
+        let op = IConstOp::new(ctx, op, result, value);
 
         Ok(op)
     }
@@ -141,13 +118,13 @@ pub struct IAddOp {
     metadata: OpMetadata,
 
     #[result(0)]
-    result: Hold<ArenaPtr<Value>>,
+    result: ArenaPtr<Value>,
 
     #[operand(0)]
-    lhs: Hold<ArenaPtr<Value>>,
+    lhs: ArenaPtr<Value>,
 
     #[operand(1)]
-    rhs: Hold<ArenaPtr<Value>>,
+    rhs: ArenaPtr<Value>,
 }
 
 impl Verify for IAddOp {}
@@ -156,8 +133,12 @@ impl Parse for IAddOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let op = IAddOp::new(ctx);
-        parse_binary(ctx, state, op)
+        let op = ctx.ops.reserve();
+        let (lhs, rhs, ty) = parse_binary(ctx, state)?;
+        let mut result_names = state.pop_result_names();
+        let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop())?;
+        let op = IAddOp::new(ctx, op, result, lhs, rhs);
+        Ok(op)
     }
 }
 
@@ -244,7 +225,7 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol("foo")
+            .lookup_symbol(&ctx, "foo")
             .is_some());
     }
 }
