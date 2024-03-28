@@ -74,5 +74,15 @@ fn test_basic_0() -> Result<()> {
         .unwrap()
         .has_ssa_dominance(&ctx, 0));
 
+    assert!(
+        module_op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap().get_region_kind(&ctx, 0)
+            == RegionKind::Graph
+    );
+
+    assert!(
+        func_op.deref(&ctx.ops).as_a::<FuncOp>().unwrap().get_region_kind(&ctx, 0)
+            == RegionKind::SsaCfg
+    );
+
     Ok(())
 }

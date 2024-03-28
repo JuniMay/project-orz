@@ -81,7 +81,7 @@ impl<T> std::ops::Index<usize> for HoldVec<T> {
 ///
 /// This is similar to `Option<T>`, but with a different meaning. When deriving
 /// [Op](crate::Op), `Hold` should always be used for the deriving fields.
-/// 
+///
 /// Option can be easily misunderstood as `valid to be None`, but `Hold` stands
 /// for `not yet determined`.
 pub struct Hold<T> {

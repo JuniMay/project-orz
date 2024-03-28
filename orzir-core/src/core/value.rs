@@ -6,12 +6,11 @@ use super::{
     block::Block,
     context::Context,
     operation::OpObj,
-    parse::TokenKind,
+    parse::{ParseState, TokenKind},
     ty::{TyObj, Typed},
 };
 use crate::{
-    support::storage::ArenaPtr, Parse, Print, PrintState, Region, TokenStream, Verify,
-    VerifyInterfaces,
+    support::storage::ArenaPtr, Parse, Print, PrintState, Region, Verify, VerifyInterfaces,
 };
 
 /// An SSA value.
@@ -271,8 +270,8 @@ impl Parse for Value {
     type Arg = ();
     type Item = ArenaPtr<Value>;
 
-    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let name = stream.consume()?;
+    fn parse(_: (), ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let name = state.stream.consume()?;
         let self_ptr = if let TokenKind::ValueName(name) = &name.kind {
             // try to get the value by name, or reserve a new one.
             let self_ptr = ctx

@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::{Ok, Result};
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Hold, HoldVec, Op, OpMetadata, OpObj, OpResultBuilder,
-    Parse, Print, PrintState, Region, RegionKind, TokenKind, TokenStream, TyObj, Value, Verify,
+    ArenaPtr, Context, Dialect, Hold, HoldVec, Op, OpMetadata, OpObj, OpResultBuilder, Parse,
+    ParseState, Print, PrintState, Region, RegionKind, TokenKind, TyObj, Value, Verify,
     VerifyInterfaces,
 };
 use orzir_macros::Op;
@@ -42,29 +42,23 @@ impl Verify for FuncOp {
 }
 
 impl Parse for FuncOp {
-    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Arg = Vec<OpResultBuilder>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let (result_builders, parent_block) = arg;
+    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let result_builders = arg;
+        let parent_block = state.curr_block();
         assert!(result_builders.is_empty());
 
-        let symbol = if let TokenKind::SymbolName(s) = stream.consume()?.kind {
+        let symbol = if let TokenKind::SymbolName(s) = state.stream.consume()?.kind {
             s
         } else {
             anyhow::bail!("expected symbol name");
         };
-        let ty = FunctionTy::parse((), ctx, stream)?;
+        let ty = FunctionTy::parse((), ctx, state)?;
         let op = FuncOp::new(ctx, symbol.clone(), ty);
-
-        // parse the region.
-        let _region = Region::builder()
-            .parent_op(op)
-            .kind(RegionKind::SsaCfg)
-            .index(0)
-            .parse(ctx, stream)?;
-
         op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
+
         // register the symbol in the parent region.
         parent_block
             .expect("FuncOp should be embraced by a region.")
@@ -72,6 +66,10 @@ impl Parse for FuncOp {
             .parent_region()
             .deref_mut(&mut ctx.regions)
             .register_symbol(symbol, op);
+
+        state.enter_region_from(op, RegionKind::SsaCfg, 0);
+        let _region = Region::parse((), ctx, state)?;
+        state.exit_region();
 
         Ok(op)
     }
@@ -102,26 +100,27 @@ pub struct ReturnOp {
 impl Verify for ReturnOp {}
 
 impl Parse for ReturnOp {
-    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Arg = Vec<OpResultBuilder>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         // func.return %1, %2
         // func.return
-        let (result_builders, parent_block) = arg;
+        let result_builders = arg;
+        let parent_block = state.curr_block();
         assert!(result_builders.is_empty());
 
         let op = ReturnOp::new(ctx);
 
         let mut cnt = 0;
-        while let TokenKind::ValueName(_) = stream.peek()?.kind {
-            let operand = Value::parse((), ctx, stream)?;
+        while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
+            let operand = Value::parse((), ctx, state)?;
 
             op.deref_mut(&mut ctx.ops).as_mut().set_operand(cnt, operand)?;
             cnt += 1;
 
-            if let TokenKind::Char(',') = stream.peek()?.kind {
-                stream.consume()?;
+            if let TokenKind::Char(',') = state.stream.peek()?.kind {
+                state.stream.consume()?;
             } else {
                 break;
             }
@@ -176,37 +175,38 @@ pub struct CallOp {
 impl Verify for CallOp {}
 
 impl Parse for CallOp {
-    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Arg = Vec<OpResultBuilder>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let (result_builders, parent_block) = arg;
+    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let result_builders = arg;
+        let parent_block = state.curr_block();
 
-        let token = stream.consume()?;
+        let token = state.stream.consume()?;
         let callee = if let TokenKind::SymbolName(s) = token.kind {
             s
         } else {
             anyhow::bail!("expected symbol name");
         };
 
-        stream.expect(TokenKind::Char('('))?;
+        state.stream.expect(TokenKind::Char('('))?;
 
         let mut operands = Vec::new();
 
-        while let TokenKind::ValueName(_) = stream.peek()?.kind {
-            let operand = Value::parse((), ctx, stream)?;
+        while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
+            let operand = Value::parse((), ctx, state)?;
             operands.push(operand);
 
-            if let TokenKind::Char(',') = stream.peek()?.kind {
-                stream.consume()?;
+            if let TokenKind::Char(',') = state.stream.peek()?.kind {
+                state.stream.consume()?;
             } else {
                 break;
             }
         }
 
-        stream.expect(TokenKind::Char(')'))?;
-        stream.expect(TokenKind::Char(':'))?;
-        let ret_ty = TyObj::parse((), ctx, stream)?;
+        state.stream.expect(TokenKind::Char(')'))?;
+        state.stream.expect(TokenKind::Char(':'))?;
+        let ret_ty = TyObj::parse((), ctx, state)?;
 
         let op = CallOp::new(ctx, callee, ret_ty);
 
@@ -253,12 +253,15 @@ pub fn register(ctx: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{Context, Op, OpObj, Parse, Print, PrintState, TokenStream};
+    use orzir_core::{
+        Context, Op, OpObj, Parse, ParseState, Print, PrintState, RegionKind, TokenStream,
+    };
 
     use crate::dialects::{
         arith,
         builtin::{self, ModuleOp},
-        cf, func,
+        cf,
+        func::{self, RegionKindInterface},
     };
 
     #[test]
@@ -279,14 +282,15 @@ mod tests {
         }
         "#;
 
-        let mut stream = TokenStream::new(src);
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
 
         builtin::register(&mut ctx);
         func::register(&mut ctx);
         arith::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
+        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
@@ -322,7 +326,8 @@ mod tests {
         }
         "#;
 
-        let mut stream = TokenStream::new(src);
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
 
         builtin::register(&mut ctx);
@@ -330,7 +335,7 @@ mod tests {
         cf::register(&mut ctx);
         arith::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
+        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
@@ -350,5 +355,7 @@ mod tests {
             .deref(&ctx.regions)
             .lookup_symbol("bar")
             .is_some());
+
+        assert!(module_op.get_region_kind(&ctx, 0) == RegionKind::Graph);
     }
 }

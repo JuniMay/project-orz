@@ -3,26 +3,27 @@ use std::fmt::Write;
 use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, TokenKind, TyObj, Value, Verify,
+    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, ParseState,
+    Print, PrintState, TokenKind, TyObj, Value, Verify,
 };
 use orzir_macros::Op;
 
 use crate::verifiers::*;
 
 fn parse_binary(
-    arg: (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>),
+    arg: Vec<OpResultBuilder>,
     ctx: &mut Context,
-    stream: &mut orzir_core::TokenStream,
+    state: &mut ParseState,
     op: ArenaPtr<OpObj>,
 ) -> Result<ArenaPtr<OpObj>> {
-    let (mut result_builders, parent_block) = arg;
+    let mut result_builders = arg;
+    let parent_block = state.curr_block();
 
-    let lhs = Value::parse((), ctx, stream)?;
-    stream.expect(TokenKind::Char(','))?;
-    let rhs = Value::parse((), ctx, stream)?;
-    stream.expect(TokenKind::Char(':'))?;
-    let ty = TyObj::parse((), ctx, stream)?;
+    let lhs = Value::parse((), ctx, state)?;
+    state.stream.expect(TokenKind::Char(','))?;
+    let rhs = Value::parse((), ctx, state)?;
+    state.stream.expect(TokenKind::Char(':'))?;
+    let ty = TyObj::parse((), ctx, state)?;
 
     assert!(result_builders.len() == 1);
     let result_builder = result_builders.pop().unwrap();
@@ -65,17 +66,15 @@ pub struct IConstOp {
 impl Verify for IConstOp {}
 
 impl Parse for IConstOp {
-    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Arg = Vec<OpResultBuilder>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(
-        arg: Self::Arg,
-        ctx: &mut Context,
-        stream: &mut orzir_core::TokenStream,
-    ) -> Result<Self::Item> {
-        let (mut result_builders, parent_block) = arg;
-        let neg = stream.consume_if(TokenKind::Char('-'))?.is_some();
-        let token = stream.consume()?;
+    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let mut result_builders = arg;
+        let parent_block = state.curr_block();
+
+        let neg = state.stream.consume_if(TokenKind::Char('-'))?.is_some();
+        let token = state.stream.consume()?;
         let value = if let TokenKind::Tokenized(s) = token.kind {
             if s == "true" {
                 BigInt::from(1)
@@ -100,8 +99,8 @@ impl Parse for IConstOp {
 
         let value = value * if neg { -1 } else { 1 };
 
-        stream.expect(TokenKind::Char(':'))?;
-        let ty = TyObj::parse((), ctx, stream)?;
+        state.stream.expect(TokenKind::Char(':'))?;
+        let ty = TyObj::parse((), ctx, state)?;
 
         let op = IConstOp::new(ctx, value);
 
@@ -148,16 +147,12 @@ pub struct IAddOp {
 impl Verify for IAddOp {}
 
 impl Parse for IAddOp {
-    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Arg = Vec<OpResultBuilder>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(
-        arg: Self::Arg,
-        ctx: &mut Context,
-        stream: &mut orzir_core::TokenStream,
-    ) -> Result<Self::Item> {
+    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let op = IAddOp::new(ctx);
-        parse_binary(arg, ctx, stream, op)
+        parse_binary(arg, ctx, state, op)
     }
 }
 
@@ -179,7 +174,7 @@ pub fn register(ctx: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{Context, Op, OpObj, Parse, Print, PrintState, TokenStream};
+    use orzir_core::{Context, Op, OpObj, Parse, ParseState, Print, PrintState, TokenStream};
 
     use crate::dialects::{
         arith,
@@ -188,11 +183,12 @@ mod tests {
     };
 
     fn test_parse_print(src: &str, expected: &str) {
-        let mut stream = TokenStream::new(src);
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
         builtin::register(&mut ctx);
         arith::register(&mut ctx);
-        let item = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
+        let item = OpObj::parse(None, &mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("");
         item.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         assert_eq!(state.buffer, expected);
@@ -225,14 +221,15 @@ mod tests {
         }
         "#;
 
-        let mut stream = TokenStream::new(src);
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
 
         builtin::register(&mut ctx);
         func::register(&mut ctx);
         arith::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
+        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);

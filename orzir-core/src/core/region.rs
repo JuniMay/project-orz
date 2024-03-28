@@ -6,11 +6,12 @@ use super::{
     block::Block,
     layout::Layout,
     operation::OpObj,
+    parse::ParseState,
     symbol::{NameManager, SymbolTable, SymbolTableOwned},
 };
 use crate::{
-    core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState,
-    TokenStream, Verify, VerifyInterfaces,
+    core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState, Verify,
+    VerifyInterfaces,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -121,11 +122,6 @@ impl RegionBuilder {
         self
     }
 
-    /// Parse the current token stream as an region and consume the builder.
-    pub fn parse(self, ctx: &mut Context, stream: &mut TokenStream) -> Result<ArenaPtr<Region>> {
-        Region::parse(self, ctx, stream)
-    }
-
     /// Build the region and consume the builder.
     ///
     /// This will add the region to the parent operation, and store the index in
@@ -175,46 +171,39 @@ impl Region {
 }
 
 impl Parse for Region {
-    type Arg = RegionBuilder;
+    type Arg = ();
     type Item = ArenaPtr<Region>;
 
     /// Parse the region.
     ///
     /// This require the parent operation parser to pass the builder to the
     /// region parser, and set the kind and parent operation.
-    fn parse(
-        builder: Self::Arg,
-        ctx: &mut Context,
-        stream: &mut TokenStream,
-    ) -> Result<Self::Item> {
-        stream.expect(TokenKind::Char('{'))?;
+    fn parse(_: (), ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        state.stream.expect(TokenKind::Char('{'))?;
         // build the region at the beginning because the blocks may reference it.
-        let region_ptr = builder.build(ctx)?;
+        let (region_kind, index) = state.curr_region_info();
+        let parent_op = state.curr_op();
+        let region = Region::builder()
+            .kind(region_kind)
+            .parent_op(parent_op)
+            .index(index)
+            .build(ctx)?;
         // parse the blocks inside the region.
+        state.enter_block_from(region);
         loop {
-            let token = stream.peek()?;
+            let token = state.stream.peek()?;
             match &token.kind {
-                TokenKind::BlockLabel(label) => {
-                    let builder =
-                        Block::builder().name(label.clone()).entry(false).parent_region(region_ptr);
-                    // consume the label, the block already has it.
-                    stream.consume()?;
-                    // the block parser will add the block to the layout.
-                    let _block_ptr = Block::parse(builder, ctx, stream)?;
-                }
                 TokenKind::Char('}') => {
-                    stream.consume()?;
-                    // end of the region.
+                    state.stream.consume()?;
+                    state.exit_block();
                     break;
                 }
                 _ => {
-                    let builder = Block::builder().entry(true).parent_region(region_ptr);
-                    // not consuming the token, the block parser will consume it.
-                    let _block_ptr = Block::parse(builder, ctx, stream)?;
+                    let _block = Block::parse((), ctx, state)?;
                 }
             }
         }
-        Ok(region_ptr)
+        Ok(region)
     }
 }
 

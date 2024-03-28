@@ -2,10 +2,10 @@ use std::fmt::Write;
 
 use anyhow::{anyhow, Result};
 
-use super::value::Value;
+use super::{parse::ParseState, value::Value};
 use crate::{
     core::parse::TokenKind, support::storage::ArenaPtr, Context, OpObj, Parse, Print, PrintState,
-    Region, TokenStream, TyObj, Typed, Verify, VerifyInterfaces,
+    Region, TyObj, Typed, Verify, VerifyInterfaces,
 };
 
 /// The block in the region.
@@ -167,43 +167,54 @@ impl BlockBuilder {
 }
 
 impl Parse for Block {
-    type Arg = BlockBuilder;
+    type Arg = ();
     type Item = ArenaPtr<Block>;
 
-    fn parse(
-        builder: Self::Arg,
-        ctx: &mut Context,
-        stream: &mut TokenStream,
-    ) -> Result<Self::Item> {
-        let block = builder.build(ctx)?;
+    fn parse(_: (), ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let builder = Block::builder().parent_region(state.curr_region());
+
+        let token = state.stream.peek()?;
+
+        let block = match &token.kind {
+            TokenKind::BlockLabel(_) => {
+                let token = state.stream.consume()?;
+                if let TokenKind::BlockLabel(label) = token.kind {
+                    builder.name(label).entry(false).build(ctx)?
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => builder.entry(true).build(ctx)?,
+        };
+
         block
             .deref(&ctx.blocks)
             .parent_region
             .deref_mut(&mut ctx.regions)
             .layout_mut()
             .append_block(block);
-        // parse the block arguments.
 
+        // parse the block arguments.
         let is_entry = block.deref(&ctx.blocks).is_entry();
         if !is_entry {
-            let token = stream.consume()?;
+            let token = state.stream.consume()?;
             match token.kind {
                 TokenKind::Char('(') => {
                     let mut cnt = 0;
                     // parse the arguments.
                     loop {
-                        let token = stream.peek()?;
+                        let token = state.stream.peek()?;
                         match &token.kind {
                             TokenKind::Char(')') => {
-                                stream.consume()?;
+                                state.stream.consume()?;
                                 break;
                             }
                             TokenKind::ValueName(ref name) => {
                                 let name = name.clone();
                                 // the argument ptr will be fetched in the builder.
-                                let _arg = Value::parse((), ctx, stream)?;
-                                stream.expect(TokenKind::Char(':'))?;
-                                let ty = TyObj::parse((), ctx, stream)?;
+                                let _arg = Value::parse((), ctx, state)?;
+                                state.stream.expect(TokenKind::Char(':'))?;
+                                let ty = TyObj::parse((), ctx, state)?;
 
                                 // the `build` function will automatically add the argument to
                                 // the block and set the index of the argument in the block.
@@ -216,9 +227,9 @@ impl Parse for Block {
 
                                 cnt += 1;
 
-                                if stream.consume_if(TokenKind::Char(','))?.is_none() {
+                                if state.stream.consume_if(TokenKind::Char(','))?.is_none() {
                                     // end of the arguments.
-                                    stream.expect(TokenKind::Char(')'))?;
+                                    state.stream.expect(TokenKind::Char(')'))?;
                                     break;
                                 }
                             }
@@ -227,7 +238,7 @@ impl Parse for Block {
                             }
                         }
                     }
-                    stream.expect(TokenKind::Char(':'))?;
+                    state.stream.expect(TokenKind::Char(':'))?;
                 }
                 TokenKind::Char(':') => {
                     // just exit.
@@ -238,13 +249,15 @@ impl Parse for Block {
             }
         }
 
+        state.enter_op_from(block);
+
         // parse the operations.
         loop {
-            let token = stream.peek()?;
+            let token = state.stream.peek()?;
             match token.kind {
                 TokenKind::ValueName(_) | TokenKind::Tokenized(_) => {
                     // parse an operation
-                    let op = OpObj::parse(Some(block), ctx, stream)?;
+                    let op = OpObj::parse(Some(block), ctx, state)?;
                     block
                         .deref(&ctx.blocks)
                         .parent_region
@@ -261,6 +274,8 @@ impl Parse for Block {
                 }
             }
         }
+
+        state.exit_op();
 
         Ok(block)
     }

@@ -4,6 +4,7 @@ use anyhow::Result;
 use thiserror::Error;
 
 use super::context::Context;
+use crate::{ArenaPtr, Block, OpObj, Region, RegionKind};
 
 /// The position in the source code.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -467,7 +468,57 @@ pub trait Parse {
     type Arg;
     type Item;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item>;
+    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item>;
 }
 
-pub type ParseFn<Arg, Item> = fn(Arg, &mut Context, &mut TokenStream) -> Result<Item>;
+pub type ParseFn<Arg, Item> = fn(Arg, &mut Context, &mut ParseState) -> Result<Item>;
+
+pub struct ParseState<'a> {
+    pub stream: TokenStream<'a>,
+    /// The stack of ops.
+    ops: Vec<ArenaPtr<OpObj>>,
+    /// The stack of regions.
+    regions: Vec<ArenaPtr<Region>>,
+    /// The stack of blocks.
+    blocks: Vec<ArenaPtr<Block>>,
+    /// The stack of region kinds and indices.
+    region_info: Vec<(RegionKind, usize)>,
+}
+
+impl<'a> ParseState<'a> {
+    pub fn new(stream: TokenStream<'a>) -> Self {
+        Self {
+            stream,
+            ops: Vec::new(),
+            regions: Vec::new(),
+            blocks: Vec::new(),
+            region_info: Vec::new(),
+        }
+    }
+
+    pub fn enter_op_from(&mut self, block: ArenaPtr<Block>) { self.blocks.push(block); }
+
+    pub fn exit_op(&mut self) { self.blocks.pop(); }
+
+    pub fn enter_region_from(&mut self, op: ArenaPtr<OpObj>, kind: RegionKind, index: usize) {
+        self.ops.push(op);
+        self.region_info.push((kind, index));
+    }
+
+    pub fn exit_region(&mut self) {
+        self.region_info.pop().unwrap();
+        self.ops.pop().unwrap();
+    }
+
+    pub fn enter_block_from(&mut self, region: ArenaPtr<Region>) { self.regions.push(region); }
+
+    pub fn exit_block(&mut self) { self.regions.pop().unwrap(); }
+
+    pub fn curr_op(&self) -> ArenaPtr<OpObj> { *self.ops.last().unwrap() }
+
+    pub fn curr_region(&self) -> ArenaPtr<Region> { *self.regions.last().unwrap() }
+
+    pub fn curr_block(&self) -> Option<ArenaPtr<Block>> { self.blocks.last().copied() }
+
+    pub fn curr_region_info(&self) -> (RegionKind, usize) { *self.region_info.last().unwrap() }
+}

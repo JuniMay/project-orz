@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Successor, TokenKind, TokenStream, Value, Verify,
+    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, ParseState,
+    Print, PrintState, Successor, TokenKind, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -26,11 +26,12 @@ pub struct Jump {
 impl Verify for Jump {}
 
 impl Parse for Jump {
-    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Arg = Vec<OpResultBuilder>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let (result_builders, parent_block) = arg;
+    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let result_builders = arg;
+        let parent_block = state.curr_block();
         assert!(result_builders.is_empty());
 
         let parent_region = parent_block
@@ -38,7 +39,7 @@ impl Parse for Jump {
             .deref(&ctx.blocks)
             .parent_region();
 
-        let successor = Successor::parse(parent_region, ctx, stream)?;
+        let successor = Successor::parse(parent_region, ctx, state)?;
 
         let op = Jump::new(ctx);
         op.deref_mut(&mut ctx.ops).as_mut().set_successor(0, successor)?;
@@ -77,26 +78,27 @@ pub struct Branch {
 impl Verify for Branch {}
 
 impl Parse for Branch {
-    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
+    type Arg = Vec<OpResultBuilder>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         // cf.branch %cond, ^then(%a: int<32>), ^else(%b: float)
-        let (result_builders, parent_block) = arg;
+        let result_builders = arg;
+        let parent_block = state.curr_block();
         assert!(result_builders.is_empty());
 
-        let cond = Value::parse((), ctx, stream)?;
-        stream.expect(TokenKind::Char(','))?;
+        let cond = Value::parse((), ctx, state)?;
+        state.stream.expect(TokenKind::Char(','))?;
 
         let parent_region = parent_block
             .expect("BranchOp should be embraced by a block.")
             .deref(&ctx.blocks)
             .parent_region();
 
-        let then_block = Successor::parse(parent_region, ctx, stream)?;
-        stream.expect(TokenKind::Char(','))?;
+        let then_block = Successor::parse(parent_region, ctx, state)?;
+        state.stream.expect(TokenKind::Char(','))?;
 
-        let else_block = Successor::parse(parent_region, ctx, stream)?;
+        let else_block = Successor::parse(parent_region, ctx, state)?;
 
         let op = Branch::new(ctx);
         let op_inner = op.deref_mut(&mut ctx.ops).as_mut();
@@ -132,7 +134,7 @@ pub fn register(ctx: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{Context, Op, OpObj, Parse, Print, PrintState, TokenStream};
+    use orzir_core::{Context, Op, OpObj, Parse, ParseState, Print, PrintState, TokenStream};
 
     use crate::dialects::{
         arith,
@@ -162,7 +164,8 @@ mod tests {
         }
         "#;
 
-        let mut stream = TokenStream::new(src);
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
 
         builtin::register(&mut ctx);
@@ -170,7 +173,7 @@ mod tests {
         arith::register(&mut ctx);
         cf::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
+        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
@@ -209,7 +212,8 @@ mod tests {
         }
         "#;
 
-        let mut stream = TokenStream::new(src);
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
 
         builtin::register(&mut ctx);
@@ -217,7 +221,7 @@ mod tests {
         arith::register(&mut ctx);
         cf::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut stream).unwrap();
+        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);

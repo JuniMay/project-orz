@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::Result;
 
-use super::parse::TokenKind;
-use crate::{Context, Parse, Print, PrintState, TokenStream};
+use super::parse::{ParseState, TokenKind};
+use crate::{Context, Parse, Print, PrintState};
 
 /// A mnemonic segment.
 ///
@@ -61,8 +61,8 @@ impl Parse for Mnemonic {
     type Arg = ();
     type Item = Mnemonic;
 
-    fn parse(_: (), _: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let token = stream.consume()?;
+    fn parse(_: (), _: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let token = state.stream.consume()?;
         match token.kind {
             TokenKind::Tokenized(ref s) => {
                 let (primary, secondary) = match s.split_once('.') {

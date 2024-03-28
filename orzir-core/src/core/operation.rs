@@ -7,7 +7,7 @@ use super::{
     block::Block,
     context::Context,
     mnemonic::Mnemonic,
-    parse::{ParseFn, TokenKind},
+    parse::{ParseFn, ParseState, TokenKind},
     value::{OpResultBuilder, Value},
 };
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
         cast::{CastMut, CastRef},
         storage::ArenaPtr,
     },
-    Parse, Print, PrintState, Region, TokenStream, TyObj, Typed, Verify,
+    Parse, Print, PrintState, Region, TyObj, Typed, Verify,
 };
 
 /// The successor.
@@ -48,20 +48,20 @@ impl Parse for Successor {
     /// ```text
     /// <block_label> `(` <arg_name_list> `)`
     /// ```
-    fn parse(region: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let token = stream.consume()?;
+    fn parse(region: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let token = state.stream.consume()?;
         if let TokenKind::BlockLabel(label) = &token.kind {
             let block = Block::reserve_with_name(ctx, label.clone(), region);
             let mut args = Vec::new();
-            if stream.consume_if(TokenKind::Char('('))?.is_some() {
+            if state.stream.consume_if(TokenKind::Char('('))?.is_some() {
                 loop {
-                    if stream.consume_if(TokenKind::Char(')'))?.is_some() {
+                    if state.stream.consume_if(TokenKind::Char(')'))?.is_some() {
                         break;
                     }
-                    let arg = Value::parse((), ctx, stream)?;
+                    let arg = Value::parse((), ctx, state)?;
                     args.push(arg);
 
-                    match stream.consume()?.kind {
+                    match state.stream.consume()?.kind {
                         TokenKind::Char(')') => break,
                         TokenKind::Char(',') => continue,
                         _ => anyhow::bail!("expected ')' or ','"),
@@ -359,20 +359,20 @@ impl Parse for OpObj {
     /// ```text
     /// <result_name_list> `=` <mnemonic> <dialect_specific_text>
     /// ````
-    fn parse(parent: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
+    fn parse(parent: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let mut result_builders = Vec::new();
 
         loop {
-            let token = stream.peek()?;
+            let token = state.stream.peek()?;
             match token.kind {
                 TokenKind::ValueName(ref name) => {
                     let builder =
                         Value::op_result_builder().name(name.clone()).index(result_builders.len());
                     result_builders.push(builder);
                     // eat the value name
-                    let _ = stream.consume()?;
+                    let _ = state.stream.consume()?;
                     // eat the next token, `=` or `,`
-                    let token = stream.consume()?;
+                    let token = state.stream.consume()?;
                     match token.kind {
                         TokenKind::Char(',') => continue,
                         TokenKind::Char('=') => break,
@@ -383,7 +383,7 @@ impl Parse for OpObj {
             }
         }
 
-        let mnemonic = Mnemonic::parse((), ctx, stream)?;
+        let mnemonic = Mnemonic::parse((), ctx, state)?;
 
         let parse_fn = ctx
             .dialects
@@ -398,7 +398,7 @@ impl Parse for OpObj {
                 )
             });
 
-        let op = parse_fn((result_builders, parent), ctx, stream)?;
+        let op = parse_fn(result_builders, ctx, state)?;
 
         if op.deref(&ctx.ops).as_ref().parent_block().is_none() {
             op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent)?;
@@ -412,7 +412,7 @@ impl Parse for OpObj {
 ///
 /// The parse function should take the result builders and the parent block as
 /// arguments and return the operation object.
-pub type OpParseFn = ParseFn<(Vec<OpResultBuilder>, Option<ArenaPtr<Block>>), ArenaPtr<OpObj>>;
+pub type OpParseFn = ParseFn<Vec<OpResultBuilder>, ArenaPtr<OpObj>>;
 
 impl Print for OpObj {
     /// Print the operation.
