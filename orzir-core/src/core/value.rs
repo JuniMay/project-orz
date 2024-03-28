@@ -321,10 +321,9 @@ impl Print for Value {
 }
 
 impl Parse for Value {
-    type Arg = ();
     type Item = ArenaPtr<Value>;
 
-    fn parse(_: (), ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let name = state.stream.consume()?;
         let self_ptr = if let TokenKind::ValueName(name) = &name.kind {
             // try to get the value by name, or reserve a new one.

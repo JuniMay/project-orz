@@ -3,38 +3,41 @@ use std::fmt::Write;
 use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, ParseState,
-    Print, PrintState, TokenKind, TyObj, Value, Verify,
+    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
+    TokenKind, TyObj, Value, Verify,
 };
 use orzir_macros::Op;
 
 use crate::verifiers::*;
 
 fn parse_binary(
-    arg: Vec<OpResultBuilder<false, false, true>>,
     ctx: &mut Context,
     state: &mut ParseState,
     op: ArenaPtr<OpObj>,
 ) -> Result<ArenaPtr<OpObj>> {
-    let mut result_builders = arg;
-    let parent_block = state.curr_block();
-
-    let lhs = Value::parse((), ctx, state)?;
+    let lhs = Value::parse(ctx, state)?;
     state.stream.expect(TokenKind::Char(','))?;
-    let rhs = Value::parse((), ctx, state)?;
+    let rhs = Value::parse(ctx, state)?;
     state.stream.expect(TokenKind::Char(':'))?;
-    let ty = TyObj::parse((), ctx, state)?;
+    let ty = TyObj::parse(ctx, state)?;
 
-    assert!(result_builders.len() == 1);
-    let result_builder = result_builders.pop().unwrap();
-    // the result will be added to the parent operation when building the result
-    let _result = result_builder.op(op).ty(ty).build(ctx)?;
+    let result_names = state.pop_result_names();
+
+    if result_names.len() != 1 {
+        anyhow::bail!("expected 1 result name, got {}", result_names.len());
+    }
+
+    let _result = Value::op_result_builder()
+        .op(op)
+        .ty(ty)
+        .name(result_names[0].clone())
+        .index(0)
+        .build(ctx)?;
 
     let op_inner = op.deref_mut(&mut ctx.ops).as_mut();
 
     op_inner.set_operand(0, lhs)?;
     op_inner.set_operand(1, rhs)?;
-    op_inner.set_parent_block(parent_block)?;
 
     Ok(op)
 }
@@ -66,13 +69,9 @@ pub struct IConstOp {
 impl Verify for IConstOp {}
 
 impl Parse for IConstOp {
-    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let mut result_builders = arg;
-        let parent_block = state.curr_block();
-
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let neg = state.stream.consume_if(TokenKind::Char('-'))?.is_some();
         let token = state.stream.consume()?;
         let value = if let TokenKind::Tokenized(s) = token.kind {
@@ -100,15 +99,22 @@ impl Parse for IConstOp {
         let value = value * if neg { -1 } else { 1 };
 
         state.stream.expect(TokenKind::Char(':'))?;
-        let ty = TyObj::parse((), ctx, state)?;
+        let ty = TyObj::parse(ctx, state)?;
 
         let op = IConstOp::new(ctx, value);
 
-        assert!(result_builders.len() == 1);
-        let result_builder = result_builders.pop().unwrap();
-        let _result = result_builder.op(op).ty(ty).build(ctx)?;
+        let result_names = state.pop_result_names();
 
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
+        if result_names.len() != 1 {
+            anyhow::bail!("expected 1 result name, got {}", result_names.len());
+        }
+
+        let _result = Value::op_result_builder()
+            .op(op)
+            .ty(ty)
+            .name(result_names[0].clone())
+            .index(0)
+            .build(ctx)?;
 
         Ok(op)
     }
@@ -147,12 +153,11 @@ pub struct IAddOp {
 impl Verify for IAddOp {}
 
 impl Parse for IAddOp {
-    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let op = IAddOp::new(ctx);
-        parse_binary(arg, ctx, state, op)
+        parse_binary(ctx, state, op)
     }
 }
 
@@ -188,7 +193,7 @@ mod tests {
         let mut ctx = Context::default();
         builtin::register(&mut ctx);
         arith::register(&mut ctx);
-        let item = OpObj::parse(None, &mut ctx, &mut state).unwrap();
+        let item = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("");
         item.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         assert_eq!(state.buffer, expected);
@@ -229,7 +234,7 @@ mod tests {
         func::register(&mut ctx);
         arith::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);

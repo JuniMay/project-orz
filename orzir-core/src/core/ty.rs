@@ -77,11 +77,10 @@ impl PartialEq for TyObj {
 impl Eq for TyObj {}
 
 impl Parse for TyObj {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let mnemonic = Mnemonic::parse((), ctx, state)?;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let mnemonic = Mnemonic::parse(ctx, state)?;
         let parse_fn = ctx
             .dialects
             .get(mnemonic.primary())
@@ -94,11 +93,11 @@ impl Parse for TyObj {
                     mnemonic.secondary().as_str()
                 )
             });
-        parse_fn((), ctx, state)
+        parse_fn(ctx, state)
     }
 }
 
-pub type TyParseFn = ParseFn<(), ArenaPtr<TyObj>>;
+pub type TyParseFn = ParseFn<ArenaPtr<TyObj>>;
 
 impl Print for TyObj {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {

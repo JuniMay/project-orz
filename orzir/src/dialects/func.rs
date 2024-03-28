@@ -2,9 +2,8 @@ use std::fmt::Write;
 
 use anyhow::{Ok, Result};
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Hold, HoldVec, Op, OpMetadata, OpObj, OpResultBuilder, Parse,
-    ParseState, Print, PrintState, Region, RegionKind, TokenKind, TyObj, Value, Verify,
-    VerifyInterfaces,
+    ArenaPtr, Context, Dialect, Hold, HoldVec, Op, OpMetadata, OpObj, Parse, ParseState, Print,
+    PrintState, Region, RegionKind, TokenKind, TyObj, Value, Verify, VerifyInterfaces,
 };
 use orzir_macros::Op;
 
@@ -42,22 +41,18 @@ impl Verify for FuncOp {
 }
 
 impl Parse for FuncOp {
-    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let result_builders = arg;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let parent_block = state.curr_block();
-        assert!(result_builders.is_empty());
 
         let symbol = if let TokenKind::SymbolName(s) = state.stream.consume()?.kind {
             s
         } else {
             anyhow::bail!("expected symbol name");
         };
-        let ty = FunctionTy::parse((), ctx, state)?;
+        let ty = FunctionTy::parse(ctx, state)?;
         let op = FuncOp::new(ctx, symbol.clone(), ty);
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
 
         // register the symbol in the parent region.
         parent_block
@@ -68,8 +63,14 @@ impl Parse for FuncOp {
             .register_symbol(symbol, op);
 
         state.enter_region_from(op, RegionKind::SsaCfg, 0);
-        let _region = Region::parse((), ctx, state)?;
+        let _region = Region::parse(ctx, state)?;
         state.exit_region();
+
+        let result_names = state.pop_result_names();
+
+        if !result_names.is_empty() {
+            anyhow::bail!("expected 0 result name, got {}", result_names.len());
+        }
 
         Ok(op)
     }
@@ -100,21 +101,16 @@ pub struct ReturnOp {
 impl Verify for ReturnOp {}
 
 impl Parse for ReturnOp {
-    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         // func.return %1, %2
         // func.return
-        let result_builders = arg;
-        let parent_block = state.curr_block();
-        assert!(result_builders.is_empty());
-
         let op = ReturnOp::new(ctx);
 
         let mut cnt = 0;
         while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
-            let operand = Value::parse((), ctx, state)?;
+            let operand = Value::parse(ctx, state)?;
 
             op.deref_mut(&mut ctx.ops).as_mut().set_operand(cnt, operand)?;
             cnt += 1;
@@ -126,7 +122,11 @@ impl Parse for ReturnOp {
             }
         }
 
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
+        let result_names = state.pop_result_names();
+
+        if !result_names.is_empty() {
+            anyhow::bail!("expected 0 result name, got {}", result_names.len());
+        }
 
         Ok(op)
     }
@@ -175,13 +175,9 @@ pub struct CallOp {
 impl Verify for CallOp {}
 
 impl Parse for CallOp {
-    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let result_builders = arg;
-        let parent_block = state.curr_block();
-
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let token = state.stream.consume()?;
         let callee = if let TokenKind::SymbolName(s) = token.kind {
             s
@@ -194,7 +190,7 @@ impl Parse for CallOp {
         let mut operands = Vec::new();
 
         while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
-            let operand = Value::parse((), ctx, state)?;
+            let operand = Value::parse(ctx, state)?;
             operands.push(operand);
 
             if let TokenKind::Char(',') = state.stream.peek()?.kind {
@@ -206,7 +202,7 @@ impl Parse for CallOp {
 
         state.stream.expect(TokenKind::Char(')'))?;
         state.stream.expect(TokenKind::Char(':'))?;
-        let ret_ty = TyObj::parse((), ctx, state)?;
+        let ret_ty = TyObj::parse(ctx, state)?;
 
         let op = CallOp::new(ctx, callee, ret_ty);
 
@@ -214,12 +210,12 @@ impl Parse for CallOp {
             op.deref_mut(&mut ctx.ops).as_mut().set_operand(i, *operand)?;
         }
 
-        for result_builder in result_builders {
+        let result_names = state.pop_result_names();
+        for (i, name) in result_names.into_iter().enumerate() {
             // the value will be added to the parent operation when building the result
-            let _result = result_builder.op(op).ty(ret_ty).build(ctx)?;
+            let _result =
+                Value::op_result_builder().op(op).ty(ret_ty).name(name).index(i).build(ctx)?;
         }
-
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
 
         Ok(op)
     }
@@ -290,7 +286,7 @@ mod tests {
         func::register(&mut ctx);
         arith::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
@@ -335,7 +331,7 @@ mod tests {
         cf::register(&mut ctx);
         arith::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);

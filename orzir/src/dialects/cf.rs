@@ -2,8 +2,8 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, OpResultBuilder, Parse, ParseState,
-    Print, PrintState, Successor, TokenKind, Value, Verify,
+    ArenaPtr, Context, Dialect, Hold, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
+    Successor, TokenKind, Value, Verify,
 };
 use orzir_macros::Op;
 
@@ -26,24 +26,18 @@ pub struct Jump {
 impl Verify for Jump {}
 
 impl Parse for Jump {
-    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let result_builders = arg;
-        let parent_block = state.curr_block();
-        assert!(result_builders.is_empty());
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let successor = Successor::parse(ctx, state)?;
 
-        let parent_region = parent_block
-            .expect("JumpOp should be embraced by a block.")
-            .deref(&ctx.blocks)
-            .parent_region();
-
-        let successor = Successor::parse(parent_region, ctx, state)?;
+        let result_names = state.pop_result_names();
+        if !result_names.is_empty() {
+            anyhow::bail!("expected 0 result name, got {}", result_names.len());
+        }
 
         let op = Jump::new(ctx);
         op.deref_mut(&mut ctx.ops).as_mut().set_successor(0, successor)?;
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block)?;
 
         Ok(op)
     }
@@ -78,27 +72,23 @@ pub struct Branch {
 impl Verify for Branch {}
 
 impl Parse for Branch {
-    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         // cf.branch %cond, ^then(%a: int<32>), ^else(%b: float)
-        let result_builders = arg;
-        let parent_block = state.curr_block();
-        assert!(result_builders.is_empty());
-
-        let cond = Value::parse((), ctx, state)?;
+        let cond = Value::parse(ctx, state)?;
         state.stream.expect(TokenKind::Char(','))?;
 
-        let parent_region = parent_block
-            .expect("BranchOp should be embraced by a block.")
-            .deref(&ctx.blocks)
-            .parent_region();
-
-        let then_block = Successor::parse(parent_region, ctx, state)?;
+        let then_block = Successor::parse(ctx, state)?;
         state.stream.expect(TokenKind::Char(','))?;
 
-        let else_block = Successor::parse(parent_region, ctx, state)?;
+        let else_block = Successor::parse(ctx, state)?;
+
+        let result_names = state.pop_result_names();
+
+        if !result_names.is_empty() {
+            anyhow::bail!("expected 0 result name, got {}", result_names.len());
+        }
 
         let op = Branch::new(ctx);
         let op_inner = op.deref_mut(&mut ctx.ops).as_mut();
@@ -106,7 +96,6 @@ impl Parse for Branch {
         op_inner.set_operand(0, cond)?;
         op_inner.set_successor(0, then_block)?;
         op_inner.set_successor(1, else_block)?;
-        op_inner.set_parent_block(parent_block)?;
 
         Ok(op)
     }
@@ -173,7 +162,7 @@ mod tests {
         arith::register(&mut ctx);
         cf::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
@@ -221,7 +210,7 @@ mod tests {
         arith::register(&mut ctx);
         cf::register(&mut ctx);
 
-        let op = OpObj::parse(None, &mut ctx, &mut state).unwrap();
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);

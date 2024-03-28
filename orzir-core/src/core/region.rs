@@ -193,14 +193,13 @@ impl Region {
 }
 
 impl Parse for Region {
-    type Arg = ();
     type Item = ArenaPtr<Region>;
 
     /// Parse the region.
     ///
     /// This require the parent operation parser to pass the builder to the
     /// region parser, and set the kind and parent operation.
-    fn parse(_: (), ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         state.stream.expect(TokenKind::Char('{'))?;
         // build the region at the beginning because the blocks may reference it.
         let (region_kind, index) = state.curr_region_info();
@@ -221,7 +220,7 @@ impl Parse for Region {
                     break;
                 }
                 _ => {
-                    let _block = Block::parse((), ctx, state)?;
+                    let _block = Block::parse(ctx, state)?;
                 }
             }
         }

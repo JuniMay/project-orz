@@ -465,13 +465,12 @@ impl<'a> TokenStream<'a> {
 }
 
 pub trait Parse {
-    type Arg;
     type Item;
 
-    fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item>;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item>;
 }
 
-pub type ParseFn<Arg, Item> = fn(Arg, &mut Context, &mut ParseState) -> Result<Item>;
+pub type ParseFn<Item> = fn(&mut Context, &mut ParseState) -> Result<Item>;
 
 pub struct ParseState<'a> {
     pub stream: TokenStream<'a>,
@@ -483,6 +482,8 @@ pub struct ParseState<'a> {
     blocks: Vec<ArenaPtr<Block>>,
     /// The stack of region kinds and indices.
     region_info: Vec<(RegionKind, usize)>,
+    /// The stack of result names.
+    result_names: Vec<Vec<String>>,
 }
 
 impl<'a> ParseState<'a> {
@@ -493,32 +494,49 @@ impl<'a> ParseState<'a> {
             regions: Vec::new(),
             blocks: Vec::new(),
             region_info: Vec::new(),
+            result_names: Vec::new(),
         }
     }
 
+    /// Enter a new op from the current block.
     pub fn enter_op_from(&mut self, block: ArenaPtr<Block>) { self.blocks.push(block); }
 
+    /// Exit the current op.
     pub fn exit_op(&mut self) { self.blocks.pop(); }
 
+    /// Enter a new region from the current op, with the region kind and index.
     pub fn enter_region_from(&mut self, op: ArenaPtr<OpObj>, kind: RegionKind, index: usize) {
         self.ops.push(op);
         self.region_info.push((kind, index));
     }
 
+    /// Exit the current region.
     pub fn exit_region(&mut self) {
         self.region_info.pop().unwrap();
         self.ops.pop().unwrap();
     }
 
+    /// Enter a new block from the current region.
     pub fn enter_block_from(&mut self, region: ArenaPtr<Region>) { self.regions.push(region); }
 
+    /// Exit the current block.
     pub fn exit_block(&mut self) { self.regions.pop().unwrap(); }
 
+    /// Get the current op.
     pub fn curr_op(&self) -> ArenaPtr<OpObj> { *self.ops.last().unwrap() }
 
+    /// Get the current region.
     pub fn curr_region(&self) -> ArenaPtr<Region> { *self.regions.last().unwrap() }
 
+    /// Get the current block.
     pub fn curr_block(&self) -> Option<ArenaPtr<Block>> { self.blocks.last().copied() }
 
+    /// Get the current region kind and index.
     pub fn curr_region_info(&self) -> (RegionKind, usize) { *self.region_info.last().unwrap() }
+
+    /// Get and pop the current result names.
+    pub fn pop_result_names(&mut self) -> Vec<String> { self.result_names.pop().unwrap() }
+
+    /// Push a new series of result name.
+    pub fn push_result_names(&mut self, names: Vec<String>) { self.result_names.push(names); }
 }

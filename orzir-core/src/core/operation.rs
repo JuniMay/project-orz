@@ -8,7 +8,7 @@ use super::{
     context::Context,
     mnemonic::Mnemonic,
     parse::{ParseFn, ParseState, TokenKind},
-    value::{OpResultBuilder, Value},
+    value::Value,
 };
 use crate::{
     support::{
@@ -38,7 +38,6 @@ impl Successor {
 }
 
 impl Parse for Successor {
-    type Arg = ArenaPtr<Region>;
     type Item = Successor;
 
     /// Parse the successor.
@@ -48,8 +47,9 @@ impl Parse for Successor {
     /// ```text
     /// <block_label> `(` <arg_name_list> `)`
     /// ```
-    fn parse(region: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let token = state.stream.consume()?;
+        let region = state.curr_region();
         if let TokenKind::BlockLabel(label) = &token.kind {
             let block = Block::reserve_with_name(ctx, label.clone(), region);
             let mut args = Vec::new();
@@ -58,7 +58,7 @@ impl Parse for Successor {
                     if state.stream.consume_if(TokenKind::Char(')'))?.is_some() {
                         break;
                     }
-                    let arg = Value::parse((), ctx, state)?;
+                    let arg = Value::parse(ctx, state)?;
                     args.push(arg);
 
                     match state.stream.consume()?.kind {
@@ -332,24 +332,21 @@ impl OpObj {
 }
 
 impl Parse for OpObj {
-    type Arg = Option<ArenaPtr<Block>>;
     type Item = ArenaPtr<OpObj>;
 
     /// The top-level parsing for an operation.
     ///
-    /// This function will parse the operation result, generate the
-    /// corresponding builders and pass them to the operation parse
-    /// function.
+    /// This function will parse the operation result, push the names to the
+    /// state, then parse the mnemonic and the dialect-specific text.
     ///
     /// e.g. for the oepration text below:
     /// ```text
     /// %0, %1 = dialect.agnostic_op %2, %3 : int<32>, int<32>
     /// ```
     ///
-    /// The result part `%0, %1` will be parsed and into [`OpResultBuilder`]s,
-    /// then the `=` will be consumed and the mnemonic will be parsed.
-    /// According to the mnemonic, the parse function will be looked up from
-    /// the context and called.
+    /// The result part `%0, %1` will be saved as names, then the `=` will be
+    /// consumed and the mnemonic will be parsed. According to the mnemonic,
+    /// the parse function will be looked up from the context and called.
     ///
     /// The dialect-specific parse function should only parse the rest of the
     /// text.
@@ -359,18 +356,23 @@ impl Parse for OpObj {
     /// ```text
     /// <result_name_list> `=` <mnemonic> <dialect_specific_text>
     /// ````
-    fn parse(parent: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let mut result_builders = Vec::new();
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let mut result_names = Vec::new();
+        let parent = state.curr_block();
 
         loop {
             let token = state.stream.peek()?;
             match token.kind {
-                TokenKind::ValueName(ref name) => {
-                    let builder =
-                        Value::op_result_builder().name(name.clone()).index(result_builders.len());
-                    result_builders.push(builder);
+                TokenKind::ValueName(_) => {
                     // eat the value name
-                    let _ = state.stream.consume()?;
+                    let token = state.stream.consume()?;
+
+                    if let TokenKind::ValueName(name) = token.kind {
+                        result_names.push(name);
+                    } else {
+                        unreachable!();
+                    }
+
                     // eat the next token, `=` or `,`
                     let token = state.stream.consume()?;
                     match token.kind {
@@ -383,7 +385,7 @@ impl Parse for OpObj {
             }
         }
 
-        let mnemonic = Mnemonic::parse((), ctx, state)?;
+        let mnemonic = Mnemonic::parse(ctx, state)?;
 
         let parse_fn = ctx
             .dialects
@@ -398,7 +400,8 @@ impl Parse for OpObj {
                 )
             });
 
-        let op = parse_fn(result_builders, ctx, state)?;
+        state.push_result_names(result_names);
+        let op = parse_fn(ctx, state)?;
 
         if op.deref(&ctx.ops).as_ref().parent_block().is_none() {
             op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent)?;
@@ -412,7 +415,7 @@ impl Parse for OpObj {
 ///
 /// The parse function should take the result builders and the parent block as
 /// arguments and return the operation object.
-pub type OpParseFn = ParseFn<Vec<OpResultBuilder<false, false, true>>, ArenaPtr<OpObj>>;
+pub type OpParseFn = ParseFn<ArenaPtr<OpObj>>;
 
 impl Print for OpObj {
     /// Print the operation.

@@ -58,10 +58,9 @@ impl Mnemonic {
 }
 
 impl Parse for Mnemonic {
-    type Arg = ();
     type Item = Mnemonic;
 
-    fn parse(_: (), _: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(_: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let token = state.stream.consume()?;
         match token.kind {
             TokenKind::Tokenized(ref s) => {

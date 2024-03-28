@@ -175,10 +175,9 @@ impl BlockBuilder<true> {
 }
 
 impl Parse for Block {
-    type Arg = ();
     type Item = ArenaPtr<Block>;
 
-    fn parse(_: (), ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let builder = Block::builder().parent_region(state.curr_region());
 
         let token = state.stream.peek()?;
@@ -220,9 +219,9 @@ impl Parse for Block {
                             TokenKind::ValueName(ref name) => {
                                 let name = name.clone();
                                 // the argument ptr will be fetched in the builder.
-                                let _arg = Value::parse((), ctx, state)?;
+                                let _arg = Value::parse(ctx, state)?;
                                 state.stream.expect(TokenKind::Char(':'))?;
-                                let ty = TyObj::parse((), ctx, state)?;
+                                let ty = TyObj::parse(ctx, state)?;
 
                                 // the `build` function will automatically add the argument to
                                 // the block and set the index of the argument in the block.
@@ -265,7 +264,7 @@ impl Parse for Block {
             match token.kind {
                 TokenKind::ValueName(_) | TokenKind::Tokenized(_) => {
                     // parse an operation
-                    let op = OpObj::parse(Some(block), ctx, state)?;
+                    let op = OpObj::parse(ctx, state)?;
                     block
                         .deref(&ctx.blocks)
                         .parent_region
