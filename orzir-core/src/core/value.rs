@@ -111,56 +111,65 @@ impl Value {
 /// index is not set, the builder cannot attach the result to the operation and
 /// will thus return an error.
 #[derive(Debug, Default)]
-pub struct OpResultBuilder {
+pub struct OpResultBuilder<
+    const TY: bool = false,
+    const OP: bool = false,
+    const INDEX: bool = false,
+> {
     name: Option<String>,
     ty: Option<ArenaPtr<TyObj>>,
     op: Option<ArenaPtr<OpObj>>,
     index: Option<usize>,
 }
 
-/// The builder to build [`Value::BlockArgument`].
-///
-/// This builder requires the type of the argument, the parent block, and the
-/// index of the argument. If the name is set, the builder will lookup if there
-/// is a reserved [`ArenaPtr<Value>`] by the name. If not, a new
-/// [`ArenaPtr<Value>`] will be reserved, and the name will be set.
-///
-/// The index represents the position of this argument in the block. If the
-/// index is not set, the builder cannot attach the argument to the block and
-/// will thus return an error.
-#[derive(Debug, Default)]
-pub struct BlockArgumentBuilder {
-    name: Option<String>,
-    ty: Option<ArenaPtr<TyObj>>,
-    block: Option<ArenaPtr<Block>>,
-    index: Option<usize>,
+impl<const OP: bool, const INDEX: bool> OpResultBuilder<false, OP, INDEX> {
+    /// Set the type of the result.
+    pub fn ty(mut self, ty: ArenaPtr<TyObj>) -> OpResultBuilder<true, OP, INDEX> {
+        self.ty = Some(ty);
+        OpResultBuilder {
+            name: self.name,
+            ty: self.ty,
+            op: self.op,
+            index: self.index,
+        }
+    }
 }
 
-impl OpResultBuilder {
-    /// Set the type of the result.
-    pub fn ty(mut self, ty: ArenaPtr<TyObj>) -> Self {
-        self.ty = Some(ty);
-        self
+impl<const TY: bool, const INDEX: bool> OpResultBuilder<TY, false, INDEX> {
+    /// Set the operation.
+    pub fn op(mut self, op: ArenaPtr<OpObj>) -> OpResultBuilder<TY, true, INDEX> {
+        self.op = Some(op);
+        OpResultBuilder {
+            name: self.name,
+            ty: self.ty,
+            op: self.op,
+            index: self.index,
+        }
     }
+}
 
+impl<const TY: bool, const OP: bool> OpResultBuilder<TY, OP, false> {
+    /// Set the index of the result.
+    pub fn index(mut self, index: usize) -> OpResultBuilder<TY, OP, true> {
+        self.index = Some(index);
+        OpResultBuilder {
+            name: self.name,
+            ty: self.ty,
+            op: self.op,
+            index: self.index,
+        }
+    }
+}
+
+impl<const TY: bool, const OP: bool, const INDEX: bool> OpResultBuilder<TY, OP, INDEX> {
     /// Set the name of the result.
     pub fn name(mut self, name: String) -> Self {
         self.name = Some(name);
         self
     }
+}
 
-    /// Set the operation.
-    pub fn op(mut self, op: ArenaPtr<OpObj>) -> Self {
-        self.op = Some(op);
-        self
-    }
-
-    /// Set the index of the result.
-    pub fn index(mut self, index: usize) -> Self {
-        self.index = Some(index);
-        self
-    }
-
+impl OpResultBuilder<true, true, true> {
     /// Build the value and consume the builder.
     ///
     /// This will add the result to the operation.
@@ -170,9 +179,9 @@ impl OpResultBuilder {
     /// This function will return an error if the type, operation, or index is
     /// not
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
-        let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
-        let op = self.op.ok_or_else(|| anyhow!("missing op"))?;
-        let index = self.index.ok_or_else(|| anyhow!("missing index"))?;
+        let ty = self.ty.unwrap();
+        let op = self.op.unwrap();
+        let index = self.index.unwrap();
 
         // the value might be used before, so try to get the reference by the name.
         let self_ptr = if let Some(ref name) = self.name {
@@ -198,31 +207,76 @@ impl OpResultBuilder {
     }
 }
 
-impl BlockArgumentBuilder {
-    /// Set the type of the argument.
-    pub fn ty(mut self, ty: ArenaPtr<TyObj>) -> Self {
-        self.ty = Some(ty);
-        self
-    }
+/// The builder to build [`Value::BlockArgument`].
+///
+/// This builder requires the type of the argument, the parent block, and the
+/// index of the argument. If the name is set, the builder will lookup if there
+/// is a reserved [`ArenaPtr<Value>`] by the name. If not, a new
+/// [`ArenaPtr<Value>`] will be reserved, and the name will be set.
+///
+/// The index represents the position of this argument in the block. If the
+/// index is not set, the builder cannot attach the argument to the block and
+/// will thus return an error.
+#[derive(Debug, Default)]
+pub struct BlockArgumentBuilder<
+    const TY: bool = false,
+    const BLOCK: bool = false,
+    const INDEX: bool = false,
+> {
+    name: Option<String>,
+    ty: Option<ArenaPtr<TyObj>>,
+    block: Option<ArenaPtr<Block>>,
+    index: Option<usize>,
+}
 
-    /// Set the name of the result.
+impl<const BLOCK: bool, const INDEX: bool> BlockArgumentBuilder<false, BLOCK, INDEX> {
+    /// Set the type of the argument.
+    pub fn ty(mut self, ty: ArenaPtr<TyObj>) -> BlockArgumentBuilder<true, BLOCK, INDEX> {
+        self.ty = Some(ty);
+        BlockArgumentBuilder {
+            name: self.name,
+            ty: self.ty,
+            block: self.block,
+            index: self.index,
+        }
+    }
+}
+
+impl<const TY: bool, const INDEX: bool> BlockArgumentBuilder<TY, false, INDEX> {
+    /// Set the block of the argument.
+    pub fn block(mut self, block: ArenaPtr<Block>) -> BlockArgumentBuilder<TY, true, INDEX> {
+        self.block = Some(block);
+        BlockArgumentBuilder {
+            name: self.name,
+            ty: self.ty,
+            block: self.block,
+            index: self.index,
+        }
+    }
+}
+
+impl<const TY: bool, const BLOCK: bool> BlockArgumentBuilder<TY, BLOCK, false> {
+    /// Set the index of the argument.
+    pub fn index(mut self, index: usize) -> BlockArgumentBuilder<TY, BLOCK, true> {
+        self.index = Some(index);
+        BlockArgumentBuilder {
+            name: self.name,
+            ty: self.ty,
+            block: self.block,
+            index: self.index,
+        }
+    }
+}
+
+impl<const TY: bool, const BLOCK: bool, const INDEX: bool> BlockArgumentBuilder<TY, BLOCK, INDEX> {
+    /// Set the name of the argument.
     pub fn name(mut self, name: String) -> Self {
         self.name = Some(name);
         self
     }
+}
 
-    /// Set the block of the argument.
-    pub fn block(mut self, block: ArenaPtr<Block>) -> Self {
-        self.block = Some(block);
-        self
-    }
-
-    /// Set the index of the argument.
-    pub fn index(mut self, index: usize) -> Self {
-        self.index = Some(index);
-        self
-    }
-
+impl BlockArgumentBuilder<true, true, true> {
     /// Build the value and consume the builder.
     ///
     /// This will add the block argument to the block.
@@ -232,7 +286,7 @@ impl BlockArgumentBuilder {
     /// This function will return an error if the type, block, or index is not
     /// set.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Value>> {
-        let ty = self.ty.ok_or_else(|| anyhow!("missing type"))?;
+        let ty = self.ty.unwrap();
         let block = self.block.ok_or_else(|| anyhow!("missing block"))?;
         let index = self.index.ok_or_else(|| anyhow!("missing index"))?;
 

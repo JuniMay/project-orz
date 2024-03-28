@@ -37,7 +37,7 @@ impl Verify for ModuleOp {
 }
 
 impl Parse for ModuleOp {
-    type Arg = Vec<OpResultBuilder>;
+    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
     fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {

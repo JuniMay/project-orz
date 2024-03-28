@@ -412,7 +412,7 @@ impl Parse for OpObj {
 ///
 /// The parse function should take the result builders and the parent block as
 /// arguments and return the operation object.
-pub type OpParseFn = ParseFn<Vec<OpResultBuilder>, ArenaPtr<OpObj>>;
+pub type OpParseFn = ParseFn<Vec<OpResultBuilder<false, false, true>>, ArenaPtr<OpObj>>;
 
 impl Print for OpObj {
     /// Print the operation.

@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use super::{parse::ParseState, value::Value};
 use crate::{
@@ -108,7 +108,7 @@ impl Block {
 /// The block builder will not add the entity to the layout of the parent
 /// region.
 #[derive(Debug, Default)]
-pub struct BlockBuilder {
+pub struct BlockBuilder<const PARENT: bool = false> {
     /// The name of the block.
     name: Option<String>,
     /// If the block is an entry block.
@@ -117,16 +117,10 @@ pub struct BlockBuilder {
     parent_region: Option<ArenaPtr<Region>>,
 }
 
-impl BlockBuilder {
+impl<const PARENT: bool> BlockBuilder<PARENT> {
     /// Set the if the block is an entry block.
     pub fn entry(mut self, is_entry: bool) -> Self {
         self.is_entry = Some(is_entry);
-        self
-    }
-
-    /// Set the parent region of the block.
-    pub fn parent_region(mut self, parent_region: ArenaPtr<Region>) -> Self {
-        self.parent_region = Some(parent_region);
         self
     }
 
@@ -135,12 +129,26 @@ impl BlockBuilder {
         self.name = Some(name);
         self
     }
+}
 
+impl BlockBuilder<false> {
+    /// Set the parent region of the block.
+    pub fn parent_region(mut self, parent_region: ArenaPtr<Region>) -> BlockBuilder<true> {
+        self.parent_region = Some(parent_region);
+        BlockBuilder {
+            name: self.name,
+            is_entry: self.is_entry,
+            parent_region: self.parent_region,
+        }
+    }
+}
+
+impl BlockBuilder<true> {
     /// Build the block.
     ///
     /// This will generate a new block, but will **NOT** add it to the layout.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Block>> {
-        let parent_region = self.parent_region.ok_or_else(|| anyhow!("missing parent region"))?;
+        let parent_region = self.parent_region.unwrap();
         // try to get the reference by the name first.
         let self_ptr = if let Some(name) = &self.name {
             parent_region

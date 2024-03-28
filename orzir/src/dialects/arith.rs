@@ -11,7 +11,7 @@ use orzir_macros::Op;
 use crate::verifiers::*;
 
 fn parse_binary(
-    arg: Vec<OpResultBuilder>,
+    arg: Vec<OpResultBuilder<false, false, true>>,
     ctx: &mut Context,
     state: &mut ParseState,
     op: ArenaPtr<OpObj>,
@@ -66,7 +66,7 @@ pub struct IConstOp {
 impl Verify for IConstOp {}
 
 impl Parse for IConstOp {
-    type Arg = Vec<OpResultBuilder>;
+    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
     fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
@@ -147,7 +147,7 @@ pub struct IAddOp {
 impl Verify for IAddOp {}
 
 impl Parse for IAddOp {
-    type Arg = Vec<OpResultBuilder>;
+    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
     fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {

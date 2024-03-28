@@ -26,7 +26,7 @@ pub struct Jump {
 impl Verify for Jump {}
 
 impl Parse for Jump {
-    type Arg = Vec<OpResultBuilder>;
+    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
     fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
@@ -78,7 +78,7 @@ pub struct Branch {
 impl Verify for Branch {}
 
 impl Parse for Branch {
-    type Arg = Vec<OpResultBuilder>;
+    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
     fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {

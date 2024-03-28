@@ -1,6 +1,6 @@
 use std::{cell::RefCell, fmt::Write, rc::Rc};
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 
 use super::{
     block::Block,
@@ -37,19 +37,6 @@ pub struct Region {
     parent_op: ArenaPtr<OpObj>,
     /// The index of the region in the parent operation.
     index: usize,
-}
-
-/// The builder of the region.
-///
-/// This builder requires the kind, parent operation, and index to be set.
-///
-/// The index is used to attach the region to the parent operation, and if
-/// it is not set, the build function will return an error.
-#[derive(Debug, Default)]
-pub struct RegionBuilder {
-    kind: Option<RegionKind>,
-    parent_op: Option<ArenaPtr<OpObj>>,
-    index: Option<usize>,
 }
 
 impl VerifyInterfaces for Region {
@@ -103,25 +90,60 @@ impl Region {
     }
 }
 
-impl RegionBuilder {
+/// The builder of the region.
+///
+/// This builder requires the kind, parent operation, and index to be set.
+///
+/// The index is used to attach the region to the parent operation, and if
+/// it is not set, the build function will return an error.
+#[derive(Debug, Default)]
+pub struct RegionBuilder<
+    const KIND: bool = false,
+    const PARENT_OP: bool = false,
+    const INDEX: bool = false,
+> {
+    kind: Option<RegionKind>,
+    parent_op: Option<ArenaPtr<OpObj>>,
+    index: Option<usize>,
+}
+
+impl<const PARENT_OP: bool, const INDEX: bool> RegionBuilder<false, PARENT_OP, INDEX> {
     /// Set the kind of the region.
-    pub fn kind(mut self, kind: RegionKind) -> Self {
+    pub fn kind(mut self, kind: RegionKind) -> RegionBuilder<true, PARENT_OP, INDEX> {
         self.kind = Some(kind);
-        self
+        RegionBuilder {
+            kind: self.kind,
+            parent_op: self.parent_op,
+            index: self.index,
+        }
     }
+}
 
+impl<const KIND: bool, const INDEX: bool> RegionBuilder<KIND, false, INDEX> {
     /// Set the parent operation of the region.
-    pub fn parent_op(mut self, parent_op: ArenaPtr<OpObj>) -> Self {
+    pub fn parent_op(mut self, parent_op: ArenaPtr<OpObj>) -> RegionBuilder<KIND, true, INDEX> {
         self.parent_op = Some(parent_op);
-        self
+        RegionBuilder {
+            kind: self.kind,
+            parent_op: self.parent_op,
+            index: self.index,
+        }
     }
+}
 
+impl<const KIND: bool, const PARENT_OP: bool> RegionBuilder<KIND, PARENT_OP, false> {
     /// Set the index of the region in the parent operation.
-    pub fn index(mut self, index: usize) -> Self {
+    pub fn index(mut self, index: usize) -> RegionBuilder<KIND, PARENT_OP, true> {
         self.index = Some(index);
-        self
+        RegionBuilder {
+            kind: self.kind,
+            parent_op: self.parent_op,
+            index: self.index,
+        }
     }
+}
 
+impl RegionBuilder<true, true, true> {
     /// Build the region and consume the builder.
     ///
     /// This will add the region to the parent operation, and store the index in
@@ -132,9 +154,9 @@ impl RegionBuilder {
     /// This function will return an error if the kind, parent operation, or
     /// index is not set.
     pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Region>> {
-        let kind = self.kind.ok_or_else(|| anyhow!("missing kind"))?;
-        let parent_op = self.parent_op.ok_or_else(|| anyhow!("missing parent_op"))?;
-        let index = self.index.ok_or_else(|| anyhow!("missing index"))?;
+        let kind = self.kind.unwrap();
+        let parent_op = self.parent_op.unwrap();
+        let index = self.index.unwrap();
 
         let above = parent_op.deref(&ctx.ops).as_ref().parent_region(ctx).map(|region| {
             let region = region.deref(&ctx.regions);
@@ -184,8 +206,8 @@ impl Parse for Region {
         let (region_kind, index) = state.curr_region_info();
         let parent_op = state.curr_op();
         let region = Region::builder()
-            .kind(region_kind)
             .parent_op(parent_op)
+            .kind(region_kind)
             .index(index)
             .build(ctx)?;
         // parse the blocks inside the region.

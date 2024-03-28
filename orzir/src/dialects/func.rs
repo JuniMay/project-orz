@@ -42,7 +42,7 @@ impl Verify for FuncOp {
 }
 
 impl Parse for FuncOp {
-    type Arg = Vec<OpResultBuilder>;
+    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
     fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
@@ -100,7 +100,7 @@ pub struct ReturnOp {
 impl Verify for ReturnOp {}
 
 impl Parse for ReturnOp {
-    type Arg = Vec<OpResultBuilder>;
+    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
     fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
@@ -175,7 +175,7 @@ pub struct CallOp {
 impl Verify for CallOp {}
 
 impl Parse for CallOp {
-    type Arg = Vec<OpResultBuilder>;
+    type Arg = Vec<OpResultBuilder<false, false, true>>;
     type Item = ArenaPtr<OpObj>;
 
     fn parse(arg: Self::Arg, ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
