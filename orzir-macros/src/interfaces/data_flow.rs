@@ -21,7 +21,7 @@ impl syn::parse::Parse for IndexKind {
     }
 }
 
-enum OpFieldMeta {
+enum FieldMeta {
     /// The result field.
     Result {
         /// The corresponding field ident.
@@ -39,9 +39,9 @@ enum OpFieldMeta {
 }
 
 #[derive(Default)]
-struct OpInfo {
+struct DeriveInfo {
     /// Fields
-    fields: Vec<OpFieldMeta>,
+    fields: Vec<FieldMeta>,
 
     /// The artifact for the number of operands.
     num_operands_artifact: TokenStream,
@@ -64,7 +64,7 @@ struct OpInfo {
     result_need_match: bool,
 }
 
-impl OpInfo {
+impl DeriveInfo {
     /// Get the info from a [`syn::DeriveInput`].
     fn from_ast(ast: &syn::DeriveInput) -> syn::Result<Self> {
         let mut info = Self::default();
@@ -81,14 +81,14 @@ impl OpInfo {
                                 match ident.to_string().as_str() {
                                     "result" => {
                                         let index = attr.parse_args::<IndexKind>()?;
-                                        field_meta = Some(OpFieldMeta::Result {
+                                        field_meta = Some(FieldMeta::Result {
                                             ident: field.ident.clone().unwrap(),
                                             index,
                                         });
                                     }
                                     "operand" => {
                                         let index = attr.parse_args::<IndexKind>()?;
-                                        field_meta = Some(OpFieldMeta::Operand {
+                                        field_meta = Some(FieldMeta::Operand {
                                             ident: field.ident.clone().unwrap(),
                                             index,
                                         });
@@ -108,33 +108,34 @@ impl OpInfo {
 
                         // basic type checking.
                         match field_meta {
-                            OpFieldMeta::Result { index, .. }
-                            | OpFieldMeta::Operand { index, .. } => match index {
-                                IndexKind::All => {
-                                    if let syn::Type::Path(ref path) = ty {
-                                        if let Some(segment) = path.path.segments.last() {
-                                            if segment.ident != "Vec" {
-                                                return Err(syn::Error::new_spanned(
-                                                    ty,
-                                                    "expect type `Vec<ArenaPtr<Value>>`",
-                                                ));
+                            FieldMeta::Result { index, .. } | FieldMeta::Operand { index, .. } => {
+                                match index {
+                                    IndexKind::All => {
+                                        if let syn::Type::Path(ref path) = ty {
+                                            if let Some(segment) = path.path.segments.last() {
+                                                if segment.ident != "Vec" {
+                                                    return Err(syn::Error::new_spanned(
+                                                        ty,
+                                                        "expect type `Vec<ArenaPtr<Value>>`",
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    IndexKind::Single(_) => {
+                                        if let syn::Type::Path(ref path) = ty {
+                                            if let Some(segment) = path.path.segments.last() {
+                                                if segment.ident != "ArenaPtr" {
+                                                    return Err(syn::Error::new_spanned(
+                                                        ty,
+                                                        "expect type `ArenaPtr<Value>`",
+                                                    ));
+                                                }
                                             }
                                         }
                                     }
                                 }
-                                IndexKind::Single(_) => {
-                                    if let syn::Type::Path(ref path) = ty {
-                                        if let Some(segment) = path.path.segments.last() {
-                                            if segment.ident != "ArenaPtr" {
-                                                return Err(syn::Error::new_spanned(
-                                                    ty,
-                                                    "expect type `ArenaPtr<Value>`",
-                                                ));
-                                            }
-                                        }
-                                    }
-                                }
-                            },
+                            }
                         }
 
                         info.fields.push(field_meta);
@@ -165,7 +166,7 @@ impl OpInfo {
 
         for field in &self.fields {
             match field {
-                OpFieldMeta::Result { ident, index } => match (result, index) {
+                FieldMeta::Result { ident, index } => match (result, index) {
                     (None, _) => result = Some(*index),
                     (Some(IndexKind::All), _) => {
                         return Err(syn::Error::new_spanned(
@@ -181,7 +182,7 @@ impl OpInfo {
                     }
                     _ => {}
                 },
-                OpFieldMeta::Operand { ident, index } => match (operand, index) {
+                FieldMeta::Operand { ident, index } => match (operand, index) {
                     (None, _) => operand = Some(*index),
                     (Some(IndexKind::All), _) => {
                         return Err(syn::Error::new_spanned(
@@ -211,9 +212,13 @@ impl OpInfo {
         self.num_operands_artifact = quote! { 0 };
         self.num_results_artifact = quote! { 0 };
 
+        let mut has_operand = false;
+        let mut has_result = false;
+        
+
         for field in &self.fields {
             match field {
-                OpFieldMeta::Operand { ident, index } => match index {
+                FieldMeta::Operand { ident, index } => match index {
                     IndexKind::All => {
                         self.num_operands_artifact = quote! {
                             self.#ident.len()
@@ -232,6 +237,7 @@ impl OpInfo {
                                 Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
                             }
                         }];
+                        has_operand = true;
                     }
                     IndexKind::Single(index) => {
                         operand_cnt += 1;
@@ -242,9 +248,10 @@ impl OpInfo {
                             #index => Ok(Some(std::mem::replace(&mut self.#ident, value)))
                         });
                         self.operand_need_match = true;
+                        has_operand = true;
                     }
                 },
-                OpFieldMeta::Result { ident, index } => match index {
+                FieldMeta::Result { ident, index } => match index {
                     IndexKind::All => {
                         self.num_results_artifact = quote! {
                             self.#ident.len()
@@ -263,6 +270,7 @@ impl OpInfo {
                                 Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
                             }
                         }];
+                        has_result = true;
                     }
                     IndexKind::Single(index) => {
                         result_cnt += 1;
@@ -273,6 +281,7 @@ impl OpInfo {
                             #index => Ok(Some(std::mem::replace(&mut self.#ident, value)))
                         });
                         self.result_need_match = true;
+                        has_result = true;
                     }
                 },
             }
@@ -285,6 +294,18 @@ impl OpInfo {
         if self.result_need_match {
             self.num_results_artifact = quote! { #result_cnt };
         }
+
+
+        if !has_operand {
+            self.get_operand_artifact = vec![quote! { None }];
+            self.set_operand_artifact = vec![quote! { ::anyhow::bail!("index out of bounds") }];
+        }
+
+        if !has_result {
+            self.get_result_artifact = vec![quote! { None }];
+            self.set_result_artifact = vec![quote! { ::anyhow::bail!("index out of bounds") }];
+        }
+
 
         Ok(())
     }
@@ -299,11 +320,7 @@ impl OpInfo {
     }
 
     fn get_operand_method(&mut self) -> TokenStream {
-        let get_operand_method = if self.get_operand_artifact.is_empty() {
-            quote! {
-                None
-            }
-        } else if self.operand_need_match {
+        let artifact = if self.operand_need_match {
             let artifact = self.get_operand_artifact.drain(..).collect::<Vec<_>>();
             quote! {
                 match index {
@@ -312,31 +329,26 @@ impl OpInfo {
                 }
             }
         } else {
-            let artifact = self.get_operand_artifact.drain(..).collect::<Vec<_>>();
-            let artifact = &artifact[0];
+            let artifact = self.get_operand_artifact.pop().unwrap();
             quote! {
                 #artifact
             }
         };
 
-        let get_operand_method = quote! {
+        let output = quote! {
             fn get_operand(
                 &self,
                 index: usize
             ) -> Option<::orzir_core::ArenaPtr<::orzir_core::Value>> {
-                #get_operand_method
+                #artifact
             }
         };
 
-        get_operand_method
+        output
     }
 
     fn set_operand_method(&mut self) -> TokenStream {
-        let set_operand_method = if self.set_operand_artifact.is_empty() {
-            quote! {
-                ::anyhow::bail!("index out of bounds");
-            }
-        } else if self.operand_need_match {
+        let artifact = if self.operand_need_match {
             let artifact = self.set_operand_artifact.drain(..).collect::<Vec<_>>();
             quote! {
                 match index {
@@ -345,24 +357,23 @@ impl OpInfo {
                 }
             }
         } else {
-            let artifact = self.set_operand_artifact.drain(..).collect::<Vec<_>>();
-            let artifact = &artifact[0];
+            let artifact = self.set_operand_artifact.pop().unwrap();
             quote! {
                 #artifact
             }
         };
 
-        let set_operand_method = quote! {
+        let output = quote! {
             fn set_operand(
                 &mut self,
                 index: usize,
                 value: ::orzir_core::ArenaPtr<::orzir_core::Value>
             ) -> ::anyhow::Result<Option<::orzir_core::ArenaPtr<::orzir_core::Value>>> {
-                #set_operand_method
+                #artifact
             }
         };
 
-        set_operand_method
+        output
     }
 
     fn num_results_method(&self) -> TokenStream {
@@ -375,11 +386,7 @@ impl OpInfo {
     }
 
     fn get_result_method(&mut self) -> TokenStream {
-        let get_result_method = if self.get_result_artifact.is_empty() {
-            quote! {
-                None
-            }
-        } else if self.result_need_match {
+        let artifact = if self.result_need_match {
             let artifact = self.get_result_artifact.drain(..).collect::<Vec<_>>();
             quote! {
                 match index {
@@ -388,31 +395,26 @@ impl OpInfo {
                 }
             }
         } else {
-            let artifact = self.get_result_artifact.drain(..).collect::<Vec<_>>();
-            let artifact = &artifact[0];
+            let artifact = self.get_result_artifact.pop().unwrap();
             quote! {
                 #artifact
             }
         };
 
-        let get_result_method = quote! {
+        let output = quote! {
             fn get_result(
                 &self,
                 index: usize
             ) -> Option<::orzir_core::ArenaPtr<::orzir_core::Value>> {
-                #get_result_method
+                #artifact
             }
         };
 
-        get_result_method
+        output
     }
 
     fn set_result_method(&mut self) -> TokenStream {
-        let set_result_method = if self.set_result_artifact.is_empty() {
-            quote! {
-                ::anyhow::bail!("index out of bounds");
-            }
-        } else if self.result_need_match {
+        let artifact =  if self.result_need_match {
             let artifact = self.set_result_artifact.drain(..).collect::<Vec<_>>();
             quote! {
                 match index {
@@ -421,30 +423,29 @@ impl OpInfo {
                 }
             }
         } else {
-            let artifact = self.set_result_artifact.drain(..).collect::<Vec<_>>();
-            let artifact = &artifact[0];
+            let artifact = self.set_result_artifact.pop().unwrap();
             quote! {
                 #artifact
             }
         };
 
-        let set_result_method = quote! {
+        let output = quote! {
             fn set_result(
                 &mut self,
                 index: usize,
                 value: ::orzir_core::ArenaPtr<::orzir_core::Value>
             ) -> ::anyhow::Result<Option<::orzir_core::ArenaPtr<::orzir_core::Value>>> {
-                #set_result_method
+                #artifact
             }
         };
 
-        set_result_method
+        output
     }
 }
 
 pub fn derive_data_flow_impl(input: TokenStream) -> syn::Result<TokenStream> {
     let ast = syn::parse2::<syn::DeriveInput>(input).unwrap();
-    let mut info = OpInfo::from_ast(&ast)?;
+    let mut info = DeriveInfo::from_ast(&ast)?;
 
     info.verify()?;
     info.generate_artifacts()?;
