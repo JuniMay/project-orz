@@ -59,18 +59,25 @@ where
 
     pub fn get_rev(&self, r: &R) -> Option<&L> { self.rev.get(r) }
 
+    #[allow(dead_code)]
     pub fn iter_fwd(&self) -> impl Iterator<Item = (&L, &R)> { self.fwd.iter() }
 
+    #[allow(dead_code)]
     pub fn iter_rev(&self) -> impl Iterator<Item = (&R, &L)> { self.rev.iter() }
 
+    #[allow(dead_code)]
     pub fn get_fwd_mut(&mut self, l: &L) -> Option<&mut R> { self.fwd.get_mut(l) }
 
+    #[allow(dead_code)]
     pub fn get_rev_mut(&mut self, r: &R) -> Option<&mut L> { self.rev.get_mut(r) }
 
+    #[allow(dead_code)]
     pub fn iter_fwd_mut(&mut self) -> impl Iterator<Item = (&L, &mut R)> { self.fwd.iter_mut() }
 
+    #[allow(dead_code)]
     pub fn iter_rev_mut(&mut self) -> impl Iterator<Item = (&R, &mut L)> { self.rev.iter_mut() }
 
+    #[allow(dead_code)]
     pub fn remove_fwd(&mut self, l: &L) -> Option<R> {
         self.fwd.remove(l).map(|r| {
             self.rev.remove(&r);
@@ -78,6 +85,7 @@ where
         })
     }
 
+    #[allow(dead_code)]
     pub fn remove_rev(&mut self, r: &R) -> Option<L> {
         self.rev.remove(r).map(|l| {
             self.fwd.remove(&l);
@@ -85,6 +93,7 @@ where
         })
     }
 
+    #[allow(dead_code)]
     pub fn contains_fwd(&self, l: &L) -> bool { self.fwd.contains_key(l) }
 
     pub fn contains_rev(&self, r: &R) -> bool { self.rev.contains_key(r) }

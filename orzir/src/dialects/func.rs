@@ -7,7 +7,7 @@ use orzir_core::{
 };
 use orzir_macros::Op;
 
-use super::builtin::FunctionTy;
+use super::builtin::{FunctionTy, Symbol};
 use crate::{
     interfaces::*,
     verifiers::{control_flow::*, *},
@@ -24,7 +24,7 @@ pub struct FuncOp {
     #[region(0)]
     region: ArenaPtr<Region>,
 
-    symbol: String,
+    symbol: Symbol,
 
     ty: ArenaPtr<TyObj>,
 }
@@ -47,20 +47,13 @@ impl Parse for FuncOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let parent_region = state.curr_region();
-
-        let symbol = if let TokenKind::SymbolName(s) = state.stream.consume()?.kind {
-            s
-        } else {
-            anyhow::bail!("expected symbol name");
-        };
-        let ty = FunctionTy::parse(ctx, state)?;
         let op = ctx.ops.reserve();
 
-        // register the symbol in the parent region.
-        parent_region
-            .deref_mut(&mut ctx.regions)
-            .register_symbol(symbol.clone(), op);
+        state.enter_component_from(op);
+        let symbol = Symbol::parse(ctx, state)?;
+        state.exit_component();
+
+        let ty = FunctionTy::parse(ctx, state)?;
 
         state.enter_region_from(op, RegionKind::SsaCfg, 0);
         let region = Region::parse(ctx, state)?;
@@ -79,7 +72,8 @@ impl Parse for FuncOp {
 
 impl Print for FuncOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        write!(state.buffer, " @{}", self.symbol)?;
+        write!(state.buffer, " ")?;
+        self.symbol.print(ctx, state)?;
         let func_ty = self.ty.deref(&ctx.tys).as_a::<FunctionTy>().unwrap();
         func_ty.print(ctx, state)?;
         write!(state.buffer, " ")?;

@@ -40,7 +40,7 @@ fn test_basic_0() -> Result<()> {
         .append(func_op)
         .unwrap();
 
-    let module_op = ModuleOp::new(&mut ctx, module_op, region, Some("foo".to_string()));
+    let module_op = ModuleOp::new(&mut ctx, module_op, region, Some("foo".into()));
 
     let func_region = Region::new(&mut ctx, RegionKind::SsaCfg, func_op, 0);
     let func_block = Block::new(&mut ctx, true, func_region, None);
@@ -50,7 +50,7 @@ fn test_basic_0() -> Result<()> {
         .append(func_block)
         .unwrap();
 
-    let func_op = FuncOp::new(&mut ctx, func_op, func_region, "foo".to_string(), func_ty);
+    let func_op = FuncOp::new(&mut ctx, func_op, func_region, "foo".into(), func_ty);
 
     let mut print_state = PrintState::new("    ");
     module_op.deref(&ctx.ops).print(&ctx, &mut print_state)?;

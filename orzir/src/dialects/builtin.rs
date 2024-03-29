@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use orzir_core::{
     ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
     Region, RegionKind, TokenKind, Ty, TyObj, Verify, VerifyInterfaces,
@@ -11,6 +11,62 @@ use crate::{
     interfaces::*,
     verifiers::{control_flow::*, *},
 };
+
+#[derive(Debug, Default, Clone)]
+pub struct Symbol(String);
+
+impl Parse for Symbol {
+    type Item = Self;
+
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let token = state.stream.peek()?;
+        if let TokenKind::SymbolName(_) = token.kind {
+            let token = state.stream.consume()?;
+            if let TokenKind::SymbolName(name) = token.kind {
+                let op = state.curr_op();
+                // register the symbol
+                let region = state.curr_region();
+                region
+                    .deref_mut(&mut ctx.regions)
+                    .register_symbol(name.clone(), op);
+                // construct and return.
+                let symbol = Self(name);
+                Ok(symbol)
+            } else {
+                unreachable!()
+            }
+        } else {
+            Err(anyhow!("not a symbol name"))
+        }
+    }
+}
+
+impl Print for Symbol {
+    fn print(&self, _: &Context, state: &mut PrintState) -> Result<()> {
+        write!(state.buffer, "@{}", self.0)?;
+        Ok(())
+    }
+}
+
+impl From<String> for Symbol {
+    fn from(s: String) -> Self {
+        if let Some(s) = s.strip_prefix('@') {
+            Self(s.to_string())
+        } else {
+            Self(s)
+        }
+    }
+}
+
+impl From<&str> for Symbol {
+    fn from(s: &str) -> Self {
+        if let Some(s) = s.strip_prefix('@') {
+            Self(s.to_string())
+        } else {
+            Self(s.to_string())
+        }
+    }
+}
 
 #[derive(Op)]
 #[mnemonic = "builtin.module"]
@@ -23,7 +79,7 @@ pub struct ModuleOp {
     #[region(0)]
     region: ArenaPtr<Region>,
 
-    symbol: Option<String>,
+    symbol: Option<Symbol>,
 }
 
 impl RegionKindInterface for ModuleOp {}
@@ -43,24 +99,14 @@ impl Parse for ModuleOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let parent_region = state.curr_region();
-
-        let token = state.stream.peek()?;
-        let symbol = if let TokenKind::ValueName(symbol) = &token.kind {
-            let symbol = symbol.clone();
-            state.stream.consume()?;
+        let op = ctx.ops.reserve();
+        state.enter_component_from(op);
+        let symbol = if let Ok(symbol) = Symbol::parse(ctx, state) {
             Some(symbol)
         } else {
             None
         };
-
-        let op = ctx.ops.reserve();
-
-        if let Some(ref symbol) = symbol {
-            parent_region
-                .deref_mut(&mut ctx.regions)
-                .register_symbol(symbol.clone(), op)
-        }
+        state.exit_component();
 
         state.enter_region_from(op, RegionKind::Graph, 0);
         let region = Region::parse(ctx, state)?;
@@ -81,7 +127,8 @@ impl Parse for ModuleOp {
 impl Print for ModuleOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         if let Some(symbol) = &self.symbol {
-            write!(state.buffer, " @{}", symbol)?;
+            write!(state.buffer, " ")?;
+            symbol.print(ctx, state)?;
         }
         write!(state.buffer, " ")?;
         self.get_region(0)
