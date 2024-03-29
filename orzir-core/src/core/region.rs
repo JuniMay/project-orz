@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::{
     block::Block,
     layout::BlockList,
-    operation::OpObj,
+    op::OpObj,
     parse::ParseState,
     symbol::{NameManager, SymbolTable},
 };

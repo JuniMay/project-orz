@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::{
     block::Block,
     context::Context,
-    operation::OpObj,
+    op::OpObj,
     parse::{ParseState, TokenKind},
     ty::{TyObj, Typed},
 };

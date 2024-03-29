@@ -8,7 +8,7 @@ pub use crate::{
         dialect::Dialect,
         interfaces::{ControlFlow, DataFlow, RegionInterface},
         mnemonic::{Mnemonic, MnemonicSegment},
-        operation::{Op, OpMetadata, OpObj, OpParseFn, Successor},
+        op::{Op, OpMetadata, OpObj, OpParseFn, Successor},
         parse::{Parse, ParseState, TokenKind, TokenStream},
         print::{Print, PrintState},
         region::{Region, RegionKind},

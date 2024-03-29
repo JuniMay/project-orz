@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 use thiserror::Error;
 
-use super::operation::OpObj;
+use super::op::OpObj;
 use crate::{
     support::{
         bimap::{BiMap, Duplicated},

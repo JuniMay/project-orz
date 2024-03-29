@@ -6,11 +6,11 @@ use interfaces::{
 use proc_macro::TokenStream;
 use ty::derive_ty;
 
-use crate::operation::derive_op;
+use crate::op::derive_op;
 
 mod cast;
 mod interfaces;
-mod operation;
+mod op;
 mod ty;
 
 /// Implement a [Op](orzir_core::Op) for the given struct.

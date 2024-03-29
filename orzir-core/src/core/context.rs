@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap};
 
 use super::{
-    block::Block, dialect::Dialect, mnemonic::MnemonicSegment, operation::OpObj, region::Region,
+    block::Block, dialect::Dialect, mnemonic::MnemonicSegment, op::OpObj, region::Region,
     symbol::NameManager, ty::TyObj, value::Value,
 };
 use crate::support::{
