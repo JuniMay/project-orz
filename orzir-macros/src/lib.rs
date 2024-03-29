@@ -64,7 +64,9 @@ mod ty;
     )
 )]
 pub fn op(item: TokenStream) -> TokenStream {
-    derive_op(item.into()).unwrap_or_else(|err| err.to_compile_error()).into()
+    derive_op(item.into())
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }
 
 /// Implement a [Ty](orzir_core::Ty) for the given struct.

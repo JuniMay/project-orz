@@ -35,7 +35,10 @@ impl Verify for FuncOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
         self.verify_interfaces(ctx)?;
         self.ty.deref(&ctx.tys).as_ref().verify(ctx)?;
-        self.get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
+        self.get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .verify(ctx)?;
         Ok(())
     }
 }
@@ -44,7 +47,7 @@ impl Parse for FuncOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let parent_block = state.curr_block();
+        let parent_region = state.curr_region();
 
         let symbol = if let TokenKind::SymbolName(s) = state.stream.consume()?.kind {
             s
@@ -55,10 +58,7 @@ impl Parse for FuncOp {
         let op = ctx.ops.reserve();
 
         // register the symbol in the parent region.
-        parent_block
-            .expect("FuncOp should be embraced by a region.")
-            .deref(&ctx.blocks)
-            .parent_region()
+        parent_region
             .deref_mut(&mut ctx.regions)
             .register_symbol(symbol.clone(), op);
 
@@ -83,7 +83,10 @@ impl Print for FuncOp {
         let func_ty = self.ty.deref(&ctx.tys).as_a::<FunctionTy>().unwrap();
         func_ty.print(ctx, state)?;
         write!(state.buffer, " ")?;
-        self.get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
+        self.get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .print(ctx, state)?;
         Ok(())
     }
 }

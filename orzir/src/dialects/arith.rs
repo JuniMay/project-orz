@@ -23,9 +23,17 @@ fn parse_binary(
 }
 
 fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> Result<()> {
-    op_inner.get_operand(0).unwrap().deref(&ctx.values).print(ctx, state)?;
+    op_inner
+        .get_operand(0)
+        .unwrap()
+        .deref(&ctx.values)
+        .print(ctx, state)?;
     write!(state.buffer, ", ")?;
-    op_inner.get_operand(1).unwrap().deref(&ctx.values).print(ctx, state)?;
+    op_inner
+        .get_operand(1)
+        .unwrap()
+        .deref(&ctx.values)
+        .print(ctx, state)?;
     write!(state.buffer, ": ")?;
     let result_tys = op_inner.result_tys(ctx);
     assert!(result_tys.len() == 1);

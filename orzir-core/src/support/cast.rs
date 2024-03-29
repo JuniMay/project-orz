@@ -82,7 +82,9 @@ impl CasterStorage {
     /// used to lookup, which will lead to a `None`.
     fn lookup<T: ?Sized + 'static>(&self, id: TypeId) -> Option<&Caster<T>> {
         let caster_id = TypeId::of::<Caster<T>>();
-        self.0.get(&(id, caster_id)).map(|c| c.downcast_ref().unwrap())
+        self.0
+            .get(&(id, caster_id))
+            .map(|c| c.downcast_ref().unwrap())
     }
 }
 
@@ -103,14 +105,18 @@ impl<S: Downcast + ?Sized> CastRef for S {
 
     fn cast_ref<T: ?Sized + 'static>(&self, caster_storage: &CasterStorage) -> Option<&T> {
         let any = self.as_any();
-        caster_storage.lookup::<T>(any.type_id()).map(|c| (c.cast_ref)(any))
+        caster_storage
+            .lookup::<T>(any.type_id())
+            .map(|c| (c.cast_ref)(any))
     }
 }
 
 impl<S: Downcast + ?Sized> CastMut for S {
     fn cast_mut<T: ?Sized + 'static>(&mut self, caster_storage: &CasterStorage) -> Option<&mut T> {
         let any = self.as_any_mut();
-        caster_storage.lookup::<T>((*any).type_id()).map(|c| (c.cast_mut)(any))
+        caster_storage
+            .lookup::<T>((*any).type_id())
+            .map(|c| (c.cast_mut)(any))
     }
 }
 

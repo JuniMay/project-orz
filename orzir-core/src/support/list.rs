@@ -142,7 +142,10 @@ where
 
         let mut node = N::default();
 
-        let before = self.node(after).ok_or(ListError::NodeNotFound(after))?.next();
+        let before = self
+            .node(after)
+            .ok_or(ListError::NodeNotFound(after))?
+            .next();
         let after_node = self.node_mut(after).ok_or(ListError::NodeNotFound(after))?;
 
         node.set_prev(Some(after));
@@ -167,8 +170,13 @@ where
 
         let mut node = N::default();
 
-        let after = self.node(before).ok_or(ListError::NodeNotFound(before))?.prev();
-        let before_node = self.node_mut(before).ok_or(ListError::NodeNotFound(before))?;
+        let after = self
+            .node(before)
+            .ok_or(ListError::NodeNotFound(before))?
+            .prev();
+        let before_node = self
+            .node_mut(before)
+            .ok_or(ListError::NodeNotFound(before))?;
 
         node.set_prev(after);
         node.set_next(Some(before));
@@ -186,7 +194,10 @@ where
     }
 
     pub fn remove(&mut self, key: K) -> Result<(), ListError<K>> {
-        let node = self.nodes.remove(&key).ok_or(ListError::NodeNotFound(key))?;
+        let node = self
+            .nodes
+            .remove(&key)
+            .ok_or(ListError::NodeNotFound(key))?;
         let prev = node.prev();
         let next = node.next();
 
@@ -246,7 +257,9 @@ where
     N: ListNode<K> + Debug,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_map().entries(self.nodes.iter().map(|(k, v)| (k, v))).finish()
+        f.debug_map()
+            .entries(self.nodes.iter().map(|(k, v)| (k, v)))
+            .finish()
     }
 }
 

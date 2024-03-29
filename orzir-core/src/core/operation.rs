@@ -188,7 +188,8 @@ pub trait Op: Downcast + Print + Verify {
         let mut results = Vec::new();
         for i in 0..self.num_results() {
             results.push(
-                self.get_result(i).unwrap_or_else(|| panic!("result at index {} not found", i)),
+                self.get_result(i)
+                    .unwrap_or_else(|| panic!("result at index {} not found", i)),
             );
         }
         results
@@ -199,7 +200,8 @@ pub trait Op: Downcast + Print + Verify {
         let mut regions = Vec::new();
         for i in 0..self.num_regions() {
             regions.push(
-                self.get_region(i).unwrap_or_else(|| panic!("region at index {} not found", i)),
+                self.get_region(i)
+                    .unwrap_or_else(|| panic!("region at index {} not found", i)),
             );
         }
         regions
@@ -404,7 +406,9 @@ impl Parse for OpObj {
         let op = parse_fn(ctx, state)?;
 
         if op.deref(&ctx.ops).as_ref().parent_block().is_none() {
-            op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent)?;
+            op.deref_mut(&mut ctx.ops)
+                .as_mut()
+                .set_parent_block(parent)?;
         }
 
         Ok(op)

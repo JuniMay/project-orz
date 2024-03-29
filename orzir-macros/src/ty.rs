@@ -23,7 +23,10 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
                         }
                     })
                     .collect::<Vec<_>>();
-                let fn_arg_names = fields.named.iter().map(|field| field.ident.clone().unwrap());
+                let fn_arg_names = fields
+                    .named
+                    .iter()
+                    .map(|field| field.ident.clone().unwrap());
                 quote! {
                     fn get(
                         ctx: &mut ::orzir_core::Context,
@@ -89,7 +92,10 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
         _ => panic!("only structs are supported to derive `Ty`"),
     };
 
-    let mnemonic = ast.attrs.iter().find(|attr| attr.path().is_ident("mnemonic"));
+    let mnemonic = ast
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("mnemonic"));
 
     if mnemonic.is_none() {
         panic!("`mnemonic` attribute is required to derive `Ty`");
@@ -112,7 +118,10 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
     let (primary, secondary) = mnemonic.split_once('.').unwrap();
 
     // generate the register_caster calls for the interfaces
-    let interfaces = ast.attrs.iter().find(|attr| attr.path().is_ident("interfaces"));
+    let interfaces = ast
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("interfaces"));
     let interfaces = if let Some(interfaces) = interfaces {
         if let Meta::List(list) = &interfaces.meta {
             let paths =
@@ -131,7 +140,10 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
         Vec::new()
     };
 
-    let verifiers = ast.attrs.iter().find(|attr| attr.path().is_ident("verifiers"));
+    let verifiers = ast
+        .attrs
+        .iter()
+        .find(|attr| attr.path().is_ident("verifiers"));
     // generate the register_caster calls for the verifiers
     let verifier_register_casters = if let Some(verifiers) = verifiers {
         if let Meta::List(list) = &verifiers.meta {

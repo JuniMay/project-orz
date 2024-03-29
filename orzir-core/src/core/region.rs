@@ -143,7 +143,11 @@ impl Parse for Region {
                 _ => {
                     let block = Block::parse(ctx, state)?;
                     // TODO: error handling.
-                    region.deref_mut(&mut ctx.regions).layout_mut().append(block).unwrap();
+                    region
+                        .deref_mut(&mut ctx.regions)
+                        .layout_mut()
+                        .append(block)
+                        .unwrap();
                 }
             }
         }

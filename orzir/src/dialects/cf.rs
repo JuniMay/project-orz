@@ -100,7 +100,10 @@ impl Parse for Branch {
 impl Print for Branch {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
         write!(state.buffer, " ")?;
-        self.get_operand(0).unwrap().deref(&ctx.values).print(ctx, state)?;
+        self.get_operand(0)
+            .unwrap()
+            .deref(&ctx.values)
+            .print(ctx, state)?;
         write!(state.buffer, ", ")?;
         self.get_successor(0).unwrap().print(ctx, state)?;
         write!(state.buffer, ", ")?;

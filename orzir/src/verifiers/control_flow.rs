@@ -12,7 +12,13 @@ pub trait IsTerminator: Op {
             anyhow::bail!("terminator must be in a region");
         }
 
-        if self.parent_block().unwrap().deref(&ctx.blocks).layout().back() != Some(self.self_ptr())
+        if self
+            .parent_block()
+            .unwrap()
+            .deref(&ctx.blocks)
+            .layout()
+            .back()
+            != Some(self.self_ptr())
         {
             anyhow::bail!("terminator is not the last operation in the block");
         }

@@ -31,7 +31,10 @@ impl RegionKindInterface for ModuleOp {}
 impl Verify for ModuleOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
         self.verify_interfaces(ctx)?;
-        self.get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
+        self.get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .verify(ctx)?;
         Ok(())
     }
 }
@@ -40,6 +43,8 @@ impl Parse for ModuleOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let parent_region = state.curr_region();
+
         let token = state.stream.peek()?;
         let symbol = if let TokenKind::ValueName(symbol) = &token.kind {
             let symbol = symbol.clone();
@@ -50,6 +55,12 @@ impl Parse for ModuleOp {
         };
 
         let op = ctx.ops.reserve();
+
+        if let Some(ref symbol) = symbol {
+            parent_region
+                .deref_mut(&mut ctx.regions)
+                .register_symbol(symbol.clone(), op)
+        }
 
         state.enter_region_from(op, RegionKind::Graph, 0);
         let region = Region::parse(ctx, state)?;
@@ -73,7 +84,10 @@ impl Print for ModuleOp {
             write!(state.buffer, " @{}", symbol)?;
         }
         write!(state.buffer, " ")?;
-        self.get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
+        self.get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .print(ctx, state)?;
 
         Ok(())
     }

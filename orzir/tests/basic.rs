@@ -29,14 +29,26 @@ fn test_basic_0() -> Result<()> {
 
     let region = Region::new(&mut ctx, RegionKind::Graph, module_op, 0);
     let block = Block::new(&mut ctx, true, region, None);
-    region.deref_mut(&mut ctx.regions).layout_mut().append(block).unwrap();
-    block.deref_mut(&mut ctx.blocks).layout_mut().append(func_op).unwrap();
+    region
+        .deref_mut(&mut ctx.regions)
+        .layout_mut()
+        .append(block)
+        .unwrap();
+    block
+        .deref_mut(&mut ctx.blocks)
+        .layout_mut()
+        .append(func_op)
+        .unwrap();
 
     let module_op = ModuleOp::new(&mut ctx, module_op, region, Some("foo".to_string()));
 
     let func_region = Region::new(&mut ctx, RegionKind::SsaCfg, func_op, 0);
     let func_block = Block::new(&mut ctx, true, func_region, None);
-    func_region.deref_mut(&mut ctx.regions).layout_mut().append(func_block).unwrap();
+    func_region
+        .deref_mut(&mut ctx.regions)
+        .layout_mut()
+        .append(func_block)
+        .unwrap();
 
     let func_op = FuncOp::new(&mut ctx, func_op, func_region, "foo".to_string(), func_ty);
 
@@ -48,11 +60,15 @@ fn test_basic_0() -> Result<()> {
 
     println!("{}", print_state.buffer);
 
-    assert!(module_op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>(&ctx));
+    assert!(module_op
+        .deref(&ctx.ops)
+        .impls::<dyn IsIsolatedFromAbove>(&ctx));
     assert!(module_op.deref(&ctx.ops).impls::<dyn NumRegions<1>>(&ctx));
     assert!(module_op.deref(&ctx.ops).impls::<dyn NumResults<0>>(&ctx));
 
-    assert!(func_op.deref(&ctx.ops).impls::<dyn IsIsolatedFromAbove>(&ctx));
+    assert!(func_op
+        .deref(&ctx.ops)
+        .impls::<dyn IsIsolatedFromAbove>(&ctx));
     assert!(func_op.deref(&ctx.ops).impls::<dyn NumRegions<1>>(&ctx));
     assert!(func_op.deref(&ctx.ops).impls::<dyn NumResults<0>>(&ctx));
 
@@ -70,12 +86,20 @@ fn test_basic_0() -> Result<()> {
         .has_ssa_dominance(&ctx, 0));
 
     assert!(
-        module_op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap().get_region_kind(&ctx, 0)
+        module_op
+            .deref(&ctx.ops)
+            .as_a::<ModuleOp>()
+            .unwrap()
+            .get_region_kind(&ctx, 0)
             == RegionKind::Graph
     );
 
     assert!(
-        func_op.deref(&ctx.ops).as_a::<FuncOp>().unwrap().get_region_kind(&ctx, 0)
+        func_op
+            .deref(&ctx.ops)
+            .as_a::<FuncOp>()
+            .unwrap()
+            .get_region_kind(&ctx, 0)
             == RegionKind::SsaCfg
     );
 
