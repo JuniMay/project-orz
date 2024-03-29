@@ -2,20 +2,18 @@ use std::fmt::Write;
 
 use anyhow::{Ok, Result};
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
-    Region, RegionKind, TokenKind, TyObj, Value, Verify, VerifyInterfaces,
+    ArenaPtr, Context, DataFlow, Dialect, Mnemonic, Op, OpMetadata, OpObj, Parse, ParseState,
+    Print, PrintState, Region, RegionInterface, RegionKind, RunVerifiers, TokenKind, TyObj, Value,
+    Verify,
 };
-use orzir_macros::Op;
+use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
 
 use super::builtin::{FunctionTy, Symbol};
-use crate::{
-    interfaces::*,
-    verifiers::{control_flow::*, *},
-};
+use crate::verifiers::{control_flow::*, *};
 
-#[derive(Op)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "func.func"]
-#[interfaces(RegionKindInterface)]
+// #[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
 pub struct FuncOp {
     #[metadata]
@@ -29,11 +27,11 @@ pub struct FuncOp {
     ty: ArenaPtr<TyObj>,
 }
 
-impl RegionKindInterface for FuncOp {}
+// impl RegionKindInterface for FuncOp {}
 
 impl Verify for FuncOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        self.verify_interfaces(ctx)?;
+        self.run_verifiers(ctx)?;
         self.ty.deref(&ctx.tys).as_ref().verify(ctx)?;
         self.get_region(0)
             .unwrap()
@@ -53,7 +51,22 @@ impl Parse for FuncOp {
         let symbol = Symbol::parse(ctx, state)?;
         state.exit_component();
 
-        let ty = FunctionTy::parse(ctx, state)?;
+        // just make the process canonical
+        let mnemonic = Mnemonic::new("builtin", "fn");
+        let parse_fn = ctx
+            .dialects
+            .get(mnemonic.primary())
+            .unwrap_or_else(|| panic!("dialect {} not found", mnemonic.primary().as_str()))
+            .get_ty_parse_fn(&mnemonic)
+            .unwrap_or_else(|| {
+                panic!(
+                    "parse function for {}.{} not found",
+                    mnemonic.primary().as_str(),
+                    mnemonic.secondary().as_str()
+                )
+            });
+
+        let ty = parse_fn(ctx, state)?;
 
         state.enter_region_from(op, RegionKind::SsaCfg, 0);
         let region = Region::parse(ctx, state)?;
@@ -85,7 +98,7 @@ impl Print for FuncOp {
     }
 }
 
-#[derive(Op)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "func.return"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
 pub struct ReturnOp {
@@ -153,7 +166,7 @@ impl Print for ReturnOp {
 /// ```text
 /// %result = func.call @callee(%arg1, %arg2) : int<32>
 /// ```
-#[derive(Op)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "func.call"]
 #[verifiers(VariadicResults, VariadicOperands, NumRegions<0>)]
 pub struct CallOp {
@@ -289,14 +302,15 @@ pub fn register(ctx: &mut Context) {
 #[cfg(test)]
 mod tests {
     use orzir_core::{
-        Context, Op, OpObj, Parse, ParseState, Print, PrintState, RegionKind, TokenStream,
+        Context, OpObj, Parse, ParseState, Print, PrintState, RegionInterface, RegionKind,
+        TokenStream,
     };
 
     use crate::dialects::{
         arith,
         builtin::{self, ModuleOp},
         cf,
-        func::{self, RegionKindInterface},
+        func::{self},
     };
 
     #[test]

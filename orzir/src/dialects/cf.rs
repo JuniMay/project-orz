@@ -2,17 +2,17 @@ use std::fmt::Write;
 
 use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
-    Successor, TokenKind, Value, Verify,
+    ArenaPtr, Context, ControlFlow, DataFlow, Dialect, Op, OpMetadata, OpObj, Parse, ParseState,
+    Print, PrintState, Successor, TokenKind, Value, Verify,
 };
-use orzir_macros::Op;
+use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
 
 use crate::verifiers::{control_flow::*, *};
 
 /// The jump operation.
 ///
 /// TODO: Make sure the operands number is ok to be zero.
-#[derive(Op)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "cf.jump"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 pub struct Jump {
@@ -52,7 +52,7 @@ impl Print for Jump {
     }
 }
 
-#[derive(Op)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "cf.branch"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
 pub struct Branch {
@@ -122,7 +122,9 @@ pub fn register(ctx: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{Context, Op, OpObj, Parse, ParseState, Print, PrintState, TokenStream};
+    use orzir_core::{
+        Context, OpObj, Parse, ParseState, Print, PrintState, RegionInterface, TokenStream,
+    };
 
     use crate::dialects::{
         arith,

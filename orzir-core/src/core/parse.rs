@@ -505,14 +505,10 @@ impl<'a> ParseState<'a> {
     pub fn exit_op(&mut self) { self.blocks.pop(); }
 
     /// Enter an arbitrary operation component.
-    pub fn enter_component_from(&mut self, op: ArenaPtr<OpObj>) {
-        self.ops.push(op);
-    }
+    pub fn enter_component_from(&mut self, op: ArenaPtr<OpObj>) { self.ops.push(op); }
 
     /// Exit an arbitrary operation component.
-    pub fn exit_component(&mut self) {
-        self.ops.pop().unwrap();
-    }
+    pub fn exit_component(&mut self) { self.ops.pop().unwrap(); }
 
     /// Enter a new region from the current op, with the region kind and index.
     pub fn enter_region_from(&mut self, op: ArenaPtr<OpObj>, kind: RegionKind, index: usize) {

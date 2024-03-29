@@ -9,9 +9,7 @@ use super::{
     parse::{ParseState, TokenKind},
     ty::{TyObj, Typed},
 };
-use crate::{
-    support::storage::ArenaPtr, Parse, Print, PrintState, Region, Verify, VerifyInterfaces,
-};
+use crate::{support::storage::ArenaPtr, Parse, Print, PrintState, Region, RunVerifiers, Verify};
 
 /// An SSA value.
 pub enum Value {
@@ -48,8 +46,8 @@ impl Typed for Value {
     }
 }
 
-impl VerifyInterfaces for Value {
-    fn verify_interfaces(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+impl RunVerifiers for Value {
+    fn run_verifiers(&self, _ctx: &Context) -> Result<()> { Ok(()) }
 }
 
 impl Verify for Value {

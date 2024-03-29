@@ -3,14 +3,11 @@ use std::fmt::Write;
 use anyhow::{anyhow, Result};
 use orzir_core::{
     ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
-    Region, RegionKind, TokenKind, Ty, TyObj, Verify, VerifyInterfaces,
+    Region, RegionInterface, RegionKind, RunVerifiers, TokenKind, Ty, TyObj, Verify,
 };
-use orzir_macros::{Op, Ty};
+use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface, Ty};
 
-use crate::{
-    interfaces::*,
-    verifiers::{control_flow::*, *},
-};
+use crate::verifiers::{control_flow::*, *};
 
 #[derive(Debug, Default, Clone)]
 pub struct Symbol(String);
@@ -68,9 +65,9 @@ impl From<&str> for Symbol {
     }
 }
 
-#[derive(Op)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "builtin.module"]
-#[interfaces(RegionKindInterface)]
+// #[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
 pub struct ModuleOp {
     #[metadata]
@@ -82,11 +79,11 @@ pub struct ModuleOp {
     symbol: Option<Symbol>,
 }
 
-impl RegionKindInterface for ModuleOp {}
+// impl RegionKindInterface for ModuleOp {}
 
 impl Verify for ModuleOp {
     fn verify(&self, ctx: &Context) -> Result<()> {
-        self.verify_interfaces(ctx)?;
+        self.run_verifiers(ctx)?;
         self.get_region(0)
             .unwrap()
             .deref(&ctx.regions)

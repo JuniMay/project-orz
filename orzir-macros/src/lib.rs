@@ -1,10 +1,15 @@
 use cast::{caster_impl, register_caster_impl};
+use interfaces::{
+    control_flow::derive_control_flow_impl, data_flow::derive_data_flow_impl,
+    region_interface::derive_region_interface_impl,
+};
 use proc_macro::TokenStream;
 use ty::derive_ty;
 
 use crate::operation::derive_op;
 
 mod cast;
+mod interfaces;
 mod operation;
 mod ty;
 
@@ -50,18 +55,9 @@ mod ty;
 /// 2. Using the `#[result(...)]`, `#[operand(...)]`, `#[successor(...)]`, and
 ///   `#[region(...)]` attributes, which means the field is a vector of the
 ///   corresponding type.
-///
-/// For the first way, the field should be a `Hold<T>` type, where `T` is an
-/// arena pointer of an entity (like successor). For the second way, the field
-/// should be a `HoldVec<T>` type.
-///
-/// The `Hold` of `HoldVec` is used for the `set_xxx` methods in the
-/// [Op](orzir_core::Op) trait.
 #[proc_macro_derive(
     Op,
-    attributes(
-        mnemonic, verifiers, interfaces, metadata, result, operand, successor, region,
-    )
+    attributes(mnemonic, verifiers, interfaces, metadata, result, operand,)
 )]
 pub fn op(item: TokenStream) -> TokenStream {
     derive_op(item.into())
@@ -105,4 +101,25 @@ pub fn caster(input: TokenStream) -> TokenStream { caster_impl(input.into()).unw
 #[proc_macro]
 pub fn register_caster(input: TokenStream) -> TokenStream {
     register_caster_impl(input.into()).unwrap().into()
+}
+
+#[proc_macro_derive(RegionInterface, attributes(region))]
+pub fn derive_region_interface(item: TokenStream) -> TokenStream {
+    derive_region_interface_impl(item.into())
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+#[proc_macro_derive(ControlFlow, attributes(successor))]
+pub fn derive_control_flow(item: TokenStream) -> TokenStream {
+    derive_control_flow_impl(item.into())
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+#[proc_macro_derive(DataFlow, attributes(result, operand))]
+pub fn derive_data_flow(item: TokenStream) -> TokenStream {
+    derive_data_flow_impl(item.into())
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }

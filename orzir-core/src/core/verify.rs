@@ -2,10 +2,10 @@ use anyhow::Result;
 
 use crate::Context;
 
-pub trait Verify: VerifyInterfaces {
-    fn verify(&self, ctx: &Context) -> Result<()> { self.verify_interfaces(ctx) }
+pub trait Verify: RunVerifiers {
+    fn verify(&self, ctx: &Context) -> Result<()> { self.run_verifiers(ctx) }
 }
 
-pub trait VerifyInterfaces {
-    fn verify_interfaces(&self, ctx: &Context) -> Result<()>;
+pub trait RunVerifiers {
+    fn run_verifiers(&self, ctx: &Context) -> Result<()>;
 }

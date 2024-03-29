@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::{layout::OpList, parse::ParseState, value::Value};
 use crate::{
     core::parse::TokenKind, support::storage::ArenaPtr, Context, OpObj, Parse, Print, PrintState,
-    Region, TyObj, Typed, Verify, VerifyInterfaces,
+    Region, RunVerifiers, TyObj, Typed, Verify,
 };
 
 /// The block in the region.
@@ -26,8 +26,8 @@ pub struct Block {
     layout: OpList,
 }
 
-impl VerifyInterfaces for Block {
-    fn verify_interfaces(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+impl RunVerifiers for Block {
+    fn run_verifiers(&self, _ctx: &Context) -> Result<()> { Ok(()) }
 }
 
 impl Verify for Block {

@@ -15,7 +15,7 @@ use crate::{
         cast::{CastMut, CastRef},
         storage::ArenaPtr,
     },
-    Parse, Print, PrintState, Region, TyObj, Typed, Verify,
+    ControlFlow, DataFlow, Parse, Print, PrintState, Region, RegionInterface, Verify,
 };
 
 /// The successor.
@@ -110,7 +110,7 @@ impl OpMetadata {
 }
 
 /// The trait of all operations.
-pub trait Op: Downcast + Print + Verify {
+pub trait Op: Downcast + Print + Verify + DataFlow + ControlFlow + RegionInterface {
     /// Get the mnemonic of the type.
     fn mnemonic(&self) -> Mnemonic;
 
@@ -145,140 +145,6 @@ pub trait Op: Downcast + Print + Verify {
         let old = self.metadata_mut().parent_block.take();
         self.metadata_mut().parent_block = parent_block;
         Ok(old)
-    }
-
-    /// Get the number of operands.
-    fn num_operands(&self) -> usize;
-
-    /// Get the number of results.
-    fn num_results(&self) -> usize;
-
-    /// Get the number of regions.
-    fn num_regions(&self) -> usize;
-
-    /// Get the number of successors.
-    fn num_successors(&self) -> usize;
-
-    /// Get the operand by index.
-    fn get_operand(&self, index: usize) -> Option<ArenaPtr<Value>>;
-
-    /// Get the result by index.
-    fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>>;
-
-    /// Get the region by index.
-    fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>>;
-
-    /// Get the successor by index.
-    fn get_successor(&self, index: usize) -> Option<&Successor>;
-
-    /// Get the operands
-    fn operands(&self) -> Vec<ArenaPtr<Value>> {
-        let mut operands = Vec::new();
-        for i in 0..self.num_operands() {
-            operands.push(
-                self.get_operand(i)
-                    .unwrap_or_else(|| panic!("operand at index {} not found", i)),
-            );
-        }
-        operands
-    }
-
-    /// Get the results
-    fn results(&self) -> Vec<ArenaPtr<Value>> {
-        let mut results = Vec::new();
-        for i in 0..self.num_results() {
-            results.push(
-                self.get_result(i)
-                    .unwrap_or_else(|| panic!("result at index {} not found", i)),
-            );
-        }
-        results
-    }
-
-    /// Get the regions
-    fn regions(&self) -> Vec<ArenaPtr<Region>> {
-        let mut regions = Vec::new();
-        for i in 0..self.num_regions() {
-            regions.push(
-                self.get_region(i)
-                    .unwrap_or_else(|| panic!("region at index {} not found", i)),
-            );
-        }
-        regions
-    }
-
-    /// Get the successors
-    fn successors(&self) -> Vec<&Successor> {
-        let mut successors = Vec::new();
-        for i in 0..self.num_successors() {
-            successors.push(
-                self.get_successor(i)
-                    .unwrap_or_else(|| panic!("successor at index {} not found", i)),
-            );
-        }
-        successors
-    }
-
-    /// Set the operand by index.
-    ///
-    /// If success, return the original operand, if any. Otherwise, return an
-    /// error.
-    fn set_operand(
-        &mut self,
-        index: usize,
-        operand: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>>;
-
-    /// Set the result by index.
-    ///
-    /// If success, return the original result, if any. Otherwise, return an
-    /// error.
-    fn set_result(
-        &mut self,
-        index: usize,
-        result: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>>;
-
-    /// Set the region by index.
-    ///
-    /// If success, return the original region, if any. Otherwise, return an
-    /// error.
-    fn set_region(
-        &mut self,
-        index: usize,
-        region: ArenaPtr<Region>,
-    ) -> Result<Option<ArenaPtr<Region>>>;
-
-    /// Set the successor by index.
-    ///
-    /// If success, return the original successor, if any. Otherwise, return an
-    /// error.
-    fn set_successor(&mut self, index: usize, successor: Successor) -> Result<Option<Successor>>;
-
-    /// Get the types of operands.
-    fn operand_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
-        let mut tys = Vec::new();
-        for i in 0..self.num_operands() {
-            if let Some(operand) = self.get_operand(i) {
-                tys.push(operand.deref(&ctx.values).ty(ctx));
-            } else {
-                panic!("operand {} not found", i);
-            }
-        }
-        tys
-    }
-
-    /// Get the types of the results.
-    fn result_tys(&self, ctx: &Context) -> Vec<ArenaPtr<TyObj>> {
-        let mut tys = Vec::new();
-        for i in 0..self.num_results() {
-            if let Some(result) = self.get_result(i) {
-                tys.push(result.deref(&ctx.values).ty(ctx));
-            } else {
-                panic!("result {} not found", i);
-            }
-        }
-        tys
     }
 
     /// Get the parent region of the operation.

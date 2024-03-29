@@ -6,6 +6,7 @@ pub use crate::{
         block::Block,
         context::Context,
         dialect::Dialect,
+        interfaces::{ControlFlow, DataFlow, RegionInterface},
         mnemonic::{Mnemonic, MnemonicSegment},
         operation::{Op, OpMetadata, OpObj, OpParseFn, Successor},
         parse::{Parse, ParseState, TokenKind, TokenStream},
@@ -13,7 +14,7 @@ pub use crate::{
         region::{Region, RegionKind},
         ty::{Ty, TyObj, TyParseFn, Typed},
         value::Value,
-        verify::{Verify, VerifyInterfaces},
+        verify::{RunVerifiers, Verify},
     },
     support::{
         cast::{Caster, CasterStorage},

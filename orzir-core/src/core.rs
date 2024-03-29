@@ -1,6 +1,7 @@
 pub mod block;
 pub mod context;
 pub mod dialect;
+pub mod interfaces;
 pub mod layout;
 pub mod mnemonic;
 pub mod operation;

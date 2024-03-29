@@ -10,8 +10,8 @@ use super::{
     symbol::{NameManager, SymbolTable},
 };
 use crate::{
-    core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState, Verify,
-    VerifyInterfaces,
+    core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState,
+    RunVerifiers, Verify,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -39,8 +39,8 @@ pub struct Region {
     index: usize,
 }
 
-impl VerifyInterfaces for Region {
-    fn verify_interfaces(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+impl RunVerifiers for Region {
+    fn run_verifiers(&self, _ctx: &Context) -> Result<()> { Ok(()) }
 }
 
 impl Verify for Region {

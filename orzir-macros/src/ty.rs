@@ -122,7 +122,7 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
         .attrs
         .iter()
         .find(|attr| attr.path().is_ident("interfaces"));
-    let interfaces = if let Some(interfaces) = interfaces {
+    let interface_register_casters = if let Some(interfaces) = interfaces {
         if let Meta::List(list) = &interfaces.meta {
             let paths =
                 list.parse_args_with(Punctuated::<Path, syn::Token![,]>::parse_terminated)?;
@@ -162,8 +162,7 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
     } else {
         Vec::new()
     };
-    // call the verifier to implement
-    // [`VerifyInterfaces`](orzir_core::VerifyInterfaces) trait.
+    // call the verifier to implement `RunVerifiers` trairt.
     let verifier_calls = if let Some(verifiers) = verifiers {
         if let Meta::List(list) = &verifiers.meta {
             let paths =
@@ -183,8 +182,8 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
     };
 
     let verify_interfaces_impl = quote! {
-        impl ::orzir_core::VerifyInterfaces for #ident {
-            fn verify_interfaces(&self, ctx: &::orzir_core::Context) -> ::anyhow::Result<()> {
+        impl ::orzir_core::RunVerifiers for #ident {
+            fn run_verifiers(&self, ctx: &::orzir_core::Context) -> ::anyhow::Result<()> {
                 #(#verifier_calls)*
                 Ok(())
             }
@@ -241,7 +240,7 @@ pub fn derive_ty(item: TokenStream) -> syn::Result<TokenStream> {
                 let mnemonic = Self::mnemonic_static();
                 ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_ty(mnemonic, parse_fn);
 
-                #(#interfaces)*
+                #(#interface_register_casters)*
                 #(#verifier_register_casters)*
             }
         }

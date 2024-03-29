@@ -3,10 +3,10 @@ use std::fmt::Write;
 use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print, PrintState,
-    TokenKind, TyObj, Value, Verify,
+    ArenaPtr, Context, DataFlow, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print,
+    PrintState, TokenKind, TyObj, Value, Verify,
 };
-use orzir_macros::Op;
+use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
 
 use crate::verifiers::*;
 
@@ -41,7 +41,7 @@ fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> Res
     Ok(())
 }
 
-#[derive(Op)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "arith.iconst"]
 #[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
 pub struct IConstOp {
@@ -115,7 +115,7 @@ impl Print for IConstOp {
     }
 }
 
-#[derive(Op)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "arith.iadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
@@ -168,7 +168,9 @@ pub fn register(ctx: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{Context, Op, OpObj, Parse, ParseState, Print, PrintState, TokenStream};
+    use orzir_core::{
+        Context, OpObj, Parse, ParseState, Print, PrintState, RegionInterface, TokenStream,
+    };
 
     use crate::dialects::{
         arith,
