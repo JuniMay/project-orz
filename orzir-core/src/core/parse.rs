@@ -1,19 +1,29 @@
+//! The parser for the IR program.
+//!
+//! OrzIR is similar to MLIR, which is completely extensible, which requires a
+//! modular parser to parse the IR program. But different from the MLIR, here we
+//! use a simple tokenizer and only support a closed-set of tokens.
+
 use std::{
     cmp, fmt,
     io::{Cursor, Read},
 };
 
-use anyhow::Result;
 use thiserror::Error;
 
 use super::context::Context;
-use crate::{ArenaPtr, Block, OpObj, Region, RegionKind};
+use crate::{parse_error, support::error::ParseResult, ArenaPtr, Block, OpObj, Region, RegionKind};
 
 /// The position in the source code.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Pos {
+    /// The line number.
     line: u32,
+    /// The column number.
     column: u32,
+    /// The byte offset.
+    ///
+    /// This will be used to rollback the reader.
     offset: u64,
 }
 
@@ -37,17 +47,16 @@ impl Ord for Pos {
     fn cmp(&self, other: &Self) -> cmp::Ordering { self.offset.cmp(&other.offset) }
 }
 
-impl Default for Pos {
-    fn default() -> Self {
+impl Pos {
+    pub(self) fn new() -> Self {
         Self {
             line: 1,
             column: 0,
             offset: 0,
         }
     }
-}
 
-impl Pos {
+    /// Update the position with a character.
     pub(self) fn update(&mut self, c: char) {
         if c == '\n' {
             self.line += 1;
@@ -62,7 +71,9 @@ impl Pos {
 /// The span of a token/item in the source code.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Span {
+    /// The start position.
     pub(self) start: Pos,
+    /// The end position.
     pub(self) end: Pos,
 }
 
@@ -83,6 +94,9 @@ impl Span {
 #[derive(Clone, PartialEq, Eq)]
 pub enum TokenKind {
     /// A character
+    ///
+    /// For delimiters, only `:`, `=`, `,`, `;` and `-` are supported. And for
+    /// brackets, only `(`, `)`, `{`, `}`, `[`, `]`, `<`, `>` are supported.
     Char(char),
     /// `->`
     Arrow,
@@ -91,31 +105,125 @@ pub enum TokenKind {
     /// A block name starting with `%`.
     ValueName(String),
     /// A type alias starting with `!`.
+    ///
+    /// This is the same with MLIR, but not used yet.
     TyAlias(String),
     /// A symbol name starting with `@`.
     SymbolName(String),
-    /// A string literal.
-    Quoted(String),
     /// Other tokenized string.
     ///
     /// This represents contiguous alphanumeric or with `_`, `-`, `.`
-    /// characters.
+    /// characters. And if the string is quoted, there can be escape sequences.
     Tokenized(String),
     /// End of file.
     Eof,
 }
 
+/// This is used as placeholder for the expected token kind.
+pub enum ExpectedTokenKind {
+    Char(char),
+    Arrow,
+    BlockLabel,
+    ValueName,
+    TyAlias,
+    SymbolName,
+    Tokenized,
+    Eof,
+}
+
+impl ExpectedTokenKind {
+    pub fn is_compatible(&self, kind: &TokenKind) -> bool {
+        match self {
+            ExpectedTokenKind::Char(c) => {
+                if let TokenKind::Char(ch) = kind {
+                    c == ch
+                } else {
+                    false
+                }
+            }
+            ExpectedTokenKind::Arrow => matches!(kind, TokenKind::Arrow),
+            ExpectedTokenKind::BlockLabel => matches!(kind, TokenKind::BlockLabel(_)),
+            ExpectedTokenKind::ValueName => matches!(kind, TokenKind::ValueName(_)),
+            ExpectedTokenKind::TyAlias => matches!(kind, TokenKind::TyAlias(_)),
+            ExpectedTokenKind::SymbolName => matches!(kind, TokenKind::SymbolName(_)),
+            ExpectedTokenKind::Tokenized => matches!(kind, TokenKind::Tokenized(_)),
+            ExpectedTokenKind::Eof => matches!(kind, TokenKind::Eof),
+        }
+    }
+}
+
+/// Get an expected token kind.
+#[macro_export]
+macro_rules! token {
+    (':') => {
+        $crate::ExpectedTokenKind::Char(':')
+    };
+    ('=') => {
+        $crate::ExpectedTokenKind::Char('=')
+    };
+    ('(') => {
+        $crate::ExpectedTokenKind::Char('(')
+    };
+    (')') => {
+        $crate::ExpectedTokenKind::Char(')')
+    };
+    ('{') => {
+        $crate::ExpectedTokenKind::Char('{')
+    };
+    ('}') => {
+        $crate::ExpectedTokenKind::Char('}')
+    };
+    ('[') => {
+        $crate::ExpectedTokenKind::Char('[')
+    };
+    (']') => {
+        $crate::ExpectedTokenKind::Char(']')
+    };
+    ('<') => {
+        $crate::ExpectedTokenKind::Char('<')
+    };
+    ('>') => {
+        $crate::ExpectedTokenKind::Char('>')
+    };
+    (',') => {
+        $crate::ExpectedTokenKind::Char(',')
+    };
+    (';') => {
+        $crate::ExpectedTokenKind::Char(';')
+    };
+    ("->") => {
+        $crate::ExpectedTokenKind::Arrow
+    };
+    ("^...") => {
+        $crate::ExpectedTokenKind::BlockLabel
+    };
+    ("%...") => {
+        $crate::ExpectedTokenKind::ValueName
+    };
+    ("!...") => {
+        $crate::ExpectedTokenKind::TyAlias
+    };
+    ("@...") => {
+        $crate::ExpectedTokenKind::SymbolName
+    };
+    ("...") => {
+        $crate::ExpectedTokenKind::Tokenized
+    };
+    ("EOF") => {
+        $crate::ExpectedTokenKind::Eof
+    };
+}
+
 impl fmt::Display for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TokenKind::Char(c) => write!(f, "{}", c),
-            TokenKind::Arrow => write!(f, "->"),
-            TokenKind::BlockLabel(s) => write!(f, "^{}", s),
-            TokenKind::ValueName(s) => write!(f, "%{}", s),
-            TokenKind::TyAlias(s) => write!(f, "!{}", s),
-            TokenKind::SymbolName(s) => write!(f, "@{}", s),
-            TokenKind::Quoted(s) => write!(f, "Quoted({})", s),
-            TokenKind::Tokenized(s) => write!(f, "Tokenized({})", s),
+            TokenKind::Char(c) => write!(f, "`{}`", c),
+            TokenKind::Arrow => write!(f, "`->`"),
+            TokenKind::BlockLabel(s) => write!(f, "`^{}`", s),
+            TokenKind::ValueName(s) => write!(f, "`%{}`", s),
+            TokenKind::TyAlias(s) => write!(f, "`!{}`", s),
+            TokenKind::SymbolName(s) => write!(f, "`@{}`", s),
+            TokenKind::Tokenized(s) => write!(f, "`{}`", s),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -125,8 +233,30 @@ impl fmt::Debug for TokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self) }
 }
 
+impl fmt::Display for ExpectedTokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExpectedTokenKind::Char(c) => write!(f, "`{}`", c),
+            ExpectedTokenKind::Arrow => write!(f, "`->`"),
+            ExpectedTokenKind::BlockLabel => write!(f, "block label (`^...`)"),
+            ExpectedTokenKind::ValueName => write!(f, "value name (`%...`)"),
+            ExpectedTokenKind::TyAlias => write!(f, "type alias (`!...`)"),
+            ExpectedTokenKind::SymbolName => write!(f, "symbol name (`@...`)"),
+            ExpectedTokenKind::Tokenized => write!(f, "tokenized string (`...`)"),
+            ExpectedTokenKind::Eof => write!(f, "EOF"),
+        }
+    }
+}
+
+impl fmt::Debug for ExpectedTokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self) }
+}
+
+/// A spanned token.
 pub struct Token {
+    /// The kind of the token.
     pub kind: TokenKind,
+    /// The span of the token.
     pub span: Span,
 }
 
@@ -137,6 +267,9 @@ impl Token {
 }
 
 /// A simple reader.
+///
+/// This reader accespts a slice of string and read the characters one by one.
+/// Note that UTF-8 characters are not supported yet.
 pub(self) struct SliceReader<'a> {
     cursor: Cursor<&'a str>,
 }
@@ -148,6 +281,7 @@ impl<'a> SliceReader<'a> {
         }
     }
 
+    /// Read a character from the reader.
     fn read_char(&mut self) -> Option<char> {
         // only support ascii characters
         let mut buf = [0; 1];
@@ -158,6 +292,7 @@ impl<'a> SliceReader<'a> {
         }
     }
 
+    /// Rollback the reader to the given position.
     fn rollback(&mut self, pos: &Pos) { self.cursor.set_position(pos.offset); }
 }
 
@@ -167,29 +302,57 @@ impl<'a> SliceReader<'a> {
 pub struct TokenStream<'a> {
     /// The reader to populate the characters.
     reader: SliceReader<'a>,
-    /// The current character.
-    ///
-    /// The backtracking is only one character.
+    /// The buffered character for peeking.
     buffered_char: Option<char>,
     /// The buffered token for peeking.
     buffered_token: Option<Token>,
-    /// Current pos.
+    /// Current position.
     pos: Pos,
-
     /// Checkpoint stack.
+    ///
+    /// This is used for backtracking the stream, which is useful if there are
+    /// optional components.
     ckpts: Vec<Pos>,
 }
 
+#[derive(Debug)]
+pub struct ExpectedList<T>(Vec<T>);
+
+impl<T> From<Vec<T>> for ExpectedList<T> {
+    fn from(v: Vec<T>) -> Self { Self(v) }
+}
+
+impl<T: fmt::Display> fmt::Display for ExpectedList<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, item) in self.0.iter().enumerate() {
+            if i > 0 {
+                write!(f, ", ")?;
+            }
+            write!(f, "{}", item)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Error)]
-pub enum BasicParseError {
-    #[error("unclosed block comment at {0}")]
-    UnclosedBlockComment(Span),
+pub enum ParseErrorKind {
+    #[error("unclosed block comment")]
+    UnclosedBlockComment,
 
-    #[error("invalid escape sequence at {0}")]
-    InvalidEscapeSequence(Pos),
+    #[error("invalid character: {1}, expected one of {0}")]
+    InvalidCharacter(ExpectedList<char>, char),
 
-    #[error("invalid character at {0}")]
-    InvalidCharacter(Pos),
+    #[error("unexpected eof")]
+    UnexpectedEof,
+
+    #[error("invalid token: {1}, expected one of {0}")]
+    InvalidToken(ExpectedList<ExpectedTokenKind>, TokenKind),
+
+    #[error("duplicated value name: {0}")]
+    DuplicatedValueName(String),
+
+    #[error("invalid result number: {1}, expected {0}")]
+    InvalidResultNumber(usize, usize),
 }
 
 impl<'a> TokenStream<'a> {
@@ -198,7 +361,7 @@ impl<'a> TokenStream<'a> {
             reader: SliceReader::new(slice),
             buffered_char: None,
             buffered_token: None,
-            pos: Pos::default(),
+            pos: Pos::new(),
             ckpts: Vec::new(),
         }
     }
@@ -207,13 +370,13 @@ impl<'a> TokenStream<'a> {
     ///
     /// This will return the buffered character if exists, otherwise read from
     /// the reader, buffer it and return.
-    fn peek_char(&mut self) -> Result<Option<char>> {
-        if let Some(c) = self.buffered_char {
-            return Ok(Some(c));
+    fn peek_char(&mut self) -> Option<char> {
+        if let Some(ch) = self.buffered_char {
+            return Some(ch);
         }
         let ch = self.reader.read_char();
         self.buffered_char = ch;
-        Ok(ch)
+        ch
     }
 
     /// Consume the buffered character.
@@ -225,67 +388,72 @@ impl<'a> TokenStream<'a> {
     }
 
     /// Peek and consume the next character.
-    fn next_char(&mut self) -> Result<Option<char>> {
-        let c = self.peek_char()?;
+    fn next_char(&mut self) -> Option<char> {
+        let c = self.peek_char();
         self.consume_char();
-        Ok(c)
+        c
     }
 
-    fn skip_line_comment(&mut self) -> Result<()> {
+    fn skip_line_comment(&mut self) {
         loop {
-            match self.next_char()? {
+            match self.next_char() {
                 Some('\n') | None => break,
                 _ => {}
             }
         }
-        Ok(())
     }
 
-    fn skip_block_comment(&mut self) -> Result<()> {
+    fn skip_block_comment(&mut self) -> ParseResult<()> {
         let mut depth = 1;
         let start = self.pos;
         while depth > 0 {
-            match self.next_char()? {
+            match self.next_char() {
                 Some('/') => {
-                    if let Some('*') = self.next_char()? {
+                    if let Some('*') = self.next_char() {
                         depth += 1;
                     }
                 }
                 Some('*') => {
-                    if let Some('/') = self.next_char()? {
+                    if let Some('/') = self.next_char() {
                         depth -= 1;
                     }
                 }
                 Some(_) => {}
                 None => {
-                    return Err(
-                        BasicParseError::UnclosedBlockComment(Span::new(start, self.pos)).into(),
-                    );
+                    return parse_error!(
+                        Span::new(start, self.pos),
+                        ParseErrorKind::UnclosedBlockComment
+                    )
+                    .into();
                 }
             }
         }
         Ok(())
     }
 
-    fn skip_whitespace(&mut self) -> Result<()> {
+    fn skip_whitespace(&mut self) -> ParseResult<()> {
         loop {
-            match self.peek_char()? {
+            match self.peek_char() {
                 Some(c) if c.is_whitespace() => {
                     self.consume_char();
                 }
                 Some('/') => {
                     self.consume_char();
-                    match self.peek_char()? {
+                    match self.peek_char() {
                         Some('/') => {
                             self.consume_char();
-                            self.skip_line_comment()?
+                            self.skip_line_comment()
                         }
                         Some('*') => {
                             self.consume_char();
                             self.skip_block_comment()?
                         }
-                        Some(_) => {
-                            return Err(BasicParseError::InvalidCharacter(self.pos).into());
+                        Some(c) => {
+                            return parse_error!(
+                                Span::new(self.pos, self.pos),
+                                ParseErrorKind::InvalidCharacter(vec!['/', '*'].into(), c)
+                            )
+                            .into();
                         }
                         None => break,
                     }
@@ -300,10 +468,10 @@ impl<'a> TokenStream<'a> {
     /// Get and buffer the next token.
     ///
     /// This will get the next token, buffer it and return the reference.
-    fn buffer_next(&mut self) -> Result<&Token> {
+    fn buffer_next(&mut self) -> ParseResult<&Token> {
         self.skip_whitespace()?;
         let start = self.pos;
-        let kind = match self.peek_char()? {
+        let kind = match self.peek_char() {
             Some('^') => {
                 self.consume_char();
                 let s = self.handle_identifier()?;
@@ -340,10 +508,6 @@ impl<'a> TokenStream<'a> {
                     TokenKind::SymbolName(s)
                 }
             }
-            Some('"') => {
-                // not consume here, just hand over to handle_identifier
-                TokenKind::Quoted(self.handle_identifier()?)
-            }
             Some(c)
                 if matches!(
                     c,
@@ -355,7 +519,7 @@ impl<'a> TokenStream<'a> {
             }
             Some('-') => {
                 self.consume_char();
-                match self.peek_char()? {
+                match self.peek_char() {
                     Some('>') => {
                         self.consume_char();
                         TokenKind::Arrow
@@ -383,8 +547,12 @@ impl<'a> TokenStream<'a> {
         Ok(self.buffered_token.as_ref().unwrap())
     }
 
+    /// Set a checkpoint.
     pub fn checkpoint(&mut self) { self.ckpts.push(self.pos); }
 
+    /// Rollback to the last checkpoint.
+    ///
+    /// This will also reset the buffered token.
     pub fn rollback(&mut self) {
         self.pos = self.ckpts.pop().unwrap();
         self.reader.rollback(&self.pos);
@@ -394,9 +562,8 @@ impl<'a> TokenStream<'a> {
 
     /// Peek the next token.
     ///
-    /// This will get the front token from the buffer, if the buffer is empty,
-    /// this will call `peek_next` to get the next token.
-    pub fn peek(&mut self) -> Result<&Token> {
+    /// This will return the buffered token if exists, otherwise buffer the next
+    pub fn peek(&mut self) -> ParseResult<&Token> {
         if self.buffered_token.is_none() {
             self.buffer_next()?;
         }
@@ -404,7 +571,7 @@ impl<'a> TokenStream<'a> {
     }
 
     /// Consume the next token.
-    pub fn consume(&mut self) -> Result<Token> {
+    pub fn consume(&mut self) -> ParseResult<Token> {
         if self.buffered_token.is_none() {
             self.buffer_next()?;
         }
@@ -412,7 +579,7 @@ impl<'a> TokenStream<'a> {
         Ok(token)
     }
 
-    pub fn consume_if(&mut self, kind: TokenKind) -> Result<Option<Token>> {
+    pub fn consume_if(&mut self, kind: TokenKind) -> ParseResult<Option<Token>> {
         if self.peek()?.kind == kind {
             Ok(Some(self.consume()?))
         } else {
@@ -420,9 +587,9 @@ impl<'a> TokenStream<'a> {
         }
     }
 
-    fn handle_identifier(&mut self) -> Result<String> {
+    fn handle_identifier(&mut self) -> ParseResult<String> {
         let mut s = String::new();
-        let inside_quote = match self.peek_char()? {
+        let inside_quote = match self.peek_char() {
             Some('"') => {
                 self.consume_char();
                 s.push('"');
@@ -431,7 +598,7 @@ impl<'a> TokenStream<'a> {
             _ => false,
         };
         loop {
-            match self.peek_char()? {
+            match self.peek_char() {
                 Some(c) if c.is_alphanumeric() || c == '_' || c == '-' || c == '.' => {
                     s.push(c);
                     self.consume_char();
@@ -443,10 +610,14 @@ impl<'a> TokenStream<'a> {
                 }
                 Some('\\') if inside_quote => {
                     self.consume_char();
-                    match self.next_char()? {
+                    match self.next_char() {
                         Some(c) => s.push(c),
                         None => {
-                            return Err(BasicParseError::InvalidEscapeSequence(self.pos).into());
+                            return parse_error!(
+                                Span::new(self.pos, self.pos),
+                                ParseErrorKind::UnexpectedEof
+                            )
+                            .into();
                         }
                     }
                 }
@@ -464,25 +635,33 @@ impl<'a> TokenStream<'a> {
         Ok(s)
     }
 
-    pub fn expect(&mut self, kind: TokenKind) -> Result<()> {
+    pub fn expect(&mut self, kind: ExpectedTokenKind) -> ParseResult<()> {
         let token = self.consume()?;
-        if token.kind == kind {
+        if kind.is_compatible(&token.kind) {
             Ok(())
         } else {
-            // Err(BasicParseError::InvalidToken(token.span, kind).into())
-            anyhow::bail!("invalid token: `{:?}`, expected `{:?}`", token.kind, kind)
+            parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![kind].into(), token.kind)
+            )
+            .into()
         }
     }
 }
 
+/// The parse trait for all the components in IR.
 pub trait Parse {
     type Item;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item>;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item>;
 }
 
-pub type ParseFn<Item> = fn(&mut Context, &mut ParseState) -> Result<Item>;
+pub type ParseFn<Item> = fn(&mut Context, &mut ParseState) -> ParseResult<Item>;
 
+/// The parse state for the parser.
+///
+/// This is used to store the current state of the parser, including the stream,
+/// the stack of ops, regions, blocks, region info, and result names.
 pub struct ParseState<'a> {
     pub stream: TokenStream<'a>,
     /// The stack of ops.
@@ -527,9 +706,7 @@ impl<'a> ParseState<'a> {
     }
 
     /// Exit the current region.
-    pub fn exit_region(&mut self) {
-        self.region_info.pop().unwrap();
-    }
+    pub fn exit_region(&mut self) { self.region_info.pop().unwrap(); }
 
     /// Enter a new block from the current region.
     pub fn enter_block_from(&mut self, region: ArenaPtr<Region>) { self.regions.push(region); }
@@ -561,9 +738,9 @@ impl<T: Parse> Parse for Option<T> {
 
     /// Parsing an optional item.
     ///
-    /// This require the parser of `T` to backtrack the stream if the parsing
-    /// fails.
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    /// This will first try to parse the item, and if failed, rollback the
+    /// stream.
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         state.stream.checkpoint();
         match T::parse(ctx, state) {
             Ok(item) => Ok(Some(item)),

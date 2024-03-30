@@ -1,5 +1,3 @@
-use anyhow::Result;
-
 use crate::{ArenaPtr, Context, Region, RegionKind, Successor, TyObj, Typed, Value};
 
 /// Builtin region interface.
@@ -14,11 +12,7 @@ pub trait RegionInterface {
     fn get_region(&self, index: usize) -> Option<ArenaPtr<Region>>;
 
     /// Set the region at the given index and return the old region (if any).
-    fn set_region(
-        &mut self,
-        index: usize,
-        region: ArenaPtr<Region>,
-    ) -> Result<Option<ArenaPtr<Region>>>;
+    fn set_region(&mut self, index: usize, region: ArenaPtr<Region>) -> Option<ArenaPtr<Region>>;
 
     /// Get all regions.
     fn regions(&self) -> Vec<ArenaPtr<Region>> {
@@ -60,18 +54,10 @@ pub trait DataFlow {
     fn get_result(&self, index: usize) -> Option<ArenaPtr<Value>>;
 
     /// Set the operand at the given index and return the old operand (if any).
-    fn set_operand(
-        &mut self,
-        index: usize,
-        operand: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>>;
+    fn set_operand(&mut self, index: usize, operand: ArenaPtr<Value>) -> Option<ArenaPtr<Value>>;
 
     /// Set the result at the given index and return the old result (if any).
-    fn set_result(
-        &mut self,
-        index: usize,
-        result: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>>;
+    fn set_result(&mut self, index: usize, result: ArenaPtr<Value>) -> Option<ArenaPtr<Value>>;
 
     /// Get all operands.
     fn operands(&self) -> Vec<ArenaPtr<Value>> {
@@ -117,7 +103,7 @@ pub trait ControlFlow {
 
     /// Set the successor at the given index and return the old successor (if
     /// any).
-    fn set_successor(&mut self, index: usize, successor: Successor) -> Result<Option<Successor>>;
+    fn set_successor(&mut self, index: usize, successor: Successor) -> Option<Successor>;
 
     /// Get all successors.
     fn successors(&self) -> Vec<&Successor> {

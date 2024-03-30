@@ -1,7 +1,5 @@
 use std::{cell::RefCell, fmt::Write};
 
-use anyhow::Result;
-
 use super::{
     block::Block,
     layout::BlockList,
@@ -10,8 +8,8 @@ use super::{
     symbol::{NameManager, SymbolTable},
 };
 use crate::{
-    core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState,
-    RunVerifiers, Verify,
+    core::parse::TokenKind, support::storage::ArenaPtr, token, Context, Parse, ParseResult, Print,
+    PrintResult, PrintState, RunVerifiers, VerificationResult, Verify,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -40,11 +38,11 @@ pub struct Region {
 }
 
 impl RunVerifiers for Region {
-    fn run_verifiers(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+    fn run_verifiers(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
 }
 
 impl Verify for Region {
-    fn verify(&self, ctx: &Context) -> Result<()> {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
         for block in self.layout().iter() {
             block.deref(&ctx.blocks).verify(ctx)?;
         }
@@ -124,8 +122,8 @@ impl Parse for Region {
     ///
     /// This require the parent operation parser to pass the builder to the
     /// region parser, and set the kind and parent operation.
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        state.stream.expect(TokenKind::Char('{'))?;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        state.stream.expect(token!('{'))?;
         // build the region at the beginning because the blocks may reference it.
         let (region_kind, index) = state.curr_region_info();
         let parent_op = state.curr_op();
@@ -156,7 +154,7 @@ impl Parse for Region {
 }
 
 impl Print for Region {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         writeln!(state.buffer, "{{")?;
         for block in self.layout.iter() {
             block.deref(&ctx.blocks).print(ctx, state)?;

@@ -1,4 +1,3 @@
-use anyhow::Result;
 use orzir::{
     dialects::{
         arith,
@@ -12,7 +11,7 @@ use orzir::{
 use orzir_core::{Block, Context, Print, PrintState, Region, RegionKind};
 
 #[test]
-fn test_basic_0() -> Result<()> {
+fn test_basic_0() -> Result<(), Box<dyn std::error::Error>> {
     let mut ctx = Context::default();
 
     builtin::register(&mut ctx);

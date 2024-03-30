@@ -1,10 +1,9 @@
 use std::fmt::Write;
 
-use anyhow::{Ok, Result};
 use orzir_core::{
-    ArenaPtr, Context, DataFlow, Dialect, Mnemonic, Op, OpMetadata, OpObj, Parse, ParseState,
-    Print, PrintState, Region, RegionInterface, RegionKind, RunVerifiers, TokenKind, TyObj, Value,
-    Verify,
+    parse_error, token, ArenaPtr, Context, DataFlow, Dialect, Mnemonic, Op, OpMetadata, OpObj,
+    Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Region,
+    RegionInterface, RegionKind, RunVerifiers, TokenKind, TyObj, Value, VerificationResult, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
 
@@ -30,7 +29,7 @@ pub struct FuncOp {
 // impl RegionKindInterface for FuncOp {}
 
 impl Verify for FuncOp {
-    fn verify(&self, ctx: &Context) -> Result<()> {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
         self.run_verifiers(ctx)?;
         self.ty.deref(&ctx.tys).as_ref().verify(ctx)?;
         self.get_region(0)
@@ -44,7 +43,7 @@ impl Verify for FuncOp {
 impl Parse for FuncOp {
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let op = ctx.ops.reserve();
 
         state.enter_component_from(op);
@@ -74,7 +73,12 @@ impl Parse for FuncOp {
 
         let result_names = state.pop_result_names();
         if !result_names.is_empty() {
-            anyhow::bail!("expected 0 result name, got {}", result_names.len());
+            return parse_error!(
+                // TODO: correct span
+                state.stream.peek()?.span,
+                ParseErrorKind::InvalidResultNumber(0, result_names.len())
+            )
+            .into();
         }
 
         let op = FuncOp::new(ctx, op, region, symbol, ty);
@@ -84,7 +88,7 @@ impl Parse for FuncOp {
 }
 
 impl Print for FuncOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, " ")?;
         self.symbol.print(ctx, state)?;
         let func_ty = self.ty.deref(&ctx.tys).as_a::<FunctionTy>().unwrap();
@@ -114,7 +118,7 @@ impl Verify for ReturnOp {}
 impl Parse for ReturnOp {
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         // func.return %1, %2
         // func.return
         let op = ctx.ops.reserve();
@@ -134,7 +138,12 @@ impl Parse for ReturnOp {
         let result_names = state.pop_result_names();
 
         if !result_names.is_empty() {
-            anyhow::bail!("expected 0 result name, got {}", result_names.len());
+            return parse_error!(
+                // TODO: correct span
+                state.stream.peek()?.span,
+                ParseErrorKind::InvalidResultNumber(0, result_names.len())
+            )
+            .into();
         }
 
         let op = ReturnOp::new(ctx, op, operands);
@@ -144,7 +153,7 @@ impl Parse for ReturnOp {
 }
 
 impl Print for ReturnOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         let operations = self.operands();
         if !operations.is_empty() {
             write!(state.buffer, " ")?;
@@ -188,15 +197,19 @@ impl Verify for CallOp {}
 impl Parse for CallOp {
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         let callee = if let TokenKind::SymbolName(s) = token.kind {
             s
         } else {
-            anyhow::bail!("expected symbol name");
+            return parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token!("@...")].into(), token.kind)
+            )
+            .into();
         };
 
-        state.stream.expect(TokenKind::Char('('))?;
+        state.stream.expect(token!('('))?;
 
         let mut operands = Vec::new();
 
@@ -211,8 +224,8 @@ impl Parse for CallOp {
             }
         }
 
-        state.stream.expect(TokenKind::Char(')'))?;
-        state.stream.expect(TokenKind::Char(':'))?;
+        state.stream.expect(token!(')'))?;
+        state.stream.expect(token!(':'))?;
 
         let mut ret_tys = Vec::new();
 
@@ -227,7 +240,7 @@ impl Parse for CallOp {
                     state.stream.consume()?;
                     break;
                 } else {
-                    state.stream.expect(TokenKind::Char(','))?;
+                    state.stream.expect(token!(','))?;
                 }
             }
         } else {
@@ -241,15 +254,16 @@ impl Parse for CallOp {
         let mut results = Vec::new();
 
         if !result_names.len() == ret_tys.len() {
-            anyhow::bail!(
-                "expected {} result name, got {}",
-                ret_tys.len(),
-                result_names.len()
-            );
+            return parse_error!(
+                // TODO: correct span
+                state.stream.peek()?.span,
+                ParseErrorKind::InvalidResultNumber(ret_tys.len(), result_names.len())
+            )
+            .into();
         }
 
         for (i, (result_name, ret_ty)) in result_names.drain(..).zip(ret_tys.iter()).enumerate() {
-            let result = Value::new_op_result(ctx, *ret_ty, op, i, Some(result_name))?;
+            let result = Value::new_op_result(ctx, *ret_ty, op, i, Some(result_name));
             results.push(result);
         }
 
@@ -259,7 +273,7 @@ impl Parse for CallOp {
 }
 
 impl Print for CallOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, " @{}", self.callee)?;
         write!(state.buffer, "(")?;
         let operands = self.operands();

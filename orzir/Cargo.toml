@@ -9,6 +9,6 @@ edition = "2021"
 orzir-macros = { path = "../orzir-macros" }
 orzir-core = { path = "../orzir-core" }
 
-anyhow = "1.0.81"
 arpfloat = "0.1.10"
 num-bigint = "0.4.4"
+thiserror = "1.0.58"

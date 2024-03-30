@@ -1,15 +1,19 @@
-use anyhow::Result;
-use orzir_core::{Context, Op};
+use orzir_core::{verification_error, Context, Op, VerificationResult};
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+#[error("operation is not a terminator")]
+struct NotTerminatorError;
 
 /// Verifier `IsTerminator` for `Op`.
 ///
 /// This verifier indicates that the operation is a terminator.
 pub trait IsTerminator: Op {
-    fn verify(&self, ctx: &Context) -> Result<()> {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
         let parent_region = self.parent_region(ctx);
 
         if parent_region.is_none() {
-            anyhow::bail!("terminator must be in a region");
+            panic!("terminator is not in a region");
         }
 
         if self
@@ -20,7 +24,7 @@ pub trait IsTerminator: Op {
             .back()
             != Some(self.self_ptr())
         {
-            anyhow::bail!("terminator is not the last operation in the block");
+            return verification_error!(NotTerminatorError).into();
         }
 
         Ok(())
@@ -32,5 +36,5 @@ pub trait IsTerminator: Op {
 /// This verifier indicates that the regions in the operation do not need a
 /// terminator.
 pub trait NoTerminator: Op {
-    fn verify(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+    fn verify(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
 }

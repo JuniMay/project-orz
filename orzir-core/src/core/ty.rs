@@ -1,4 +1,3 @@
-use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 
 use super::{
@@ -11,7 +10,7 @@ use crate::{
         cast::CastRef,
         storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
     },
-    Parse, Print, PrintState, Verify,
+    Parse, ParseResult, Print, PrintResult, PrintState, Verify,
 };
 
 pub trait Ty: Downcast + GetUniqueArenaHash + Print + Verify {
@@ -79,7 +78,7 @@ impl Eq for TyObj {}
 impl Parse for TyObj {
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let mnemonic = Mnemonic::parse(ctx, state)?;
         let parse_fn = ctx
             .dialects
@@ -100,7 +99,7 @@ impl Parse for TyObj {
 pub type TyParseFn = ParseFn<ArenaPtr<TyObj>>;
 
 impl Print for TyObj {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         self.as_ref().mnemonic().print(ctx, state)?;
         self.as_ref().print(ctx, state)?;
         Ok(())

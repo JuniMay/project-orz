@@ -1,9 +1,7 @@
 use std::fmt::Write;
 
-use anyhow::Result;
-
-use super::parse::{ParseState, TokenKind};
-use crate::{Context, Parse, Print, PrintState};
+use super::parse::{ParseErrorKind, ParseState, TokenKind};
+use crate::{parse_error, token, Context, Parse, ParseResult, Print, PrintResult, PrintState};
 
 /// A mnemonic segment.
 ///
@@ -60,17 +58,10 @@ impl Mnemonic {
 impl Parse for Mnemonic {
     type Item = Mnemonic;
 
-    fn parse(_: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         match token.kind {
             TokenKind::Tokenized(ref s) => {
-                let (primary, secondary) = match s.split_once('.') {
-                    Some((primary, secondary)) => (primary, secondary),
-                    None => ("builtin", s.as_str()),
-                };
-                Ok(Mnemonic::new(primary, secondary))
-            }
-            TokenKind::Quoted(ref s) => {
                 // remove the quotes.
                 let s = if s.starts_with('"') && s.ends_with('"') {
                     &s[1..s.len() - 1]
@@ -84,13 +75,17 @@ impl Parse for Mnemonic {
                 };
                 Ok(Mnemonic::new(primary, secondary))
             }
-            _ => anyhow::bail!("expect a mnemonic."),
+            _ => parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token!("...")].into(), token.kind)
+            )
+            .into(),
         }
     }
 }
 
 impl Print for Mnemonic {
-    fn print(&self, _: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
         if self.primary.as_str() == "builtin" {
             write!(state.buffer, "{}", self.secondary.as_str())?;
         } else {

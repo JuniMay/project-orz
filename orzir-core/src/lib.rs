@@ -9,7 +9,7 @@ pub use crate::{
         interfaces::{ControlFlow, DataFlow, RegionInterface},
         mnemonic::{Mnemonic, MnemonicSegment},
         op::{Op, OpMetadata, OpObj, OpParseFn, Successor},
-        parse::{Parse, ParseState, TokenKind, TokenStream},
+        parse::{ExpectedTokenKind, Parse, ParseErrorKind, ParseState, TokenKind, TokenStream},
         print::{Print, PrintState},
         region::{Region, RegionKind},
         ty::{Ty, TyObj, TyParseFn, Typed},
@@ -18,6 +18,9 @@ pub use crate::{
     },
     support::{
         cast::{Caster, CasterStorage},
+        error::{
+            ParseError, ParseResult, PrintError, PrintResult, VerificationError, VerificationResult,
+        },
         storage::{Arena, ArenaBase, ArenaPtr, UniqueArena},
     },
 };

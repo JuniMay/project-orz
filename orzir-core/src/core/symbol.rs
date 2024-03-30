@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
 use thiserror::Error;
 
 use super::op::OpObj;
@@ -82,13 +81,17 @@ impl<T> Default for NameManager<T> {
 }
 
 impl<T> NameManager<T> {
-    pub(super) fn set(&mut self, ptr: ArenaPtr<T>, name: String) -> Result<()> {
+    pub(super) fn set(
+        &mut self,
+        ptr: ArenaPtr<T>,
+        name: String,
+    ) -> Result<(), NameAllocDuplicatedErr> {
         let result = self.names.checked_insert(ptr, name);
         match result {
             Ok(_) => Ok(()),
-            Err(Duplicated::Fwd(_)) => Err(NameAllocDuplicatedErr::Key.into()),
-            Err(Duplicated::Rev(_)) => Err(NameAllocDuplicatedErr::Name.into()),
-            Err(Duplicated::Both(_, _)) => Err(NameAllocDuplicatedErr::Both.into()),
+            Err(Duplicated::Fwd(_)) => Err(NameAllocDuplicatedErr::Key),
+            Err(Duplicated::Rev(_)) => Err(NameAllocDuplicatedErr::Name),
+            Err(Duplicated::Both(_, _)) => Err(NameAllocDuplicatedErr::Both),
             Err(Duplicated::Full) => Ok(()),
         }
     }

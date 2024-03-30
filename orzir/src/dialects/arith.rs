@@ -1,28 +1,29 @@
 use std::fmt::Write;
 
-use anyhow::{anyhow, Result};
 use num_bigint::BigInt;
 use orzir_core::{
-    ArenaPtr, Context, DataFlow, Dialect, Op, OpMetadata, OpObj, Parse, ParseState, Print,
-    PrintState, TokenKind, TyObj, Value, Verify,
+    parse_error, token, ArenaPtr, Context, DataFlow, Dialect, Op, OpMetadata, OpObj, Parse,
+    ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, TokenKind, TyObj,
+    Value, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
+use thiserror::Error;
 
 use crate::verifiers::*;
 
 fn parse_binary(
     ctx: &mut Context,
     state: &mut ParseState,
-) -> Result<(ArenaPtr<Value>, ArenaPtr<Value>, ArenaPtr<TyObj>)> {
+) -> ParseResult<(ArenaPtr<Value>, ArenaPtr<Value>, ArenaPtr<TyObj>)> {
     let lhs = Value::parse(ctx, state)?;
-    state.stream.expect(TokenKind::Char(','))?;
+    state.stream.expect(token!(','))?;
     let rhs = Value::parse(ctx, state)?;
-    state.stream.expect(TokenKind::Char(':'))?;
+    state.stream.expect(token!(':'))?;
     let ty = TyObj::parse(ctx, state)?;
     Ok((lhs, rhs, ty))
 }
 
-fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> Result<()> {
+fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> PrintResult<()> {
     op_inner
         .get_operand(0)
         .unwrap()
@@ -58,10 +59,14 @@ impl Verify for IConstOp {}
 
 pub struct IntLiteral(pub BigInt);
 
+#[derive(Debug, Error)]
+#[error("invalid int literal: {0}")]
+struct InvalidIntLiteral(String);
+
 impl Parse for IntLiteral {
     type Item = IntLiteral;
 
-    fn parse(_: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let neg_token = state.stream.consume_if(TokenKind::Char('-'))?;
         let neg = neg_token.is_some();
 
@@ -74,19 +79,23 @@ impl Parse for IntLiteral {
                 BigInt::from(0)
             } else if s.starts_with("0x") {
                 BigInt::parse_bytes(&s.as_bytes()[2..], 16)
-                    .ok_or_else(|| anyhow!("invalid hex literal"))?
+                    .ok_or_else(|| parse_error!(token.span, InvalidIntLiteral(s)))?
             } else if s.starts_with("0b") {
                 BigInt::parse_bytes(&s.as_bytes()[2..], 2)
-                    .ok_or_else(|| anyhow!("invalid binary literal"))?
+                    .ok_or_else(|| parse_error!(token.span, InvalidIntLiteral(s)))?
             } else if s.starts_with("0o") {
                 BigInt::parse_bytes(&s.as_bytes()[2..], 8)
-                    .ok_or_else(|| anyhow!("invalid octal literal"))?
+                    .ok_or_else(|| parse_error!(token.span, InvalidIntLiteral(s)))?
             } else {
                 BigInt::parse_bytes(s.as_bytes(), 10)
-                    .ok_or_else(|| anyhow!("invalid decimal literal"))?
+                    .ok_or_else(|| parse_error!(token.span, InvalidIntLiteral(s)))?
             }
         } else {
-            anyhow::bail!("invalid token: {:?}", token.kind);
+            return parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token!("...")].into(), token.kind)
+            )
+            .into();
         };
 
         Ok(IntLiteral(if neg { -value } else { value }))
@@ -94,7 +103,7 @@ impl Parse for IntLiteral {
 }
 
 impl Print for IntLiteral {
-    fn print(&self, _: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, "{}", self.0)?;
         Ok(())
     }
@@ -103,16 +112,21 @@ impl Print for IntLiteral {
 impl Parse for IConstOp {
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let value = IntLiteral::parse(ctx, state)?;
-        state.stream.expect(TokenKind::Char(':'))?;
+        state.stream.expect(token!(':'))?;
         let ty = TyObj::parse(ctx, state)?;
         let op = ctx.ops.reserve();
         let mut result_names = state.pop_result_names();
         if result_names.len() != 1 {
-            anyhow::bail!("expected 1 result name, got {}", result_names.len());
+            return parse_error!(
+                // TODO: correct span
+                state.stream.peek()?.span,
+                ParseErrorKind::InvalidResultNumber(1, result_names.len())
+            )
+            .into();
         }
-        let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop())?;
+        let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop());
         let op = IConstOp::new(ctx, op, result, value);
 
         Ok(op)
@@ -120,7 +134,7 @@ impl Parse for IConstOp {
 }
 
 impl Print for IConstOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, " ")?;
         self.value.print(ctx, state)?;
         write!(state.buffer, " : ")?;
@@ -156,18 +170,18 @@ impl Verify for IAddOp {}
 impl Parse for IAddOp {
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let op = ctx.ops.reserve();
         let (lhs, rhs, ty) = parse_binary(ctx, state)?;
         let mut result_names = state.pop_result_names();
-        let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop())?;
+        let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop());
         let op = IAddOp::new(ctx, op, result, lhs, rhs);
         Ok(op)
     }
 }
 
 impl Print for IAddOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, " ")?;
         let op_base = self;
         print_binary(ctx, state, op_base)

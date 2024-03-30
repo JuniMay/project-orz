@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
-use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
+use thiserror::Error;
 
 use super::{
     block::Block,
@@ -11,11 +11,14 @@ use super::{
     value::Value,
 };
 use crate::{
+    core::parse::ParseErrorKind,
+    parse_error,
     support::{
         cast::{CastMut, CastRef},
         storage::ArenaPtr,
     },
-    ControlFlow, DataFlow, Parse, Print, PrintState, Region, RegionInterface, Verify,
+    token, ControlFlow, DataFlow, Parse, ParseResult, Print, PrintResult, PrintState, Region,
+    RegionInterface, Verify,
 };
 
 /// The successor.
@@ -37,6 +40,10 @@ impl Successor {
     pub fn args(&self) -> &[ArenaPtr<Value>] { &self.args }
 }
 
+#[derive(Debug, Error)]
+#[error("expect block label, found {0:?}")]
+struct ExpectBlockLabelInSuccessor(TokenKind);
+
 impl Parse for Successor {
     type Item = Successor;
 
@@ -47,7 +54,7 @@ impl Parse for Successor {
     /// ```text
     /// <block_label> `(` <arg_name_list> `)`
     /// ```
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         let region = state.curr_region();
         if let TokenKind::BlockLabel(label) = &token.kind {
@@ -64,19 +71,28 @@ impl Parse for Successor {
                     match state.stream.consume()?.kind {
                         TokenKind::Char(')') => break,
                         TokenKind::Char(',') => continue,
-                        _ => anyhow::bail!("expected ')' or ','"),
+                        _ => {
+                            return parse_error!(
+                                token.span,
+                                ParseErrorKind::InvalidToken(
+                                    vec![token!(')'), token!(',')].into(),
+                                    token.kind
+                                )
+                            )
+                            .into();
+                        }
                     }
                 }
             }
             Ok(Successor::new(block, args))
         } else {
-            anyhow::bail!("expected block label");
+            parse_error!(token.span, ExpectBlockLabelInSuccessor(token.kind)).into()
         }
     }
 }
 
 impl Print for Successor {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         let block_name = self.block.deref(&ctx.blocks).name(ctx);
         write!(state.buffer, "^{}", block_name)?;
         if !self.args.is_empty() {
@@ -141,10 +157,10 @@ pub trait Op: Downcast + Print + Verify + DataFlow + ControlFlow + RegionInterfa
     fn set_parent_block(
         &mut self,
         parent_block: Option<ArenaPtr<Block>>,
-    ) -> Result<Option<ArenaPtr<Block>>> {
+    ) -> Option<ArenaPtr<Block>> {
         let old = self.metadata_mut().parent_block.take();
         self.metadata_mut().parent_block = parent_block;
-        Ok(old)
+        old
     }
 
     /// Get the parent region of the operation.
@@ -224,7 +240,7 @@ impl Parse for OpObj {
     /// ```text
     /// <result_name_list> `=` <mnemonic> <dialect_specific_text>
     /// ````
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let mut result_names = Vec::new();
         let parent = state.curr_block();
 
@@ -246,7 +262,16 @@ impl Parse for OpObj {
                     match token.kind {
                         TokenKind::Char(',') => continue,
                         TokenKind::Char('=') => break,
-                        _ => anyhow::bail!("invalid token: {:?}, expected ',' or '='", token.kind),
+                        _ => {
+                            return parse_error!(
+                                token.span,
+                                ParseErrorKind::InvalidToken(
+                                    vec![token!(','), token!('=')].into(),
+                                    token.kind
+                                )
+                            )
+                            .into();
+                        }
                     }
                 }
                 _ => break,
@@ -272,9 +297,7 @@ impl Parse for OpObj {
         let op = parse_fn(ctx, state)?;
 
         if op.deref(&ctx.ops).as_ref().parent_block().is_none() {
-            op.deref_mut(&mut ctx.ops)
-                .as_mut()
-                .set_parent_block(parent)?;
+            op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent);
         }
 
         Ok(op)
@@ -291,7 +314,7 @@ impl Print for OpObj {
     /// Print the operation.
     ///
     /// This is actually symmetric to the parsing process.
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         let num_results = self.as_ref().num_results();
 
         if num_results > 0 {

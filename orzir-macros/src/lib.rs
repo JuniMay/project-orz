@@ -9,10 +9,10 @@ use ty::derive_ty;
 use crate::op::derive_op;
 
 mod cast;
+mod format;
 mod interfaces;
 mod op;
 mod ty;
-mod format;
 
 /// Implement an [Op](orzir_core::Op) for the given struct.
 ///
@@ -46,7 +46,7 @@ mod format;
 /// To make a struct valid for the `Op` derive, the `#[metadata]` attribute must
 /// be specified for the metadata field of the struct, which contains the
 /// `self_ptr` and `parent_block` fields.
-/// 
+///
 /// For an [`Op``](orzir_core::Op) trait to be valid, the following traits must
 /// be implemented:
 /// - [`Print`](orzir_core::Print)
@@ -55,9 +55,8 @@ mod format;
 /// - [`DataFlow`](orzir_core::DataFlow)
 /// - [`ControlFlow`](orzir_core::ControlFlow)
 /// - [`RegionInterface`](orzir_core::RegionInterface)
-/// 
+///
 /// They can be derived or implemented manually.
-/// 
 #[proc_macro_derive(Op, attributes(mnemonic, verifiers, interfaces, metadata))]
 pub fn op(item: TokenStream) -> TokenStream {
     derive_op(item.into())
@@ -69,9 +68,8 @@ pub fn op(item: TokenStream) -> TokenStream {
 ///
 /// This is similar to the [`Op`] derive, but for the `Ty` trait, except that
 /// the constructor will be `get` for singleton style construction.
-/// 
+///
 /// TODO: Error handling.
-/// 
 #[proc_macro_derive(Ty, attributes(mnemonic, verifiers, interfaces))]
 pub fn ty(item: TokenStream) -> TokenStream { derive_ty(item.into()).unwrap().into() }
 
@@ -105,7 +103,6 @@ pub fn caster(input: TokenStream) -> TokenStream {
 /// ```rust,ignore
 /// register_caster!(ctx, ModuleOp => IsIsolatedFromAbove)
 /// ```
-/// 
 #[proc_macro]
 pub fn register_caster(input: TokenStream) -> TokenStream {
     register_caster_impl(input.into()).unwrap().into()
@@ -125,7 +122,6 @@ pub fn register_caster(input: TokenStream) -> TokenStream {
 ///
 /// The type of the fields should be `ArenaPtr<Region>` or
 /// `Vec<ArenaPtr<Region>>`.
-/// 
 #[proc_macro_derive(RegionInterface, attributes(region))]
 pub fn derive_region_interface(item: TokenStream) -> TokenStream {
     derive_region_interface_impl(item.into())
@@ -145,7 +141,6 @@ pub fn derive_region_interface(item: TokenStream) -> TokenStream {
 ///    successors.
 ///
 /// The type of the fields should be `Successor` or `Vec<Successor>`.
-/// 
 #[proc_macro_derive(ControlFlow, attributes(successor))]
 pub fn derive_control_flow(item: TokenStream) -> TokenStream {
     derive_control_flow_impl(item.into())
@@ -167,11 +162,9 @@ pub fn derive_control_flow(item: TokenStream) -> TokenStream {
 ///
 /// The type of the fields should be `ArenaPtr<Value>` or
 /// `Vec<ArenaPtr<Value>>`.
-/// 
 #[proc_macro_derive(DataFlow, attributes(result, operand))]
 pub fn derive_data_flow(item: TokenStream) -> TokenStream {
     derive_data_flow_impl(item.into())
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
-

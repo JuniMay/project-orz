@@ -214,7 +214,6 @@ impl DeriveInfo {
 
         let mut has_operand = false;
         let mut has_result = false;
-        
 
         for field in &self.fields {
             match field {
@@ -228,13 +227,13 @@ impl DeriveInfo {
                         }];
                         self.set_operand_artifact = vec![quote! {
                             if index > self.#ident.len() {
-                                ::anyhow::bail!("index out of bounds")
+                                panic!("index out of bounds")
                             }
                             if index == self.#ident.len() {
                                 self.#ident.push(value);
-                                Ok(None)
+                                None
                             } else {
-                                Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
+                                Some(std::mem::replace(&mut self.#ident[index], value))
                             }
                         }];
                         has_operand = true;
@@ -245,7 +244,7 @@ impl DeriveInfo {
                             #index => Some(self.#ident)
                         });
                         self.set_operand_artifact.push(quote! {
-                            #index => Ok(Some(std::mem::replace(&mut self.#ident, value)))
+                            #index => Some(std::mem::replace(&mut self.#ident, value))
                         });
                         self.operand_need_match = true;
                         has_operand = true;
@@ -261,13 +260,13 @@ impl DeriveInfo {
                         }];
                         self.set_result_artifact = vec![quote! {
                             if index > self.#ident.len() {
-                                ::anyhow::bail!("index out of bounds")
+                                panic!("index out of bounds")
                             }
                             if index == self.#ident.len() {
                                 self.#ident.push(value);
-                                Ok(None)
+                                None
                             } else {
-                                Ok(Some(std::mem::replace(&mut self.#ident[index], value)))
+                                Some(std::mem::replace(&mut self.#ident[index], value))
                             }
                         }];
                         has_result = true;
@@ -278,7 +277,7 @@ impl DeriveInfo {
                             #index => Some(self.#ident)
                         });
                         self.set_result_artifact.push(quote! {
-                            #index => Ok(Some(std::mem::replace(&mut self.#ident, value)))
+                            #index => Some(std::mem::replace(&mut self.#ident, value))
                         });
                         self.result_need_match = true;
                         has_result = true;
@@ -295,17 +294,15 @@ impl DeriveInfo {
             self.num_results_artifact = quote! { #result_cnt };
         }
 
-
         if !has_operand {
             self.get_operand_artifact = vec![quote! { None }];
-            self.set_operand_artifact = vec![quote! { ::anyhow::bail!("index out of bounds") }];
+            self.set_operand_artifact = vec![quote! { panic!("index out of bounds") }];
         }
 
         if !has_result {
             self.get_result_artifact = vec![quote! { None }];
-            self.set_result_artifact = vec![quote! { ::anyhow::bail!("index out of bounds") }];
+            self.set_result_artifact = vec![quote! { panic!("index out of bounds") }];
         }
-
 
         Ok(())
     }
@@ -353,7 +350,7 @@ impl DeriveInfo {
             quote! {
                 match index {
                     #(#artifact,)*
-                    _ => Err(::anyhow::anyhow!("index out of bounds"))
+                    _ => panic!("index out of bounds")
                 }
             }
         } else {
@@ -368,7 +365,7 @@ impl DeriveInfo {
                 &mut self,
                 index: usize,
                 value: ::orzir_core::ArenaPtr<::orzir_core::Value>
-            ) -> ::anyhow::Result<Option<::orzir_core::ArenaPtr<::orzir_core::Value>>> {
+            ) -> Option<::orzir_core::ArenaPtr<::orzir_core::Value>> {
                 #artifact
             }
         };
@@ -414,12 +411,12 @@ impl DeriveInfo {
     }
 
     fn set_result_method(&mut self) -> TokenStream {
-        let artifact =  if self.result_need_match {
+        let artifact = if self.result_need_match {
             let artifact = self.set_result_artifact.drain(..).collect::<Vec<_>>();
             quote! {
                 match index {
                     #(#artifact,)*
-                    _ => Err(::anyhow::anyhow!("index out of bounds"))
+                    _ => panic!("index out of bounds")
                 }
             }
         } else {
@@ -434,7 +431,7 @@ impl DeriveInfo {
                 &mut self,
                 index: usize,
                 value: ::orzir_core::ArenaPtr<::orzir_core::Value>
-            ) -> ::anyhow::Result<Option<::orzir_core::ArenaPtr<::orzir_core::Value>>> {
+            ) -> Option<::orzir_core::ArenaPtr<::orzir_core::Value>> {
                 #artifact
             }
         };

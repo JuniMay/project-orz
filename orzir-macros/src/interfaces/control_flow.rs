@@ -158,7 +158,7 @@ impl DeriveInfo {
                 None
             }];
             self.set_artifacts = vec![quote! {
-                ::anyhow::bail!("inedx out of bounds");
+                panic!("inedx out of bounds");
             }];
         }
 
@@ -176,13 +176,13 @@ impl DeriveInfo {
                     }];
                     self.set_artifacts = vec![quote! {
                         if index > self.#ident.len() {
-                            ::anyhow::bail!("index out of bounds")
+                            panic!("index out of bounds")
                         }
                         if index == self.#ident.len() {
                             self.#ident.push(successor);
-                            Ok(None)
+                            None
                         } else {
-                            Ok(Some(std::mem::replace(&mut self.#ident[index], successor)))
+                            Some(std::mem::replace(&mut self.#ident[index], successor))
                         }
                     }]
                 }
@@ -192,7 +192,7 @@ impl DeriveInfo {
                         #i => Some(&self.#ident)
                     });
                     self.set_artifacts.push(quote! {
-                        #i => Ok(Some(std::mem::replace(&mut self.#ident, successor)))
+                        #i => Some(std::mem::replace(&mut self.#ident, successor))
                     });
                     self.need_match = true;
                 }
@@ -248,10 +248,10 @@ impl DeriveInfo {
                     &mut self,
                     index: usize,
                     successor: ::orzir_core::Successor,
-                ) -> ::anyhow::Result<Option<::orzir_core::Successor>> {
+                ) -> Option<::orzir_core::Successor> {
                     match index {
                         #(#artifacts,)*
-                        _ => ::anyhow::bail!("index out of bounds")
+                        _ => panic!("index out of bounds")
                     }
                 }
             }
@@ -262,7 +262,7 @@ impl DeriveInfo {
                     &mut self,
                     index: usize,
                     successor: ::orzir_core::Successor,
-                ) -> ::anyhow::Result<Option<::orzir_core::Successor>> {
+                ) -> Option<::orzir_core::Successor> {
                     #artifact
                 }
             }

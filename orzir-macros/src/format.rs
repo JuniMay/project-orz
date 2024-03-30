@@ -30,7 +30,6 @@ impl FormatToken {
                 } else {
                     panic!("invalid format token: {}", s);
                 }
-            
             }
         }
     }
@@ -43,16 +42,13 @@ impl From<FormatToken> for TokenStream {
                 let ident = syn::Ident::new(&ident, proc_macro2::Span::call_site());
                 quote!(#ident)
             }
-            FormatToken::Punct(punct) => {
-                match punct.as_str() {
-                    "->" => quote!(::orzir_core::TokenKind::Arrow),
-                    _ => {
-                        let ch = punct.chars().next().unwrap();
-                        quote!(::orzir_core::TokenKind::Char(#ch))
-                    }
-
+            FormatToken::Punct(punct) => match punct.as_str() {
+                "->" => quote!(::orzir_core::TokenKind::Arrow),
+                _ => {
+                    let ch = punct.chars().next().unwrap();
+                    quote!(::orzir_core::TokenKind::Char(#ch))
                 }
-            }
+            },
         }
     }
 }

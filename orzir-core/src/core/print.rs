@@ -1,8 +1,7 @@
 use std::fmt::Write;
 
-use anyhow::Result;
-
 use super::context::Context;
+use crate::PrintResult;
 
 pub struct PrintState {
     indent: &'static str,
@@ -35,5 +34,14 @@ impl PrintState {
 }
 
 pub trait Print {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()>;
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()>;
+}
+
+impl<T: Print> Print for Option<T> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
+        if let Some(inner) = self {
+            inner.print(ctx, state)?;
+        }
+        Ok(())
+    }
 }

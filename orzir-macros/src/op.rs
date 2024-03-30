@@ -334,7 +334,7 @@ pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
 
     let verify_interfaces_impl = quote! {
         impl ::orzir_core::RunVerifiers for #ident {
-            fn run_verifiers(&self, ctx: &::orzir_core::Context) -> ::anyhow::Result<()> {
+            fn run_verifiers(&self, ctx: &::orzir_core::Context) -> ::orzir_core::VerificationResult<()> {
                 #(#verifier_calls)*
                 Ok(())
             }

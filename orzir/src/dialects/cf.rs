@@ -1,9 +1,9 @@
 use std::fmt::Write;
 
-use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Context, ControlFlow, DataFlow, Dialect, Op, OpMetadata, OpObj, Parse, ParseState,
-    Print, PrintState, Successor, TokenKind, Value, Verify,
+    parse_error, token, ArenaPtr, Context, ControlFlow, DataFlow, Dialect, Op, OpMetadata, OpObj,
+    Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Successor,
+    Value, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
 
@@ -28,12 +28,17 @@ impl Verify for Jump {}
 impl Parse for Jump {
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let successor = Successor::parse(ctx, state)?;
 
         let result_names = state.pop_result_names();
         if !result_names.is_empty() {
-            anyhow::bail!("expected 0 result name, got {}", result_names.len());
+            return parse_error!(
+                // TODO: correct span
+                state.stream.peek()?.span,
+                ParseErrorKind::InvalidResultNumber(0, result_names.len())
+            )
+            .into();
         }
 
         let op = ctx.ops.reserve();
@@ -44,7 +49,7 @@ impl Parse for Jump {
 }
 
 impl Print for Jump {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         let successor = self.get_successor(0).unwrap();
         write!(state.buffer, " ")?;
         successor.print(ctx, state)?;
@@ -74,21 +79,19 @@ impl Verify for Branch {}
 impl Parse for Branch {
     type Item = ArenaPtr<OpObj>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         // cf.branch %cond, ^then(%a: int<32>), ^else(%b: float)
         let cond = Value::parse(ctx, state)?;
-        state.stream.expect(TokenKind::Char(','))?;
+        state.stream.expect(token!(','))?;
 
         let then_block = Successor::parse(ctx, state)?;
-        state.stream.expect(TokenKind::Char(','))?;
+        state.stream.expect(token!(','))?;
 
         let else_block = Successor::parse(ctx, state)?;
 
         let result_names = state.pop_result_names();
 
-        if !result_names.is_empty() {
-            anyhow::bail!("expected 0 result name, got {}", result_names.len());
-        }
+        if !result_names.is_empty() {}
 
         let op = ctx.ops.reserve();
         let op = Branch::new(ctx, op, cond, then_block, else_block);
@@ -98,7 +101,7 @@ impl Parse for Branch {
 }
 
 impl Print for Branch {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, " ")?;
         self.get_operand(0)
             .unwrap()

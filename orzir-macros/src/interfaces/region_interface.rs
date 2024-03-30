@@ -158,7 +158,7 @@ impl DeriveInfo {
                 None
             }];
             self.set_artifacts = vec![quote! {
-                ::anyhow::bail!("inedx out of bounds");
+                panic!("inedx out of bounds");
             }];
         }
 
@@ -176,13 +176,13 @@ impl DeriveInfo {
                     }];
                     self.set_artifacts = vec![quote! {
                         if index > self.#ident.len() {
-                            ::anyhow::bail!("index out of bounds")
+                            panic!("index out of bounds")
                         }
                         if index == self.#ident.len() {
                             self.#ident.push(region);
-                            Ok(None)
+                            None
                         } else {
-                            Ok(Some(std::mem::replace(&mut self.#ident[index], region)))
+                            Some(std::mem::replace(&mut self.#ident[index], region))
                         }
                     }]
                 }
@@ -192,7 +192,7 @@ impl DeriveInfo {
                         #i => Some(self.#ident)
                     });
                     self.set_artifacts.push(quote! {
-                        #i => Ok(Some(std::mem::replace(&mut self.#ident, region)))
+                        #i => Some(std::mem::replace(&mut self.#ident, region))
                     });
                     self.need_match = true;
                 }
@@ -248,10 +248,10 @@ impl DeriveInfo {
                     &mut self,
                     index: usize,
                     region: ::orzir_core::ArenaPtr<::orzir_core::Region>,
-                ) -> ::anyhow::Result<Option<::orzir_core::ArenaPtr<::orzir_core::Region>>> {
+                ) -> Option<::orzir_core::ArenaPtr<::orzir_core::Region>> {
                     match index {
                         #(#artifacts,)*
-                        _ => ::anyhow::bail!("index out of bounds")
+                        _ => panic!("index out of bounds")
                     }
                 }
             }
@@ -262,7 +262,7 @@ impl DeriveInfo {
                     &mut self,
                     index: usize,
                     region: ::orzir_core::ArenaPtr<::orzir_core::Region>,
-                ) -> ::anyhow::Result<Option<::orzir_core::ArenaPtr<::orzir_core::Region>>> {
+                ) -> Option<::orzir_core::ArenaPtr<::orzir_core::Region>> {
                     #artifact
                 }
             }

@@ -1,11 +1,15 @@
 use std::fmt::Write;
 
-use anyhow::Result;
-
-use super::{layout::OpList, parse::ParseState, value::Value};
+use super::{layout::OpList, parse::ParseState, symbol::NameAllocDuplicatedErr, value::Value};
 use crate::{
-    core::parse::TokenKind, support::storage::ArenaPtr, Context, OpObj, Parse, Print, PrintState,
-    Region, RunVerifiers, TyObj, Typed, Verify,
+    core::parse::{ParseErrorKind, TokenKind},
+    parse_error,
+    support::{
+        error::{PrintResult, VerificationResult},
+        storage::ArenaPtr,
+    },
+    token, Context, OpObj, Parse, ParseResult, Print, PrintState, Region, RunVerifiers, TyObj,
+    Typed, Verify,
 };
 
 /// The block in the region.
@@ -27,11 +31,11 @@ pub struct Block {
 }
 
 impl RunVerifiers for Block {
-    fn run_verifiers(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+    fn run_verifiers(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
 }
 
 impl Verify for Block {
-    fn verify(&self, ctx: &Context) -> Result<()> {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
         for arg in &self.args {
             arg.deref(&ctx.values).verify(ctx)?;
         }
@@ -92,26 +96,22 @@ impl Block {
     }
 
     /// Set the name of the block.
-    pub fn set_name(&self, ctx: &Context, name: String) -> Result<()> {
+    pub fn set_name(&self, ctx: &Context, name: String) -> Result<(), NameAllocDuplicatedErr> {
         let region = self.parent_region.deref(&ctx.regions);
         region.block_names.borrow_mut().set(self.self_ptr, name)
     }
 
-    pub fn set_arg(
-        &mut self,
-        index: usize,
-        arg: ArenaPtr<Value>,
-    ) -> Result<Option<ArenaPtr<Value>>> {
+    pub fn set_arg(&mut self, index: usize, arg: ArenaPtr<Value>) -> Option<ArenaPtr<Value>> {
         if index > self.args.len() {
-            anyhow::bail!("index out of range");
+            panic!("index out of range when setting block argument.");
         }
         if index == self.args.len() {
             self.args.push(arg);
-            return Ok(None);
+            return None;
         }
 
         let old = std::mem::replace(&mut self.args[index], arg);
-        Ok(Some(old))
+        Some(old)
     }
 
     pub fn num_args(&self) -> usize { self.args.len() }
@@ -148,7 +148,7 @@ impl Block {
 impl Parse for Block {
     type Item = ArenaPtr<Block>;
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.peek()?;
         let block = match &token.kind {
             TokenKind::BlockLabel(_) => {
@@ -182,33 +182,47 @@ impl Parse for Block {
                                 let name = name.clone();
                                 let _arg = Value::parse(ctx, state)?;
 
-                                state.stream.expect(TokenKind::Char(':'))?;
+                                state.stream.expect(token!(':'))?;
                                 let ty = TyObj::parse(ctx, state)?;
 
                                 let arg =
-                                    Value::new_block_argument(ctx, ty, block, cnt, Some(name))?;
-                                block.deref_mut(&mut ctx.blocks).set_arg(cnt, arg)?;
+                                    Value::new_block_argument(ctx, ty, block, cnt, Some(name));
+                                block.deref_mut(&mut ctx.blocks).set_arg(cnt, arg);
 
                                 cnt += 1;
 
                                 if state.stream.consume_if(TokenKind::Char(','))?.is_none() {
                                     // end of the arguments.
-                                    state.stream.expect(TokenKind::Char(')'))?;
+                                    state.stream.expect(token!(')'))?;
                                     break;
                                 }
                             }
                             _ => {
-                                anyhow::bail!("unexpected token: {:?}", token.kind);
+                                return parse_error!(
+                                    token.span,
+                                    ParseErrorKind::InvalidToken(
+                                        vec![token!(')'), token!("%...")].into(),
+                                        token.kind.clone()
+                                    )
+                                )
+                                .into();
                             }
                         }
                     }
-                    state.stream.expect(TokenKind::Char(':'))?;
+                    state.stream.expect(token!(':'))?;
                 }
                 TokenKind::Char(':') => {
                     // just exit.
                 }
                 _ => {
-                    anyhow::bail!("unexpected token: {:?}", token.kind);
+                    return parse_error!(
+                        token.span,
+                        ParseErrorKind::InvalidToken(
+                            vec![token!('('), token!(':')].into(),
+                            token.kind
+                        )
+                    )
+                    .into();
                 }
             }
         }
@@ -227,14 +241,21 @@ impl Parse for Block {
                         .deref_mut(&mut ctx.blocks)
                         .layout_mut()
                         .append(op)
-                        .map_err(|_| anyhow::anyhow!("error appending operation"))?;
+                        .expect("should be able to append an operation when parsing.")
                 }
                 TokenKind::BlockLabel(_) | TokenKind::Char('}') => {
                     // end of the block
                     break;
                 }
                 _ => {
-                    anyhow::bail!("unexpected token: {:?}", token.kind);
+                    return parse_error!(
+                        token.span,
+                        ParseErrorKind::InvalidToken(
+                            vec![token!("%..."), token!('}'), token!("^..."), token!("...")].into(),
+                            token.kind.clone()
+                        )
+                    )
+                    .into();
                 }
             }
         }
@@ -246,7 +267,7 @@ impl Parse for Block {
 }
 
 impl Print for Block {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         if !self.is_entry() {
             state.write_indent()?;
             write!(state.buffer, "^{}", self.name(ctx))?;
