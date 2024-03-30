@@ -585,6 +585,7 @@ mod tests {
     fn test_ckpt() {
         let mut stream = TokenStream::new("a b c");
         stream.checkpoint();
+        let pos = stream.peek().unwrap().span.start;
         assert_eq!(
             stream.consume().unwrap().kind,
             TokenKind::Tokenized("a".to_string())
@@ -594,9 +595,12 @@ mod tests {
             TokenKind::Tokenized("b".to_string())
         );
         stream.rollback();
+        let pos2 = stream.peek().unwrap().span.start;
         assert_eq!(
             stream.consume().unwrap().kind,
             TokenKind::Tokenized("a".to_string())
         );
+
+        assert_eq!(pos, pos2);
     }
 }

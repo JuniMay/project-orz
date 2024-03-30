@@ -16,24 +16,19 @@ impl Parse for Symbol {
     type Item = Self;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let token = state.stream.peek()?;
-        if let TokenKind::SymbolName(_) = token.kind {
-            let token = state.stream.consume()?;
-            if let TokenKind::SymbolName(name) = token.kind {
-                let op = state.curr_op();
-                // register the symbol
-                let region = state.curr_region();
-                region
-                    .deref_mut(&mut ctx.regions)
-                    .register_symbol(name.clone(), op);
-                // construct and return.
-                let symbol = Self(name);
-                Ok(symbol)
-            } else {
-                unreachable!()
-            }
+        let token = state.stream.consume()?;
+        if let TokenKind::SymbolName(name) = token.kind {
+            let op = state.curr_op();
+            // register the symbol
+            let region = state.curr_region();
+            region
+                .deref_mut(&mut ctx.regions)
+                .register_symbol(name.clone(), op);
+            // construct and return.
+            let symbol = Self(name);
+            Ok(symbol)
         } else {
-            Err(anyhow!("not a symbol name"))
+            Err(anyhow!("expect a symbol name, got {:?}", token.kind))
         }
     }
 }
@@ -98,11 +93,7 @@ impl Parse for ModuleOp {
     fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let op = ctx.ops.reserve();
         state.enter_component_from(op);
-        let symbol = if let Ok(symbol) = Symbol::parse(ctx, state) {
-            Some(symbol)
-        } else {
-            None
-        };
+        let symbol = Option::<Symbol>::parse(ctx, state)?;
         state.exit_component();
 
         state.enter_region_from(op, RegionKind::Graph, 0);
@@ -412,7 +403,7 @@ pub fn register(ctx: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{Context, Parse, ParseState, Print, PrintState, TokenStream, TyObj};
+    use orzir_core::{Context, OpObj, Parse, ParseState, Print, PrintState, TokenStream, TyObj};
 
     use crate::dialects::builtin::{self, DoubleTy, FloatTy, FunctionTy, IntTy, MemRefTy, TupleTy};
 
@@ -511,5 +502,28 @@ mod tests {
     #[test]
     fn test_memref_parse() {
         test_ty_parse_print("memref<1 x 2 x 3 x int<32>>", "memref<1 x 2 x 3 x int<32>>");
+    }
+
+    #[test]
+    fn test_module_op() {
+        let src = r#"
+            module {
+                module @named_module {
+
+                }
+            }
+        "#;
+
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
+        let mut ctx = Context::default();
+
+        builtin::register(&mut ctx);
+
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
+
+        let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
+        println!("{}", state.buffer);
     }
 }
