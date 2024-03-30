@@ -94,11 +94,11 @@ impl Parse for ModuleOp {
         let op = ctx.ops.reserve();
         state.enter_component_from(op);
         let symbol = Option::<Symbol>::parse(ctx, state)?;
-        state.exit_component();
 
-        state.enter_region_from(op, RegionKind::Graph, 0);
+        state.enter_region_with( RegionKind::Graph, 0);
         let region = Region::parse(ctx, state)?;
         state.exit_region();
+        state.exit_component();
 
         let result_names = state.pop_result_names();
 

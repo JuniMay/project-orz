@@ -12,6 +12,7 @@ mod cast;
 mod interfaces;
 mod op;
 mod ty;
+mod format;
 
 /// Implement an [Op](orzir_core::Op) for the given struct.
 ///

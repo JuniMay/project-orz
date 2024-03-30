@@ -49,7 +49,6 @@ impl Parse for FuncOp {
 
         state.enter_component_from(op);
         let symbol = Symbol::parse(ctx, state)?;
-        state.exit_component();
 
         // just make the process canonical
         let mnemonic = Mnemonic::new("builtin", "fn");
@@ -68,9 +67,10 @@ impl Parse for FuncOp {
 
         let ty = parse_fn(ctx, state)?;
 
-        state.enter_region_from(op, RegionKind::SsaCfg, 0);
+        state.enter_region_with(RegionKind::SsaCfg, 0);
         let region = Region::parse(ctx, state)?;
         state.exit_region();
+        state.exit_component();
 
         let result_names = state.pop_result_names();
         if !result_names.is_empty() {
