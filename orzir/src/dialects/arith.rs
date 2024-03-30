@@ -51,17 +51,22 @@ pub struct IConstOp {
     #[result(0)]
     result: ArenaPtr<Value>,
 
-    value: BigInt,
+    value: IntLiteral,
 }
 
 impl Verify for IConstOp {}
 
-impl Parse for IConstOp {
-    type Item = ArenaPtr<OpObj>;
+pub struct IntLiteral(pub BigInt);
 
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
-        let neg = state.stream.consume_if(TokenKind::Char('-'))?.is_some();
+impl Parse for IntLiteral {
+    type Item = IntLiteral;
+    
+    fn parse(_: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let neg_token = state.stream.consume_if(TokenKind::Char('-'))?;
+        let neg = neg_token.is_some();
+
         let token = state.stream.consume()?;
+
         let value = if let TokenKind::Tokenized(s) = token.kind {
             if s == "true" {
                 BigInt::from(1)
@@ -81,24 +86,38 @@ impl Parse for IConstOp {
                     .ok_or_else(|| anyhow!("invalid decimal literal"))?
             }
         } else {
-            anyhow::bail!("invalid token: {:?}", token.kind);
+            // backtracking
+            state.stream.rebuffer(token);
+            if let Some(neg_token) = neg_token {
+                state.stream.rebuffer(neg_token);
+            }
+            anyhow::bail!("invalid token for int literal, backtracked.")
         };
 
-        let value = value * if neg { -1 } else { 1 };
+        Ok(IntLiteral(if neg { -value } else { value }))
+    }
+}
 
+impl Print for IntLiteral {
+    fn print(&self, _: &Context, state: &mut PrintState) -> Result<()> {
+        write!(state.buffer, "{}", self.0)?;
+        Ok(())
+    }
+}
+
+impl Parse for IConstOp {
+    type Item = ArenaPtr<OpObj>;
+
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        let value = IntLiteral::parse(ctx, state)?;
         state.stream.expect(TokenKind::Char(':'))?;
         let ty = TyObj::parse(ctx, state)?;
-
         let op = ctx.ops.reserve();
-
         let mut result_names = state.pop_result_names();
-
         if result_names.len() != 1 {
             anyhow::bail!("expected 1 result name, got {}", result_names.len());
         }
-
         let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop())?;
-
         let op = IConstOp::new(ctx, op, result, value);
 
         Ok(op)
@@ -107,7 +126,9 @@ impl Parse for IConstOp {
 
 impl Print for IConstOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        write!(state.buffer, " {} : ", self.value)?;
+        write!(state.buffer, " ")?;
+        self.value.print(ctx, state)?;
+        write!(state.buffer, " : ")?;
         let result_tys = self.result_tys(ctx);
         assert!(result_tys.len() == 1);
         result_tys[0].deref(&ctx.tys).print(ctx, state)?;
