@@ -60,7 +60,7 @@ pub struct IntLiteral(pub BigInt);
 
 impl Parse for IntLiteral {
     type Item = IntLiteral;
-    
+
     fn parse(_: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
         let neg_token = state.stream.consume_if(TokenKind::Char('-'))?;
         let neg = neg_token.is_some();
@@ -86,12 +86,7 @@ impl Parse for IntLiteral {
                     .ok_or_else(|| anyhow!("invalid decimal literal"))?
             }
         } else {
-            // backtracking
-            state.stream.rebuffer(token);
-            if let Some(neg_token) = neg_token {
-                state.stream.rebuffer(neg_token);
-            }
-            anyhow::bail!("invalid token for int literal, backtracked.")
+            anyhow::bail!("invalid token: {:?}", token.kind);
         };
 
         Ok(IntLiteral(if neg { -value } else { value }))

@@ -1,4 +1,7 @@
-use std::{cmp, collections::VecDeque, fmt};
+use std::{
+    cmp, fmt,
+    io::{Cursor, Read},
+};
 
 use anyhow::Result;
 use thiserror::Error;
@@ -135,21 +138,27 @@ impl Token {
 
 /// A simple reader.
 pub(self) struct SliceReader<'a> {
-    _slice: &'a str,
-    chars: std::str::Chars<'a>,
+    cursor: Cursor<&'a str>,
 }
 
 impl<'a> SliceReader<'a> {
     fn new(slice: &'a str) -> Self {
-        SliceReader {
-            _slice: slice,
-            chars: slice.chars(),
+        Self {
+            cursor: Cursor::new(slice),
         }
     }
-}
 
-impl<'a> SliceReader<'a> {
-    fn read_char(&mut self) -> Option<char> { self.chars.next() }
+    fn read_char(&mut self) -> Option<char> {
+        // only support ascii characters
+        let mut buf = [0; 1];
+        match self.cursor.read(&mut buf) {
+            Ok(0) => None,
+            Ok(_) => Some(buf[0] as char),
+            Err(_) => None,
+        }
+    }
+
+    fn rollback(&mut self, pos: &Pos) { self.cursor.set_position(pos.offset); }
 }
 
 /// A tokenizer for the IR program.
@@ -162,15 +171,13 @@ pub struct TokenStream<'a> {
     ///
     /// The backtracking is only one character.
     buffered_char: Option<char>,
-    /// The buffered tokens for backtracking.
-    ///
-    /// The grammar can be LL(1), but here still support backtracking for
-    /// simplicity.
-    buffered_tokens: VecDeque<Token>,
+    /// The buffered token for peeking.
+    buffered_token: Option<Token>,
     /// Current pos.
     pos: Pos,
-    /// If eof is reached.
-    eof: bool,
+
+    /// Checkpoint stack.
+    ckpts: Vec<Pos>,
 }
 
 #[derive(Debug, Error)]
@@ -190,9 +197,9 @@ impl<'a> TokenStream<'a> {
         Self {
             reader: SliceReader::new(slice),
             buffered_char: None,
-            buffered_tokens: VecDeque::new(),
+            buffered_token: None,
             pos: Pos::default(),
-            eof: false,
+            ckpts: Vec::new(),
         }
     }
 
@@ -206,9 +213,6 @@ impl<'a> TokenStream<'a> {
         }
         let ch = self.reader.read_char();
         self.buffered_char = ch;
-        if ch.is_none() {
-            self.eof = true;
-        }
         Ok(ch)
     }
 
@@ -366,36 +370,46 @@ impl<'a> TokenStream<'a> {
         let end = self.pos;
         let token = Token::new(kind, Span::new(start, end));
 
-        if let Some(last) = self.buffered_tokens.back() {
+        if let Some(last) = &self.buffered_token {
             if !last.is_eof() {
-                self.buffered_tokens.push_back(token);
+                self.buffered_token = Some(token);
             } else {
                 // if the last token is eof, we should not buffer the new token
             }
         } else {
-            self.buffered_tokens.push_back(token);
+            self.buffered_token = Some(token);
         }
 
-        Ok(self.buffered_tokens.back().unwrap())
+        Ok(self.buffered_token.as_ref().unwrap())
+    }
+
+    pub fn checkpoint(&mut self) { self.ckpts.push(self.pos); }
+
+    pub fn rollback(&mut self) {
+        self.pos = self.ckpts.pop().unwrap();
+        self.reader.rollback(&self.pos);
+        self.buffered_char = None;
+        self.buffered_token = None;
     }
 
     /// Peek the next token.
     ///
     /// This will get the front token from the buffer, if the buffer is empty,
-    /// call `peek_next` to get the next token.
+    /// this will call `peek_next` to get the next token.
     pub fn peek(&mut self) -> Result<&Token> {
-        if self.buffered_tokens.is_empty() {
+        if self.buffered_token.is_none() {
             self.buffer_next()?;
         }
-        Ok(self.buffered_tokens.front().unwrap())
+        Ok(self.buffered_token.as_ref().unwrap())
     }
 
     /// Consume the next token.
     pub fn consume(&mut self) -> Result<Token> {
-        if self.buffered_tokens.is_empty() {
+        if self.buffered_token.is_none() {
             self.buffer_next()?;
         }
-        Ok(self.buffered_tokens.pop_front().unwrap())
+        let token = self.buffered_token.take().unwrap();
+        Ok(token)
     }
 
     pub fn consume_if(&mut self, kind: TokenKind) -> Result<Option<Token>> {
@@ -405,9 +419,6 @@ impl<'a> TokenStream<'a> {
             Ok(None)
         }
     }
-
-    /// Rebuffer the token to the front of the buffer.
-    pub fn rebuffer(&mut self, token: Token) { self.buffered_tokens.push_front(token); }
 
     fn handle_identifier(&mut self) -> Result<String> {
         let mut s = String::new();
@@ -545,4 +556,47 @@ impl<'a> ParseState<'a> {
 
     /// Push a new series of result name.
     pub fn push_result_names(&mut self, names: Vec<String>) { self.result_names.push(names); }
+}
+
+impl<T: Parse> Parse for Option<T> {
+    type Item = Option<T::Item>;
+
+    /// Parsing an optional item.
+    ///
+    /// This require the parser of `T` to backtrack the stream if the parsing
+    /// fails.
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> Result<Self::Item> {
+        state.stream.checkpoint();
+        match T::parse(ctx, state) {
+            Ok(item) => Ok(Some(item)),
+            Err(_) => {
+                state.stream.rollback();
+                Ok(None)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{TokenKind, TokenStream};
+
+    #[test]
+    fn test_ckpt() {
+        let mut stream = TokenStream::new("a b c");
+        stream.checkpoint();
+        assert_eq!(
+            stream.consume().unwrap().kind,
+            TokenKind::Tokenized("a".to_string())
+        );
+        assert_eq!(
+            stream.consume().unwrap().kind,
+            TokenKind::Tokenized("b".to_string())
+        );
+        stream.rollback();
+        assert_eq!(
+            stream.consume().unwrap().kind,
+            TokenKind::Tokenized("a".to_string())
+        );
+    }
 }
