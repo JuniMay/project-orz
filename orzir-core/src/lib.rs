@@ -9,7 +9,7 @@ pub use crate::{
         interfaces::{ControlFlow, DataFlow, RegionInterface},
         mnemonic::{Mnemonic, MnemonicSegment},
         op::{Op, OpMetadata, OpObj, OpParseFn, Successor},
-        parse::{Parse, ParseErrorKind, ParseState, TokenKind, TokenStream},
+        parse::{Parse, ParseErrorKind, ParseState, Span, TokenKind, TokenStream},
         print::{Print, PrintState},
         region::{Region, RegionKind},
         ty::{Ty, TyObj, TyParseFn, Typed},

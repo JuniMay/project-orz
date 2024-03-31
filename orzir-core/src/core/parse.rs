@@ -72,9 +72,9 @@ impl Pos {
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     /// The start position.
-    pub(self) start: Pos,
+    pub start: Pos,
     /// The end position.
-    pub(self) end: Pos,
+    pub end: Pos,
 }
 
 impl fmt::Display for Span {
@@ -88,7 +88,14 @@ impl fmt::Debug for Span {
 }
 
 impl Span {
-    pub(super) fn new(start: Pos, end: Pos) -> Self { Self { start, end } }
+    pub fn new(start: Pos, end: Pos) -> Self { Self { start, end } }
+
+    pub fn merge(&self, other: &Self) -> Self {
+        Self {
+            start: cmp::min(self.start, other.start),
+            end: cmp::max(self.end, other.end),
+        }
+    }
 }
 
 /// A token kind.
@@ -218,6 +225,46 @@ impl Token {
     pub fn new(kind: TokenKind, span: Span) -> Self { Self { kind, span } }
 
     pub fn is_eof(&self) -> bool { matches!(self.kind, TokenKind::Eof) }
+
+    pub fn unwrap_block_label(&self) -> String {
+        if let TokenKind::BlockLabel(Some(s)) = &self.kind {
+            s.clone()
+        } else {
+            panic!("not a block label");
+        }
+    }
+
+    pub fn unwrap_value_name(&self) -> String {
+        if let TokenKind::ValueName(Some(s)) = &self.kind {
+            s.clone()
+        } else {
+            panic!("not a value name");
+        }
+    }
+
+    pub fn unwrap_ty_alias(&self) -> String {
+        if let TokenKind::TyAlias(Some(s)) = &self.kind {
+            s.clone()
+        } else {
+            panic!("not a type alias");
+        }
+    }
+
+    pub fn unwrap_symbol_name(&self) -> String {
+        if let TokenKind::SymbolName(Some(s)) = &self.kind {
+            s.clone()
+        } else {
+            panic!("not a symbol name");
+        }
+    }
+
+    pub fn unwrap_tokenized(&self) -> String {
+        if let TokenKind::Tokenized(Some(s)) = &self.kind {
+            s.clone()
+        } else {
+            panic!("not a tokenized string");
+        }
+    }
 }
 
 /// A simple reader.
@@ -627,7 +674,7 @@ pub struct ParseState<'a> {
     /// The stack of region kinds and indices.
     region_info: Vec<(RegionKind, usize)>,
     /// The stack of result names.
-    result_names: Vec<Vec<String>>,
+    result_names: Vec<Vec<Token>>,
 }
 
 impl<'a> ParseState<'a> {
@@ -681,10 +728,10 @@ impl<'a> ParseState<'a> {
     pub fn curr_region_info(&self) -> (RegionKind, usize) { *self.region_info.last().unwrap() }
 
     /// Get and pop the current result names.
-    pub fn pop_result_names(&mut self) -> Vec<String> { self.result_names.pop().unwrap() }
+    pub fn pop_result_names(&mut self) -> Vec<Token> { self.result_names.pop().unwrap() }
 
     /// Push a new series of result name.
-    pub fn push_result_names(&mut self, names: Vec<String>) { self.result_names.push(names); }
+    pub fn push_result_names(&mut self, names: Vec<Token>) { self.result_names.push(names); }
 }
 
 impl<T: Parse> Parse for Option<T> {

@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::{collections::HashMap, fmt::Write};
 
 use super::parse::{ParseErrorKind, ParseState, TokenKind};
 use crate::{parse_error, token, Context, Parse, ParseResult, Print, PrintResult, PrintState};
@@ -55,10 +55,26 @@ impl Mnemonic {
     pub fn secondary(&self) -> &MnemonicSegment { &self.secondary }
 }
 
+macro_rules! map {
+    ($($key:expr => $value:expr),* $(,)?) => {
+        {
+            let mut map = HashMap::new();
+            $(
+                map.insert($key, $value);
+            )*
+            map
+        }
+    };
+}
+
 impl Parse for Mnemonic {
     type Item = Mnemonic;
 
     fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let shortcuts = map! {
+            "func" => ("func", "func"),
+        };
+
         let token = state.stream.consume()?;
         match token.kind {
             TokenKind::Tokenized(s) => {
@@ -69,10 +85,15 @@ impl Parse for Mnemonic {
                 } else {
                     s.as_str()
                 };
-                // TODO: More general approach to process mnemonic aliases.
                 let (primary, secondary) = match s.split_once('.') {
                     Some((primary, secondary)) => (primary, secondary),
-                    None => ("builtin", s),
+                    None => {
+                        if let Some(shortcut) = shortcuts.get(s) {
+                            *shortcut
+                        } else {
+                            ("builtin", s)
+                        }
+                    }
                 };
                 Ok(Mnemonic::new(primary, secondary))
             }

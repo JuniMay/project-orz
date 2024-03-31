@@ -3,8 +3,8 @@ use std::fmt::Write;
 use num_bigint::BigInt;
 use orzir_core::{
     parse_error, token, ArenaPtr, Context, DataFlow, Dialect, Op, OpMetadata, OpObj, Parse,
-    ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, TokenKind, TyObj,
-    Value, Verify,
+    ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Span, TokenKind,
+    TyObj, Value, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
 use thiserror::Error;
@@ -114,20 +114,35 @@ impl Parse for IConstOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let pos = state.stream.peek()?.span.start;
+
         let value = IntLiteral::parse(ctx, state)?;
         state.stream.expect(token!(':'))?;
         let ty = TyObj::parse(ctx, state)?;
         let op = ctx.ops.reserve();
         let mut result_names = state.pop_result_names();
         if result_names.len() != 1 {
+            if result_names.is_empty() {
+                return parse_error!(
+                    Span::new(pos, pos),
+                    ParseErrorKind::InvalidResultNumber(1, 0)
+                )
+                .into();
+            }
+
+            let mut span = result_names[0].span;
+            for name in result_names.iter().skip(1) {
+                span = span.merge(&name.span);
+            }
+
             return parse_error!(
-                // TODO: correct span
-                state.stream.peek()?.span,
+                span,
                 ParseErrorKind::InvalidResultNumber(1, result_names.len())
             )
             .into();
         }
-        let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop());
+        let result_name = result_names.pop().unwrap().unwrap_value_name();
+        let result = Value::new_op_result(ctx, ty, op, 0, Some(result_name));
         let op = IConstOp::new(ctx, op, result, value);
 
         Ok(op)
@@ -175,7 +190,8 @@ impl Parse for IAddOp {
         let op = ctx.ops.reserve();
         let (lhs, rhs, ty) = parse_binary(ctx, state)?;
         let mut result_names = state.pop_result_names();
-        let result = Value::new_op_result(ctx, ty, op, 0, result_names.pop());
+        let result_name = result_names.pop().unwrap().unwrap_value_name();
+        let result = Value::new_op_result(ctx, ty, op, 0, Some(result_name));
         let op = IAddOp::new(ctx, op, result, lhs, rhs);
         Ok(op)
     }

@@ -3,7 +3,8 @@ use std::fmt::Write;
 use orzir_core::{
     parse_error, token, ArenaPtr, Context, DataFlow, Dialect, Mnemonic, Op, OpMetadata, OpObj,
     Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Region,
-    RegionInterface, RegionKind, RunVerifiers, TokenKind, TyObj, Value, VerificationResult, Verify,
+    RegionInterface, RegionKind, RunVerifiers, Span, TokenKind, TyObj, Value, VerificationResult,
+    Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
 
@@ -73,9 +74,12 @@ impl Parse for FuncOp {
 
         let result_names = state.pop_result_names();
         if !result_names.is_empty() {
+            let mut span = result_names[0].span;
+            for result_name in result_names.iter().skip(1) {
+                span = span.merge(&result_name.span);
+            }
             return parse_error!(
-                // TODO: correct span
-                state.stream.peek()?.span,
+                span,
                 ParseErrorKind::InvalidResultNumber(0, result_names.len())
             )
             .into();
@@ -138,9 +142,13 @@ impl Parse for ReturnOp {
         let result_names = state.pop_result_names();
 
         if !result_names.is_empty() {
+            let mut span = result_names[0].span;
+            for result_name in result_names.iter().skip(1) {
+                span = span.merge(&result_name.span);
+            }
+
             return parse_error!(
-                // TODO: correct span
-                state.stream.peek()?.span,
+                span,
                 ParseErrorKind::InvalidResultNumber(0, result_names.len())
             )
             .into();
@@ -199,6 +207,8 @@ impl Parse for CallOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let pos = state.stream.peek()?.span.start;
+
         let callee = Symbol::parse(ctx, state)?;
 
         state.stream.expect(token!('('))?;
@@ -245,17 +255,30 @@ impl Parse for CallOp {
         let mut result_names = state.pop_result_names();
         let mut results = Vec::new();
 
-        if !result_names.len() == ret_tys.len() {
+        if result_names.len() != ret_tys.len() {
+            if result_names.is_empty() {
+                return parse_error!(
+                    Span::new(pos, pos),
+                    ParseErrorKind::InvalidResultNumber(ret_tys.len(), 0)
+                )
+                .into();
+            }
+
+            let mut span = result_names[0].span;
+            for result_name in result_names.iter().skip(1) {
+                span = span.merge(&result_name.span);
+            }
+
             return parse_error!(
-                // TODO: correct span
-                state.stream.peek()?.span,
+                span,
                 ParseErrorKind::InvalidResultNumber(ret_tys.len(), result_names.len())
             )
             .into();
         }
 
         for (i, (result_name, ret_ty)) in result_names.drain(..).zip(ret_tys.iter()).enumerate() {
-            let result = Value::new_op_result(ctx, *ret_ty, op, i, Some(result_name));
+            let result =
+                Value::new_op_result(ctx, *ret_ty, op, i, Some(result_name.unwrap_value_name()));
             results.push(result);
         }
 

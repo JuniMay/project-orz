@@ -236,7 +236,6 @@ impl Parse for Block {
                 TokenKind::ValueName(_) | TokenKind::Tokenized(_) => {
                     // parse an operation
                     let op = OpObj::parse(ctx, state)?;
-                    // TODO: error handling.
                     block
                         .deref_mut(&mut ctx.blocks)
                         .layout_mut()

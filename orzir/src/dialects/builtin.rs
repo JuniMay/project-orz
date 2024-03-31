@@ -109,9 +109,13 @@ impl Parse for ModuleOp {
         let result_names = state.pop_result_names();
 
         if !result_names.is_empty() {
+            let mut span = result_names[0].span;
+            for name in result_names.iter().skip(1) {
+                span = span.merge(&name.span);
+            }
+
             return parse_error!(
-                // TODO: correct span
-                state.stream.peek()?.span,
+                span,
                 ParseErrorKind::InvalidResultNumber(0, result_names.len())
             )
             .into();

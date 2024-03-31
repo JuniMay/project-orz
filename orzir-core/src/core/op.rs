@@ -252,8 +252,8 @@ impl Parse for OpObj {
                     // eat the value name
                     let token = state.stream.consume()?;
 
-                    if let TokenKind::ValueName(name) = token.kind {
-                        result_names.push(name.unwrap());
+                    if let TokenKind::ValueName(_) = token.kind {
+                        result_names.push(token);
                     } else {
                         unreachable!();
                     }

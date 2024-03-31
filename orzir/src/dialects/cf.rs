@@ -10,11 +10,9 @@ use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
 use crate::verifiers::{control_flow::*, *};
 
 /// The jump operation.
-///
-/// TODO: Make sure the operands number is ok to be zero.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "cf.jump"]
-#[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
+#[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 pub struct Jump {
     #[metadata]
     metadata: OpMetadata,
@@ -33,9 +31,13 @@ impl Parse for Jump {
 
         let result_names = state.pop_result_names();
         if !result_names.is_empty() {
+            let mut span = result_names[0].span;
+            for name in result_names.iter().skip(1) {
+                span = span.merge(&name.span);
+            }
+
             return parse_error!(
-                // TODO: correct span
-                state.stream.peek()?.span,
+                span,
                 ParseErrorKind::InvalidResultNumber(0, result_names.len())
             )
             .into();

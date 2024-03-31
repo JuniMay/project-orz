@@ -31,7 +31,5 @@ pub struct Context {
     /// This is used for interface casting.
     pub casters: CasterStorage,
     /// The name of values.
-    ///
-    /// TODO: More fine-grained name management.
     pub(crate) value_names: RefCell<NameManager<Value>>,
 }
