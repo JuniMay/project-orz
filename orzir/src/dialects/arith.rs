@@ -23,20 +23,18 @@ fn parse_binary(
     Ok((lhs, rhs, ty))
 }
 
-fn print_binary(ctx: &Context, state: &mut PrintState, op_inner: &dyn Op) -> PrintResult<()> {
-    op_inner
-        .get_operand(0)
+fn print_binary(ctx: &Context, state: &mut PrintState, op: &dyn Op) -> PrintResult<()> {
+    op.get_operand(0)
         .unwrap()
         .deref(&ctx.values)
         .print(ctx, state)?;
     write!(state.buffer, ", ")?;
-    op_inner
-        .get_operand(1)
+    op.get_operand(1)
         .unwrap()
         .deref(&ctx.values)
         .print(ctx, state)?;
     write!(state.buffer, ": ")?;
-    let result_tys = op_inner.result_tys(ctx);
+    let result_tys = op.result_tys(ctx);
     assert!(result_tys.len() == 1);
     result_tys[0].deref(&ctx.tys).print(ctx, state)?;
     Ok(())
@@ -114,17 +112,24 @@ impl Parse for IConstOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let pos = state.stream.peek()?.span.start;
+        let op = ctx.ops.reserve();
+        state.enter_component_from(op);
+
+        let start_pos = state.stream.curr_pos()?;
 
         let value = IntLiteral::parse(ctx, state)?;
         state.stream.expect(token!(':'))?;
         let ty = TyObj::parse(ctx, state)?;
-        let op = ctx.ops.reserve();
+
+        let _end_pos = state.stream.curr_pos()?;
+
+        state.exit_component();
+
         let mut result_names = state.pop_result_names();
         if result_names.len() != 1 {
             if result_names.is_empty() {
                 return parse_error!(
-                    Span::new(pos, pos),
+                    Span::new(start_pos, start_pos),
                     ParseErrorKind::InvalidResultNumber(1, 0)
                 )
                 .into();
@@ -143,6 +148,8 @@ impl Parse for IConstOp {
         }
         let result_name = result_names.pop().unwrap().unwrap_value_name();
         let result = Value::new_op_result(ctx, ty, op, 0, Some(result_name));
+
+        // construct the operation and fill
         let op = IConstOp::new(ctx, op, result, value);
 
         Ok(op)
@@ -151,7 +158,6 @@ impl Parse for IConstOp {
 
 impl Print for IConstOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, " ")?;
         self.value.print(ctx, state)?;
         write!(state.buffer, " : ")?;
         let result_tys = self.result_tys(ctx);
@@ -188,10 +194,42 @@ impl Parse for IAddOp {
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let op = ctx.ops.reserve();
+
+        state.enter_component_from(op);
+        let start_pos = state.stream.curr_pos()?;
+
         let (lhs, rhs, ty) = parse_binary(ctx, state)?;
+
+        let _end_pos = state.stream.curr_pos()?;
+        state.exit_component();
+
         let mut result_names = state.pop_result_names();
+
+        if result_names.len() != 1 {
+            if result_names.is_empty() {
+                return parse_error!(
+                    Span::new(start_pos, start_pos),
+                    ParseErrorKind::InvalidResultNumber(1, 0)
+                )
+                .into();
+            }
+
+            let mut span = result_names[0].span;
+            for name in result_names.iter().skip(1) {
+                span = span.merge(&name.span);
+            }
+
+            return parse_error!(
+                span,
+                ParseErrorKind::InvalidResultNumber(1, result_names.len())
+            )
+            .into();
+        }
+
         let result_name = result_names.pop().unwrap().unwrap_value_name();
         let result = Value::new_op_result(ctx, ty, op, 0, Some(result_name));
+
+        // construct the operation and fill
         let op = IAddOp::new(ctx, op, result, lhs, rhs);
         Ok(op)
     }
@@ -199,9 +237,7 @@ impl Parse for IAddOp {
 
 impl Print for IAddOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, " ")?;
-        let op_base = self;
-        print_binary(ctx, state, op_base)
+        print_binary(ctx, state, self)
     }
 }
 

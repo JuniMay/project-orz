@@ -276,7 +276,8 @@ impl Print for Block {
                 write!(state.buffer, "(")?;
                 for (i, arg) in self.args.iter().enumerate() {
                     let arg = arg.deref(&ctx.values);
-                    write!(state.buffer, "{}:", arg.name(ctx))?;
+                    arg.print(ctx, state)?;
+                    write!(state.buffer, ": ")?;
                     let ty = arg.ty(ctx);
                     ty.deref(&ctx.tys).print(ctx, state)?;
                     if i != self.args.len() - 1 {

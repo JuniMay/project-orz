@@ -27,7 +27,14 @@ impl Parse for Jump {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let op = ctx.ops.reserve();
+        state.enter_component_from(op);
+        let _start_pos = state.stream.curr_pos()?;
+
         let successor = Successor::parse(ctx, state)?;
+
+        let _end_pos = state.stream.curr_pos()?;
+        state.exit_component();
 
         let result_names = state.pop_result_names();
         if !result_names.is_empty() {
@@ -43,7 +50,6 @@ impl Parse for Jump {
             .into();
         }
 
-        let op = ctx.ops.reserve();
         let op = Jump::new(ctx, op, successor);
 
         Ok(op)
@@ -52,10 +58,7 @@ impl Parse for Jump {
 
 impl Print for Jump {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        let successor = self.get_successor(0).unwrap();
-        write!(state.buffer, " ")?;
-        successor.print(ctx, state)?;
-        Ok(())
+        self.get_successor(0).unwrap().print(ctx, state)
     }
 }
 
@@ -83,6 +86,11 @@ impl Parse for Branch {
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         // cf.branch %cond, ^then(%a: int<32>), ^else(%b: float)
+        let op = ctx.ops.reserve();
+        state.enter_component_from(op);
+
+        let _start_pos = state.stream.curr_pos()?;
+
         let cond = Value::parse(ctx, state)?;
         state.stream.expect(token!(','))?;
 
@@ -91,11 +99,23 @@ impl Parse for Branch {
 
         let else_block = Successor::parse(ctx, state)?;
 
+        let _end_pos = state.stream.curr_pos()?;
+        state.exit_component();
+
         let result_names = state.pop_result_names();
+        if !result_names.is_empty() {
+            let mut span = result_names[0].span;
+            for name in result_names.iter().skip(1) {
+                span = span.merge(&name.span);
+            }
 
-        if !result_names.is_empty() {}
+            return parse_error!(
+                span,
+                ParseErrorKind::InvalidResultNumber(0, result_names.len())
+            )
+            .into();
+        }
 
-        let op = ctx.ops.reserve();
         let op = Branch::new(ctx, op, cond, then_block, else_block);
 
         Ok(op)
@@ -104,7 +124,6 @@ impl Parse for Branch {
 
 impl Print for Branch {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, " ")?;
         self.get_operand(0)
             .unwrap()
             .deref(&ctx.values)

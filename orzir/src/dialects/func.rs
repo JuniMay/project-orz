@@ -13,7 +13,6 @@ use crate::verifiers::{control_flow::*, *};
 
 #[derive(Op, DataFlow, RegionInterface, ControlFlow)]
 #[mnemonic = "func.func"]
-// #[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
 pub struct FuncOp {
     #[metadata]
@@ -127,6 +126,9 @@ impl Parse for ReturnOp {
         // func.return
         let op = ctx.ops.reserve();
 
+        state.enter_component_from(op);
+        let _start_pos = state.stream.curr_pos()?;
+
         let mut operands = Vec::new();
         while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
             let operand = Value::parse(ctx, state)?;
@@ -139,8 +141,10 @@ impl Parse for ReturnOp {
             }
         }
 
-        let result_names = state.pop_result_names();
+        let _end_pos = state.stream.curr_pos()?;
+        state.exit_component();
 
+        let result_names = state.pop_result_names();
         if !result_names.is_empty() {
             let mut span = result_names[0].span;
             for result_name in result_names.iter().skip(1) {
@@ -162,17 +166,12 @@ impl Parse for ReturnOp {
 
 impl Print for ReturnOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        let operations = self.operands();
-        if !operations.is_empty() {
-            write!(state.buffer, " ")?;
-            for (i, operand) in operations.iter().enumerate() {
-                if i > 0 {
-                    write!(state.buffer, ", ")?;
-                }
-                operand.deref(&ctx.values).print(ctx, state)?;
+        for (i, operand) in self.operands().into_iter().enumerate() {
+            if i > 0 {
+                write!(state.buffer, ", ")?;
             }
+            operand.deref(&ctx.values).print(ctx, state)?;
         }
-
         Ok(())
     }
 }
@@ -197,8 +196,6 @@ pub struct CallOp {
     operands: Vec<ArenaPtr<Value>>,
 
     callee: Symbol,
-
-    ret_ty: Vec<ArenaPtr<TyObj>>,
 }
 
 impl Verify for CallOp {}
@@ -207,59 +204,60 @@ impl Parse for CallOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let pos = state.stream.peek()?.span.start;
+        let op = ctx.ops.reserve();
 
-        let callee = Symbol::parse(ctx, state)?;
+        state.enter_component_from(op);
+        let start_pos = state.stream.peek()?.span.start;
 
-        state.stream.expect(token!('('))?;
-
+        let callee;
         let mut operands = Vec::new();
+        let mut result_tys = Vec::new();
 
-        while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
-            let operand = Value::parse(ctx, state)?;
-            operands.push(operand);
+        {
+            callee = Symbol::parse(ctx, state)?;
+            state.stream.expect(token!('('))?;
+            while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
+                let operand = Value::parse(ctx, state)?;
+                operands.push(operand);
 
-            if let TokenKind::Char(',') = state.stream.peek()?.kind {
-                state.stream.consume()?;
-            } else {
-                break;
-            }
-        }
-
-        state.stream.expect(token!(')'))?;
-        state.stream.expect(token!(':'))?;
-
-        let mut ret_tys = Vec::new();
-
-        // (tys...) or ty
-        if let TokenKind::Char('(') = state.stream.peek()?.kind {
-            state.stream.consume()?;
-            loop {
-                let ty = TyObj::parse(ctx, state)?;
-                ret_tys.push(ty);
-
-                if let TokenKind::Char(')') = state.stream.peek()?.kind {
+                if let TokenKind::Char(',') = state.stream.peek()?.kind {
                     state.stream.consume()?;
-                    break;
                 } else {
-                    state.stream.expect(token!(','))?;
+                    break;
                 }
             }
-        } else {
-            let ty = TyObj::parse(ctx, state)?;
-            ret_tys.push(ty);
+            state.stream.expect(token!(')'))?;
+            state.stream.expect(token!(':'))?;
+            // (tys,...) or ty
+            if let TokenKind::Char('(') = state.stream.peek()?.kind {
+                state.stream.consume()?;
+                loop {
+                    let ty = TyObj::parse(ctx, state)?;
+                    result_tys.push(ty);
+
+                    if let TokenKind::Char(')') = state.stream.peek()?.kind {
+                        state.stream.consume()?;
+                        break;
+                    } else {
+                        state.stream.expect(token!(','))?;
+                    }
+                }
+            } else {
+                let ty = TyObj::parse(ctx, state)?;
+                result_tys.push(ty);
+            }
         }
 
-        let op = ctx.ops.reserve();
+        let _end_pos = state.stream.curr_pos()?;
+        state.exit_component();
 
         let mut result_names = state.pop_result_names();
         let mut results = Vec::new();
-
-        if result_names.len() != ret_tys.len() {
+        if result_names.len() != result_tys.len() {
             if result_names.is_empty() {
                 return parse_error!(
-                    Span::new(pos, pos),
-                    ParseErrorKind::InvalidResultNumber(ret_tys.len(), 0)
+                    Span::new(start_pos, start_pos),
+                    ParseErrorKind::InvalidResultNumber(result_tys.len(), 0)
                 )
                 .into();
             }
@@ -271,25 +269,26 @@ impl Parse for CallOp {
 
             return parse_error!(
                 span,
-                ParseErrorKind::InvalidResultNumber(ret_tys.len(), result_names.len())
+                ParseErrorKind::InvalidResultNumber(result_tys.len(), result_names.len())
             )
             .into();
         }
 
-        for (i, (result_name, ret_ty)) in result_names.drain(..).zip(ret_tys.iter()).enumerate() {
+        for (i, (result_name, ret_ty)) in
+            result_names.drain(..).zip(result_tys.drain(..)).enumerate()
+        {
             let result =
-                Value::new_op_result(ctx, *ret_ty, op, i, Some(result_name.unwrap_value_name()));
+                Value::new_op_result(ctx, ret_ty, op, i, Some(result_name.unwrap_value_name()));
             results.push(result);
         }
 
-        let op = CallOp::new(ctx, op, results, operands, callee, ret_tys);
+        let op = CallOp::new(ctx, op, results, operands, callee);
         Ok(op)
     }
 }
 
 impl Print for CallOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, " ")?;
         self.callee.print(ctx, state)?;
         write!(state.buffer, "(")?;
         let operands = self.operands();
@@ -301,18 +300,20 @@ impl Print for CallOp {
         }
         write!(state.buffer, ") : ")?;
 
-        if self.ret_ty.len() > 1 {
+        let result_tys = self.result_tys(ctx);
+
+        if result_tys.len() > 1 {
             write!(state.buffer, "(")?;
         }
 
-        for (i, ty) in self.ret_ty.iter().enumerate() {
+        for (i, ty) in result_tys.iter().enumerate() {
             ty.deref(&ctx.tys).print(ctx, state)?;
-            if i != self.ret_ty.len() - 1 {
+            if i != result_tys.len() - 1 {
                 write!(state.buffer, ", ")?;
             }
         }
 
-        if self.ret_ty.len() > 1 {
+        if result_tys.len() > 1 {
             write!(state.buffer, ")")?;
         }
 

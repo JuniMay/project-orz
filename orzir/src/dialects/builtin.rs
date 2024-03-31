@@ -99,15 +99,18 @@ impl Parse for ModuleOp {
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let op = ctx.ops.reserve();
         state.enter_component_from(op);
+        let _start_pos = state.stream.curr_pos()?;
+
         let symbol = Option::<Symbol>::parse(ctx, state)?;
 
         state.enter_region_with(RegionKind::Graph, 0);
         let region = Region::parse(ctx, state)?;
         state.exit_region();
+
+        let _end_pos = state.stream.curr_pos()?;
         state.exit_component();
 
         let result_names = state.pop_result_names();
-
         if !result_names.is_empty() {
             let mut span = result_names[0].span;
             for name in result_names.iter().skip(1) {
@@ -130,10 +133,9 @@ impl Parse for ModuleOp {
 impl Print for ModuleOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         if let Some(symbol) = &self.symbol {
-            write!(state.buffer, " ")?;
             symbol.print(ctx, state)?;
+            write!(state.buffer, " ")?;
         }
-        write!(state.buffer, " ")?;
         self.get_region(0)
             .unwrap()
             .deref(&ctx.regions)

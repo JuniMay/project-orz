@@ -648,6 +648,11 @@ impl<'a> TokenStream<'a> {
             .into()
         }
     }
+
+    pub fn curr_pos(&mut self) -> ParseResult<Pos> {
+        self.skip_whitespace()?;
+        Ok(self.pos)
+    }
 }
 
 /// The parse trait for all the components in IR.

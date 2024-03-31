@@ -333,6 +333,7 @@ impl Print for OpObj {
         }
 
         self.as_ref().mnemonic().print(ctx, state)?;
+        write!(state.buffer, " ")?;
         self.as_ref().print(ctx, state)?;
         Ok(())
     }
