@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap};
 
 use super::{
-    block::Block, dialect::Dialect, mnemonic::MnemonicSegment, operation::OpObj, region::Region,
+    block::Block, dialect::Dialect, mnemonic::MnemonicSegment, op::OpObj, region::Region,
     symbol::NameManager, ty::TyObj, value::Value,
 };
 use crate::support::{
@@ -31,7 +31,5 @@ pub struct Context {
     /// This is used for interface casting.
     pub casters: CasterStorage,
     /// The name of values.
-    ///
-    /// TODO: More fine-grained name management.
     pub(crate) value_names: RefCell<NameManager<Value>>,
 }

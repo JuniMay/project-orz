@@ -17,4 +17,4 @@ proc-macro = true
 [dev-dependencies]
 trybuild = "=1.0.89"
 orzir-core = { path = "../orzir-core" }
-anyhow = "1.0.81"
+prettyplease = "0.2.17"

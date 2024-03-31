@@ -1,20 +1,15 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    rc::{Rc, Weak},
-};
+use std::collections::HashMap;
 
-use anyhow::Result;
 use thiserror::Error;
 
-use super::operation::OpObj;
-use crate::support::{
-    bimap::{BiMap, Duplicated},
-    storage::ArenaPtr,
+use super::op::OpObj;
+use crate::{
+    support::{
+        bimap::{BiMap, Duplicated},
+        storage::ArenaPtr,
+    },
+    Context, Region,
 };
-
-pub type SymbolTableOwned = Rc<RefCell<SymbolTable>>;
-pub type SymbolTableCell = Weak<RefCell<SymbolTable>>;
 
 /// A symbol table.
 ///
@@ -22,16 +17,16 @@ pub type SymbolTableCell = Weak<RefCell<SymbolTable>>;
 pub struct SymbolTable {
     /// The symbol name and the operation that defines it.
     symbols: HashMap<String, ArenaPtr<OpObj>>,
-    /// The upper-level symbol table.
-    above: Option<SymbolTableCell>,
+    /// The region that the symbol table belongs to.
+    region: ArenaPtr<Region>,
 }
 
 impl SymbolTable {
     /// Create a new symbol table.
-    pub fn new(above: Option<SymbolTableCell>) -> Self {
+    pub fn new(region: ArenaPtr<Region>) -> Self {
         Self {
             symbols: HashMap::new(),
-            above,
+            region,
         }
     }
 
@@ -41,12 +36,17 @@ impl SymbolTable {
     /// Get the operation that defines the symbol.
     ///
     /// This might return the operation from the upper-level symbol table.
-    pub fn lookup(&self, name: &str) -> Option<ArenaPtr<OpObj>> {
+    pub fn lookup(&self, ctx: &Context, name: &str) -> Option<ArenaPtr<OpObj>> {
         self.symbols.get(name).cloned().or_else(|| {
-            self.above
+            self.region
+                .deref(&ctx.regions)
+                .parent_op()
+                .deref(&ctx.ops)
                 .as_ref()
-                .and_then(|above| above.upgrade().map(|table| table.borrow().lookup(name)))
-                .flatten()
+                .parent_region(ctx)
+                .and_then(|parent_region| {
+                    parent_region.deref(&ctx.regions).lookup_symbol(ctx, name)
+                })
         })
     }
 }
@@ -81,13 +81,17 @@ impl<T> Default for NameManager<T> {
 }
 
 impl<T> NameManager<T> {
-    pub(super) fn set(&mut self, ptr: ArenaPtr<T>, name: String) -> Result<()> {
+    pub(super) fn set(
+        &mut self,
+        ptr: ArenaPtr<T>,
+        name: String,
+    ) -> Result<(), NameAllocDuplicatedErr> {
         let result = self.names.checked_insert(ptr, name);
         match result {
             Ok(_) => Ok(()),
-            Err(Duplicated::Fwd(_)) => Err(NameAllocDuplicatedErr::Key.into()),
-            Err(Duplicated::Rev(_)) => Err(NameAllocDuplicatedErr::Name.into()),
-            Err(Duplicated::Both(_, _)) => Err(NameAllocDuplicatedErr::Both.into()),
+            Err(Duplicated::Fwd(_)) => Err(NameAllocDuplicatedErr::Key),
+            Err(Duplicated::Rev(_)) => Err(NameAllocDuplicatedErr::Name),
+            Err(Duplicated::Both(_, _)) => Err(NameAllocDuplicatedErr::Both),
             Err(Duplicated::Full) => Ok(()),
         }
     }

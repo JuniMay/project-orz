@@ -1,21 +1,17 @@
 use cast::{caster_impl, register_caster_impl};
+use interfaces::{control_flow, data_flow, region_interface};
 use proc_macro::TokenStream;
-use ty::derive_ty;
-
-use crate::operation::derive_op;
 
 mod cast;
-mod operation;
+mod format;
+mod interfaces;
+mod op;
 mod ty;
 
-/// Implement a [Op](orzir_core::Op) for the given struct.
+/// Implement an [Op](orzir_core::Op) for the given struct.
 ///
 /// This will first generate a `new` constructor for the struct, which returns
 /// an `ArenaPtr<OpObj>` object.
-///
-/// To make the target struct valid for deriving, it must have a field with type
-/// [`OpBase`](orzir_core::OpBase), and marked with the `#[base]` attribute.
-/// This field is used to store the basic operation informations.
 ///
 /// The `#[mnemonic = "..."]` attribute is used to specify the mnemonic of the
 /// operation. The mnemonic string will be split by the first dot character. The
@@ -40,15 +36,40 @@ mod ty;
 /// interfaces can be implemented in a plug-in manner. This can be done by
 /// calling the `register_caster` macro in the `register` function of any
 /// dialect.
-#[proc_macro_derive(Op, attributes(mnemonic, base, verifiers, interfaces))]
-pub fn op(item: TokenStream) -> TokenStream { derive_op(item.into()).unwrap().into() }
+///
+/// To make a struct valid for the `Op` derive, the `#[metadata]` attribute must
+/// be specified for the metadata field of the struct, which contains the
+/// `self_ptr` and `parent_block` fields.
+///
+/// For an [`Op``](orzir_core::Op) trait to be valid, the following traits must
+/// be implemented:
+/// - [`Print`](orzir_core::Print)
+/// - [`Parse`](orzir_core::Parse)
+/// - [`Verify`](orzir_core::Verify)
+/// - [`DataFlow`](orzir_core::DataFlow)
+/// - [`ControlFlow`](orzir_core::ControlFlow)
+/// - [`RegionInterface`](orzir_core::RegionInterface)
+///
+/// They can be derived or implemented manually.
+#[proc_macro_derive(Op, attributes(mnemonic, verifiers, interfaces, metadata))]
+pub fn op(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    op::derive_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
 
 /// Implement a [Ty](orzir_core::Ty) for the given struct.
 ///
 /// This is similar to the [`Op`] derive, but for the `Ty` trait, except that
 /// the constructor will be `get` for singleton style construction.
 #[proc_macro_derive(Ty, attributes(mnemonic, verifiers, interfaces))]
-pub fn ty(item: TokenStream) -> TokenStream { derive_ty(item.into()).unwrap().into() }
+pub fn ty(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    ty::derive_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
 
 /// Create a caster for casting from one trait object to another.
 ///
@@ -61,7 +82,11 @@ pub fn ty(item: TokenStream) -> TokenStream { derive_ty(item.into()).unwrap().in
 /// caster!(ModuleOp => IsIsolatedFromAbove)
 /// ```
 #[proc_macro]
-pub fn caster(input: TokenStream) -> TokenStream { caster_impl(input.into()).unwrap().into() }
+pub fn caster(input: TokenStream) -> TokenStream {
+    caster_impl(input.into())
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
 
 /// Register a trait object caster in the context.
 ///
@@ -79,4 +104,92 @@ pub fn caster(input: TokenStream) -> TokenStream { caster_impl(input.into()).unw
 #[proc_macro]
 pub fn register_caster(input: TokenStream) -> TokenStream {
     register_caster_impl(input.into()).unwrap().into()
+}
+
+/// Implement the [RegionInterface](orzir_core::RegionInterface) for the given
+/// struct.
+///
+/// For the region interface, the `#[region]` attribute is used to specify the
+/// region field of the struct.
+///
+/// There are currently two ways to specify these fields:
+///
+/// 1. Using the `#[region(n)]` where `n` is the index of the field.
+/// 2. Using the `#[region(...)]`, which means the field is a vector of the
+///    regions.
+///
+/// The type of the fields should be `ArenaPtr<Region>` or
+/// `Vec<ArenaPtr<Region>>`.
+#[proc_macro_derive(RegionInterface, attributes(region))]
+pub fn derive_region_interface(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    region_interface::derive_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Implement the [ControlFlow](orzir_core::ControlFlow) for the given struct.
+///
+/// The `#[successor]` attribute is used to specify the successor field of the
+/// struct.
+///
+/// There are currently two ways to specify these fields:
+///
+/// 1. Using the `#[successor(n)]` where `n` is the index of the field.
+/// 2. Using the `#[successor(...)]`, which means the field is a vector of the
+///    successors.
+///
+/// The type of the fields should be `Successor` or `Vec<Successor>`.
+#[proc_macro_derive(ControlFlow, attributes(successor))]
+pub fn derive_control_flow(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    control_flow::derive_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Implement the [DataFlow](orzir_core::DataFlow) for the given struct.
+///
+/// The `#[result]` and `#[operand]` attributes are used to specify the result
+/// and operand fields of the struct.
+///
+/// There are currently two ways to specify these fields:
+///
+/// 1. Using the `#[result(n)]` or `#[operand(n)]` where `n` is the index of the
+///    value.
+/// 2. Using the `#[result(...)]` or `#[operand(...)]`, which means the field is
+///    a vector of the values.
+///
+/// The type of the fields should be `ArenaPtr<Value>` or
+/// `Vec<ArenaPtr<Value>>`.
+#[proc_macro_derive(DataFlow, attributes(result, operand))]
+pub fn derive_data_flow(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    data_flow::derive_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive the `Parse` trait for the given struct.
+///
+/// This support very simple grammar, for more complex grammar, the trait can be
+/// implemented manually.
+#[proc_macro_derive(Parse, attributes(format))]
+pub fn derive_parse(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    format::derive_parse_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive the `Print` trait for the given struct.
+///
+/// This support very simple grammar, for more complex grammar, the trait can be
+/// implemented manually.
+#[proc_macro_derive(Print, attributes(format))]
+pub fn derive_print(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    format::derive_print_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }

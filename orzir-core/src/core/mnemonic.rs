@@ -1,9 +1,7 @@
-use std::fmt::Write;
+use std::{collections::HashMap, fmt::Write};
 
-use anyhow::Result;
-
-use super::parse::TokenKind;
-use crate::{Context, Parse, Print, PrintState, TokenStream};
+use super::parse::{ParseErrorKind, ParseState, TokenKind};
+use crate::{parse_error, token, Context, Parse, ParseResult, Print, PrintResult, PrintState};
 
 /// A mnemonic segment.
 ///
@@ -57,41 +55,59 @@ impl Mnemonic {
     pub fn secondary(&self) -> &MnemonicSegment { &self.secondary }
 }
 
+macro_rules! map {
+    ($($key:expr => $value:expr),* $(,)?) => {
+        {
+            let mut map = HashMap::new();
+            $(
+                map.insert($key, $value);
+            )*
+            map
+        }
+    };
+}
+
 impl Parse for Mnemonic {
-    type Arg = ();
     type Item = Mnemonic;
 
-    fn parse(_: (), _: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let token = stream.consume()?;
+    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let shortcuts = map! {
+            "func" => ("func", "func"),
+        };
+
+        let token = state.stream.consume()?;
         match token.kind {
-            TokenKind::Tokenized(ref s) => {
-                let (primary, secondary) = match s.split_once('.') {
-                    Some((primary, secondary)) => (primary, secondary),
-                    None => ("builtin", s.as_str()),
-                };
-                Ok(Mnemonic::new(primary, secondary))
-            }
-            TokenKind::Quoted(ref s) => {
+            TokenKind::Tokenized(s) => {
                 // remove the quotes.
+                let s = s.unwrap();
                 let s = if s.starts_with('"') && s.ends_with('"') {
                     &s[1..s.len() - 1]
                 } else {
                     s.as_str()
                 };
-                // TODO: More general approach to process mnemonic aliases.
                 let (primary, secondary) = match s.split_once('.') {
                     Some((primary, secondary)) => (primary, secondary),
-                    None => ("builtin", s),
+                    None => {
+                        if let Some(shortcut) = shortcuts.get(s) {
+                            *shortcut
+                        } else {
+                            ("builtin", s)
+                        }
+                    }
                 };
                 Ok(Mnemonic::new(primary, secondary))
             }
-            _ => anyhow::bail!("expect a mnemonic."),
+            _ => parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token!("...")].into(), token.kind)
+            )
+            .into(),
         }
     }
 }
 
 impl Print for Mnemonic {
-    fn print(&self, _: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
         if self.primary.as_str() == "builtin" {
             write!(state.buffer, "{}", self.secondary.as_str())?;
         } else {

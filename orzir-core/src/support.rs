@@ -1,5 +1,6 @@
 pub mod bimap;
 pub mod cast;
-pub mod either;
+pub mod diagnostic;
+pub mod error;
 pub mod list;
 pub mod storage;

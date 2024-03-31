@@ -1,13 +1,16 @@
-use anyhow::Result;
 use downcast_rs::{impl_downcast, Downcast};
 
-use super::{context::Context, mnemonic::Mnemonic, parse::ParseFn};
+use super::{
+    context::Context,
+    mnemonic::Mnemonic,
+    parse::{ParseFn, ParseState},
+};
 use crate::{
     support::{
         cast::CastRef,
         storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
     },
-    Parse, Print, PrintState, TokenStream, Verify,
+    Parse, ParseResult, Print, PrintResult, PrintState, Verify,
 };
 
 pub trait Ty: Downcast + GetUniqueArenaHash + Print + Verify {
@@ -73,11 +76,10 @@ impl PartialEq for TyObj {
 impl Eq for TyObj {}
 
 impl Parse for TyObj {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let mnemonic = Mnemonic::parse((), ctx, stream)?;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let mnemonic = Mnemonic::parse(ctx, state)?;
         let parse_fn = ctx
             .dialects
             .get(mnemonic.primary())
@@ -90,14 +92,14 @@ impl Parse for TyObj {
                     mnemonic.secondary().as_str()
                 )
             });
-        parse_fn((), ctx, stream)
+        parse_fn(ctx, state)
     }
 }
 
-pub type TyParseFn = ParseFn<(), ArenaPtr<TyObj>>;
+pub type TyParseFn = ParseFn<ArenaPtr<TyObj>>;
 
 impl Print for TyObj {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         self.as_ref().mnemonic().print(ctx, state)?;
         self.as_ref().print(ctx, state)?;
         Ok(())

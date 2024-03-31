@@ -1,81 +1,99 @@
 use std::fmt::Write;
 
-use anyhow::Result;
 use orzir_core::{
-    ArenaPtr, Block, Context, Dialect, Op, OpBase, OpObj, OpResultBuilder, Parse, Print,
-    PrintState, Region, RegionKind, TokenKind, TokenStream, Ty, TyObj, Verify, VerifyInterfaces,
+    parse_error, token, ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseErrorKind,
+    ParseResult, ParseState, Print, PrintResult, PrintState, Region, RegionInterface, RegionKind,
+    RunVerifiers, TokenKind, Ty, TyObj, VerificationResult, Verify,
 };
-use orzir_macros::{Op, Ty};
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Ty};
+use thiserror::Error;
 
-use crate::{
-    interfaces::*,
-    verifiers::{control_flow::*, *},
-};
+use crate::verifiers::{control_flow::*, *};
 
-#[derive(Op)]
-#[mnemonic = "builtin.module"]
-#[interfaces(RegionKindInterface)]
-#[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
-pub struct ModuleOp {
-    #[base]
-    op_base: OpBase,
-    symbol: Option<String>,
+#[derive(Debug, Default, Clone)]
+pub struct Symbol(String);
+
+impl Parse for Symbol {
+    type Item = Self;
+
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        if let TokenKind::SymbolName(name) = token.kind {
+            let name = name.unwrap();
+            let op = state.curr_op();
+            // register the symbol
+            let region = state.curr_region();
+            region
+                .deref_mut(&mut ctx.regions)
+                .register_symbol(name.clone(), op);
+            // construct and return.
+            let symbol = Self(name);
+            Ok(symbol)
+        } else {
+            parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token!("@...")].into(), token.kind)
+            )
+            .into()
+        }
+    }
 }
 
-impl RegionKindInterface for ModuleOp {}
+impl Print for Symbol {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
+        write!(state.buffer, "@{}", self.0)?;
+        Ok(())
+    }
+}
+
+impl From<String> for Symbol {
+    fn from(s: String) -> Self {
+        if let Some(s) = s.strip_prefix('@') {
+            Self(s.to_string())
+        } else {
+            Self(s)
+        }
+    }
+}
+
+impl From<&str> for Symbol {
+    fn from(s: &str) -> Self {
+        if let Some(s) = s.strip_prefix('@') {
+            Self(s.to_string())
+        } else {
+            Self(s.to_string())
+        }
+    }
+}
+
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+#[mnemonic = "builtin.module"]
+#[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
+#[format(pattern = "{symbol} {region}", num_results = 0)]
+pub struct ModuleOp {
+    #[metadata]
+    metadata: OpMetadata,
+
+    #[region(0, kind = RegionKind::Graph)]
+    region: ArenaPtr<Region>,
+
+    symbol: Option<Symbol>,
+}
 
 impl Verify for ModuleOp {
-    fn verify(&self, ctx: &Context) -> Result<()> {
-        self.verify_interfaces(ctx)?;
-        self.get_region(0).unwrap().deref(&ctx.regions).verify(ctx)?;
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+        self.run_verifiers(ctx)?;
+        self.get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .verify(ctx)?;
         Ok(())
     }
 }
 
-impl Parse for ModuleOp {
-    type Arg = (Vec<OpResultBuilder>, Option<ArenaPtr<Block>>);
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(arg: Self::Arg, ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        let (result_builders, parent_block) = arg;
-
-        if !result_builders.is_empty() {
-            anyhow::bail!("ModuleOp does not have any results");
-        }
-
-        let token = stream.peek()?;
-        let symbol = if let TokenKind::ValueName(symbol) = &token.kind {
-            let symbol = symbol.clone();
-            stream.consume()?;
-            Some(symbol)
-        } else {
-            None
-        };
-
-        let op = ModuleOp::new(ctx, symbol);
-        op.deref_mut(&mut ctx.ops).as_mut().set_parent_block(parent_block);
-
-        let _region = Region::builder()
-            .parent_op(op)
-            .kind(RegionKind::Graph)
-            .index(0)
-            .parse(ctx, stream)?;
-
-        Ok(op)
-    }
-}
-
-impl Print for ModuleOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
-        if let Some(symbol) = &self.symbol {
-            write!(state.buffer, "@{}", symbol)?;
-        }
-        write!(state.buffer, " ")?;
-        self.get_region(0).unwrap().deref(&ctx.regions).print(ctx, state)?;
-
-        Ok(())
-    }
-}
+#[derive(Debug, Error)]
+#[error("invalid size literal")]
+struct InvalidSizeLiteral;
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.int"]
@@ -85,24 +103,29 @@ pub struct IntTy(usize);
 impl Verify for IntTy {}
 
 impl Parse for IntTy {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        stream.expect(TokenKind::Char('<'))?;
-        let token = stream.consume()?;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        state.stream.expect(token!('<'))?;
+        let token = state.stream.consume()?;
         let size = if let TokenKind::Tokenized(s) = token.kind {
-            s.parse::<usize>()?
+            s.unwrap()
+                .parse::<usize>()
+                .map_err(|_| parse_error!(token.span, InvalidSizeLiteral))?
         } else {
-            anyhow::bail!("expect a number")
+            return parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token!("...")].into(), token.kind)
+            )
+            .into();
         };
-        stream.expect(TokenKind::Char('>'))?;
+        state.stream.expect(token!('>'))?;
         Ok(IntTy::get(ctx, size))
     }
 }
 
 impl Print for IntTy {
-    fn print(&self, _ct_sx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, "<{}>", self.0)?;
         Ok(())
     }
@@ -116,16 +139,15 @@ pub struct FloatTy;
 impl Verify for FloatTy {}
 
 impl Parse for FloatTy {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, _: &mut ParseState) -> ParseResult<Self::Item> {
         Ok(FloatTy::get(ctx))
     }
 }
 
 impl Print for FloatTy {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
+    fn print(&self, _: &Context, _: &mut PrintState) -> PrintResult<()> { Ok(()) }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
@@ -136,16 +158,15 @@ pub struct DoubleTy;
 impl Verify for DoubleTy {}
 
 impl Parse for DoubleTy {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, _: &mut ParseState) -> ParseResult<Self::Item> {
         Ok(DoubleTy::get(ctx))
     }
 }
 
 impl Print for DoubleTy {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
+    fn print(&self, _: &Context, _: &mut PrintState) -> PrintResult<()> { Ok(()) }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
@@ -157,20 +178,28 @@ pub struct TupleTy {
 impl Verify for TupleTy {}
 
 impl Parse for TupleTy {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        stream.expect(TokenKind::Char('<'))?;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        state.stream.expect(token!('<'))?;
         let mut elems = Vec::new();
         loop {
-            let ty = TyObj::parse((), ctx, stream)?;
+            let ty = TyObj::parse(ctx, state)?;
             elems.push(ty);
-            let token = stream.consume()?;
+            let token = state.stream.consume()?;
             match token.kind {
                 TokenKind::Char(',') => {}
                 TokenKind::Char('>') => break,
-                _ => anyhow::bail!("expect ',' or '>', got {:?}", token.kind),
+                _ => {
+                    return parse_error!(
+                        token.span,
+                        ParseErrorKind::InvalidToken(
+                            vec![token!(','), token!('>')].into(),
+                            token.kind
+                        )
+                    )
+                    .into();
+                }
             }
         }
         Ok(TupleTy::get(ctx, elems))
@@ -178,7 +207,7 @@ impl Parse for TupleTy {
 }
 
 impl Print for TupleTy {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, "<")?;
         for (i, ty) in self.elems.iter().enumerate() {
             ty.deref(&ctx.tys).print(ctx, state)?;
@@ -201,43 +230,60 @@ pub struct FunctionTy {
 impl Verify for FunctionTy {}
 
 impl Parse for FunctionTy {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        stream.expect(TokenKind::Char('('))?;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        state.stream.expect(token!('('))?;
         let mut args = Vec::new();
         loop {
-            if stream.peek()?.kind == TokenKind::Char(')') {
-                stream.consume()?;
+            if state.stream.peek()?.kind == TokenKind::Char(')') {
+                state.stream.consume()?;
                 break;
             }
-            let ty = TyObj::parse((), ctx, stream)?;
+            let ty = TyObj::parse(ctx, state)?;
             args.push(ty);
-            let token = stream.consume()?;
+            let token = state.stream.consume()?;
             match token.kind {
                 TokenKind::Char(',') => {}
                 TokenKind::Char(')') => break,
-                _ => anyhow::bail!("expect ',' or ')', got {:?}", token.kind),
+                _ => {
+                    return parse_error!(
+                        token.span,
+                        ParseErrorKind::InvalidToken(
+                            vec![token!(','), token!(')')].into(),
+                            token.kind
+                        )
+                    )
+                    .into();
+                }
             }
         }
 
-        stream.expect(TokenKind::Arrow)?;
+        state.stream.expect(token!("->"))?;
 
         let mut rets = Vec::new();
-        if stream.peek()?.kind != TokenKind::Char('(') {
-            let ty = TyObj::parse((), ctx, stream)?;
+        if state.stream.peek()?.kind != TokenKind::Char('(') {
+            let ty = TyObj::parse(ctx, state)?;
             rets.push(ty);
         } else {
-            stream.consume()?;
+            state.stream.consume()?;
             loop {
-                let ty = TyObj::parse((), ctx, stream)?;
+                let ty = TyObj::parse(ctx, state)?;
                 rets.push(ty);
-                let token = stream.consume()?;
+                let token = state.stream.consume()?;
                 match token.kind {
                     TokenKind::Char(',') => {}
                     TokenKind::Char(')') => break,
-                    _ => anyhow::bail!("expect ',' or ')', got {:?}", token.kind),
+                    _ => {
+                        return parse_error!(
+                            token.span,
+                            ParseErrorKind::InvalidToken(
+                                vec![token!(','), token!(')')].into(),
+                                token.kind
+                            )
+                        )
+                        .into();
+                    }
                 }
             }
         }
@@ -247,7 +293,7 @@ impl Parse for FunctionTy {
 }
 
 impl Print for FunctionTy {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, "(")?;
         for (i, ty) in self.args.iter().enumerate() {
             ty.deref(&ctx.tys).print(ctx, state)?;
@@ -282,33 +328,41 @@ pub struct MemRefTy {
 impl Verify for MemRefTy {}
 
 impl Parse for MemRefTy {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, stream: &mut TokenStream) -> Result<Self::Item> {
-        stream.expect(TokenKind::Char('<'))?;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        state.stream.expect(token!('<'))?;
         let mut shape = Vec::new();
         let mut elem = None;
         loop {
-            let token = stream.peek()?;
+            let token = state.stream.peek()?;
             match &token.kind {
-                TokenKind::Tokenized(s) if s == "x" => {
-                    stream.consume()?;
+                TokenKind::Tokenized(s) if s.as_ref().unwrap() == "x" => {
+                    state.stream.consume()?;
                 }
                 TokenKind::Tokenized(s) => {
-                    let dim = s.parse::<usize>().ok();
+                    let dim = s.as_ref().unwrap().parse::<usize>().ok();
                     if let Some(dim) = dim {
-                        stream.consume()?;
+                        state.stream.consume()?;
                         shape.push(dim);
                     } else {
-                        elem = Some(TyObj::parse((), ctx, stream)?);
+                        elem = Some(TyObj::parse(ctx, state)?);
                     }
                 }
                 TokenKind::Char('>') => {
-                    stream.consume()?;
+                    state.stream.consume()?;
                     break;
                 }
-                _ => anyhow::bail!("expect a number or 'x', got {:?}", token.kind),
+                _ => {
+                    return parse_error!(
+                        token.span,
+                        ParseErrorKind::InvalidToken(
+                            vec![token!("..."), token!('>'), token!("x"),].into(),
+                            token.kind.clone()
+                        )
+                    )
+                    .into();
+                }
             }
         }
 
@@ -317,7 +371,7 @@ impl Parse for MemRefTy {
 }
 
 impl Print for MemRefTy {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         write!(state.buffer, "<")?;
         for dim in self.shape.iter() {
             write!(state.buffer, "{}", dim)?;
@@ -336,16 +390,15 @@ pub struct UnitTy;
 impl Verify for UnitTy {}
 
 impl Parse for UnitTy {
-    type Arg = ();
     type Item = ArenaPtr<TyObj>;
 
-    fn parse(_: (), ctx: &mut Context, _: &mut TokenStream) -> Result<Self::Item> {
+    fn parse(ctx: &mut Context, _: &mut ParseState) -> ParseResult<Self::Item> {
         Ok(UnitTy::get(ctx))
     }
 }
 
 impl Print for UnitTy {
-    fn print(&self, _: &Context, _: &mut PrintState) -> Result<()> { Ok(()) }
+    fn print(&self, _: &Context, _: &mut PrintState) -> PrintResult<()> { Ok(()) }
 }
 
 pub fn register(ctx: &mut Context) {
@@ -365,7 +418,7 @@ pub fn register(ctx: &mut Context) {
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{Context, Parse, Print, PrintState, TokenStream, TyObj};
+    use orzir_core::{Context, OpObj, Parse, ParseState, Print, PrintState, TokenStream, TyObj};
 
     use crate::dialects::builtin::{self, DoubleTy, FloatTy, FunctionTy, IntTy, MemRefTy, TupleTy};
 
@@ -414,10 +467,12 @@ mod tests {
     }
 
     fn test_ty_parse_print(ty: &str, expected: &str) {
-        let mut stream = TokenStream::new(ty);
+        let stream = TokenStream::new(ty);
+        let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
         builtin::register(&mut ctx);
-        let ty = TyObj::parse((), &mut ctx, &mut stream).unwrap();
+        let ty = TyObj::parse(&mut ctx, &mut state).unwrap();
+
         let mut state = PrintState::new("");
         ty.deref(&ctx.tys).print(&ctx, &mut state).unwrap();
         assert_eq!(state.buffer, expected);
@@ -462,5 +517,28 @@ mod tests {
     #[test]
     fn test_memref_parse() {
         test_ty_parse_print("memref<1 x 2 x 3 x int<32>>", "memref<1 x 2 x 3 x int<32>>");
+    }
+
+    #[test]
+    fn test_module_op() {
+        let src = r#"
+            module {
+                module @named_module {
+
+                }
+            }
+        "#;
+
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
+        let mut ctx = Context::default();
+
+        builtin::register(&mut ctx);
+
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
+
+        let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
+        println!("{}", state.buffer);
     }
 }

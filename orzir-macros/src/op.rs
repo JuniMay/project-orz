@@ -2,47 +2,87 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
 
-fn derive_struct_ctor(data_struct: &syn::DataStruct) -> syn::Result<TokenStream> {
+fn derive_struct_ctor_metadata(
+    data_struct: &syn::DataStruct,
+) -> syn::Result<(TokenStream, TokenStream)> {
     let mut ctor_args = Vec::new();
+    let mut metadata_ident = None;
+    let mut metadata_idx = None;
 
     let is_unnamed = match &data_struct.fields {
         syn::Fields::Named(_) => false,
         syn::Fields::Unnamed(_) => true,
-        syn::Fields::Unit => true,
+        syn::Fields::Unit => unimplemented!("cannot derive for unit structs"),
     };
 
     for (idx, field) in data_struct.fields.iter().enumerate() {
-        let ident = field
-            .ident
-            .clone()
-            .unwrap_or_else(|| syn::Ident::new(&format!("arg_{}", idx), field.span()));
+        let attr = &field.attrs;
 
-        ctor_args.push((ident, field.ty.clone()));
+        let metadata_attr = attr.iter().find(|attr| attr.path().is_ident("metadata"));
+
+        if let Some(metadata_attr) = metadata_attr {
+            if metadata_ident.is_some() {
+                return Err(syn::Error::new(
+                    metadata_attr.span(),
+                    "duplicate metadata attribute",
+                ));
+            }
+
+            metadata_ident = Some(
+                field
+                    .ident
+                    .clone()
+                    .unwrap_or_else(|| syn::Ident::new(&format!("arg_{}", idx), field.span())),
+            );
+
+            metadata_idx = Some(idx);
+
+            ctor_args.push((metadata_ident.as_ref().unwrap().clone(), field.ty.clone()));
+        } else {
+            let ident = field
+                .ident
+                .clone()
+                .unwrap_or_else(|| syn::Ident::new(&format!("arg_{}", idx), field.span()));
+
+            ctor_args.push((ident, field.ty.clone()));
+        }
     }
 
+    if metadata_ident.is_none() {
+        return Err(syn::Error::new(
+            data_struct.fields.span(),
+            "missing metadata attribute",
+        ));
+    }
+
+    let metadata_ident = metadata_ident.unwrap();
     let ctor_arg_tokens = ctor_args
         .iter()
+        .filter(|(ident, _)| ident != &metadata_ident)
         .map(|(ident, ty)| {
             quote! { #ident: #ty }
-        })
-        .collect::<Vec<_>>();
+        });
 
     let mut ctor_body = TokenStream::new();
     for (ident, _) in ctor_args.iter() {
-        ctor_body.extend(quote! { #ident, });
-    }
-
-    let ctor_body = if ctor_args.is_empty() {
-        if is_unnamed {
-            quote! {
-                Self
+        if ident == &metadata_ident {
+            if is_unnamed {
+                ctor_body.extend(quote! {
+                    ::orzir_core::OpMetadata::new(self_ptr),
+                });
+            } else {
+                ctor_body.extend(quote! {
+                    #ident: ::orzir_core::OpMetadata::new(self_ptr),
+                });
             }
         } else {
-            quote! {
-                Self {}
-            }
+            ctor_body.extend(quote! {
+                #ident,
+            });
         }
-    } else if is_unnamed {
+    }
+
+    let ctor_body = if is_unnamed {
         quote! {
             Self(#ctor_body)
         }
@@ -53,21 +93,36 @@ fn derive_struct_ctor(data_struct: &syn::DataStruct) -> syn::Result<TokenStream>
     };
 
     let ctor_body = quote! {
-        fn get(
+        fn new(
             ctx: &mut ::orzir_core::Context,
+            self_ptr: ::orzir_core::ArenaPtr<::orzir_core::OpObj>,
             #(#ctor_arg_tokens),*
-        ) -> ::orzir_core::ArenaPtr<::orzir_core::TyObj> {
+        ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
             let instance = #ctor_body;
-            let obj = ::orzir_core::TyObj::from(instance);
-            <::orzir_core::UniqueArena<
-                ::orzir_core::TyObj
-            > as ::orzir_core::ArenaBase<
-                ::orzir_core::TyObj
-            >>::alloc(&mut ctx.tys, obj)
+            let obj = ::orzir_core::OpObj::from(instance);
+            ctx.ops.fill(self_ptr, obj);
+            self_ptr
         }
     };
 
-    Ok(ctor_body)
+    let metadata_field = if is_unnamed {
+        let index = syn::Index::from(metadata_idx.unwrap());
+        quote! { self.#index }
+    } else {
+        quote! { self.#metadata_ident }
+    };
+
+    let metadata_body = quote! {
+        fn metadata(&self) -> &::orzir_core::OpMetadata {
+            &#metadata_field
+        }
+
+        fn metadata_mut(&mut self) -> &mut ::orzir_core::OpMetadata {
+            &mut #metadata_field
+        }
+    };
+
+    Ok((ctor_body, metadata_body))
 }
 
 pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
@@ -133,8 +188,8 @@ pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         )
     })?;
 
-    let ctor_body = if let syn::Data::Struct(ref data_struct) = ast.data {
-        derive_struct_ctor(data_struct)?
+    let (ctor_body, metadata_body) = if let syn::Data::Struct(ref data_struct) = ast.data {
+        derive_struct_ctor_metadata(data_struct)?
     } else {
         unimplemented!("items other than structs are not supported yet")
     };
@@ -174,7 +229,7 @@ pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
             pub #ctor_body
         }
 
-        impl ::orzir_core::Ty for #ident {
+        impl ::orzir_core::Op for #ident {
             fn mnemonic(&self) -> ::orzir_core::Mnemonic {
                 ::orzir_core::Mnemonic::new(#primary, #secondary)
             }
@@ -183,25 +238,18 @@ pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
                 ::orzir_core::Mnemonic::new(#primary, #secondary)
             }
 
-            fn eq(&self, other: &dyn ::orzir_core::Ty) -> bool {
-                if let Some(other) = other.downcast_ref::<Self>() {
-                    self == other
-                } else {
-                    false
-                }
-            }
-
-            fn register(ctx: &mut ::orzir_core::Context, parse_fn: ::orzir_core::TyParseFn)
+            fn register(ctx: &mut ::orzir_core::Context, parse_fn: ::orzir_core::OpParseFn)
             where
                 Self: Sized
             {
                 let mnemonic = Self::mnemonic_static();
-                ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_ty(mnemonic, parse_fn);
+                ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_op(mnemonic, parse_fn);
 
                 #interface_register_casters
                 #verifier_register_casters
             }
 
+            #metadata_body
         }
 
         #verifier_impls
@@ -221,14 +269,15 @@ pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 mod tests {
     use quote::quote;
 
-    use crate::ty::derive_impl;
+    use crate::op::derive_impl;
 
     #[test]
     fn test_0() {
         let src = quote! {
-            #[mnemonic = "builtin.float"]
-            #[verifiers(FloatLikeTy)]
-            pub struct FloatTy;
+            #[mnemonic = "macro.test"]
+            #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
+            #[interfaces(SomeInterface)]
+            pub struct TestOp(#[operand(...)] Vec<ArenaPtr<Value>>, #[metadata] OpMetadata);
         };
 
         let ast = syn::parse2::<syn::DeriveInput>(src).unwrap();

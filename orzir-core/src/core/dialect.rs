@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{mnemonic::MnemonicSegment, operation::OpParseFn, ty::TyParseFn};
+use super::{mnemonic::MnemonicSegment, op::OpParseFn, ty::TyParseFn};
 use crate::Mnemonic;
 
 /// A dialect.

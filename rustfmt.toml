@@ -5,5 +5,4 @@ group_imports = "StdExternalCrate"
 reorder_impl_items = true
 imports_granularity = "Crate"
 fn_single_line = true
-edition = "2018"
-chain_width = 80
+edition = "2021"

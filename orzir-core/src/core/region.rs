@@ -1,16 +1,15 @@
-use std::{cell::RefCell, fmt::Write, rc::Rc};
-
-use anyhow::{anyhow, Result};
+use std::{cell::RefCell, fmt::Write};
 
 use super::{
     block::Block,
-    layout::Layout,
-    operation::OpObj,
-    symbol::{NameManager, SymbolTable, SymbolTableOwned},
+    layout::BlockList,
+    op::OpObj,
+    parse::ParseState,
+    symbol::{NameManager, SymbolTable},
 };
 use crate::{
-    core::parse::TokenKind, support::storage::ArenaPtr, Context, Parse, Print, PrintState,
-    TokenStream, Verify, VerifyInterfaces,
+    core::parse::TokenKind, support::storage::ArenaPtr, token, Context, Parse, ParseResult, Print,
+    PrintResult, PrintState, RunVerifiers, VerificationResult, Verify,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -27,9 +26,9 @@ pub struct Region {
     /// The kind of the region.
     kind: RegionKind,
     /// The layout of the region.
-    layout: Layout,
+    layout: BlockList,
     /// The symbol table of the region.
-    symbol_table: SymbolTableOwned,
+    symbol_table: SymbolTable,
     /// The block names of the region.
     pub(crate) block_names: RefCell<NameManager<Block>>,
     /// The parent operation of the region.
@@ -38,33 +37,45 @@ pub struct Region {
     index: usize,
 }
 
-#[derive(Debug, Default)]
-pub struct RegionBuilder {
-    kind: Option<RegionKind>,
-    parent_op: Option<ArenaPtr<OpObj>>,
-    index: Option<usize>,
-}
-
-impl VerifyInterfaces for Region {
-    fn verify_interfaces(&self, _ctx: &Context) -> Result<()> { Ok(()) }
+impl RunVerifiers for Region {
+    fn run_verifiers(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
 }
 
 impl Verify for Region {
-    fn verify(&self, ctx: &Context) -> Result<()> {
-        for block in self.layout().iter_blocks() {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+        for block in self.layout().iter() {
             block.deref(&ctx.blocks).verify(ctx)?;
-            for op in self.layout().iter_ops(block) {
-                op.deref(&ctx.ops).as_ref().verify(ctx)?;
-            }
         }
         Ok(())
     }
 }
 
 impl Region {
-    pub fn layout(&self) -> &Layout { &self.layout }
+    pub fn new(
+        ctx: &mut Context,
+        kind: RegionKind,
+        parent_op: ArenaPtr<OpObj>,
+        index: usize,
+    ) -> ArenaPtr<Region> {
+        let self_ptr = ctx.regions.reserve();
 
-    pub fn layout_mut(&mut self) -> &mut Layout { &mut self.layout }
+        let symbol_table = SymbolTable::new(self_ptr);
+        let region = Region {
+            self_ptr,
+            kind,
+            layout: BlockList::default(),
+            symbol_table,
+            block_names: RefCell::new(NameManager::default()),
+            parent_op,
+            index,
+        };
+        ctx.regions.fill(self_ptr, region);
+        self_ptr
+    }
+
+    pub fn layout(&self) -> &BlockList { &self.layout }
+
+    pub fn layout_mut(&mut self) -> &mut BlockList { &mut self.layout }
 
     pub fn kind(&self) -> RegionKind { self.kind }
 
@@ -94,119 +105,57 @@ impl Region {
         }
         false
     }
-}
 
-impl RegionBuilder {
-    pub fn kind(mut self, kind: RegionKind) -> Self {
-        self.kind = Some(kind);
-        self
+    pub fn register_symbol(&mut self, name: String, op: ArenaPtr<OpObj>) {
+        self.symbol_table.insert(name, op);
     }
 
-    pub fn parent_op(mut self, parent_op: ArenaPtr<OpObj>) -> Self {
-        self.parent_op = Some(parent_op);
-        self
-    }
-
-    pub fn index(mut self, index: usize) -> Self {
-        self.index = Some(index);
-        self
-    }
-
-    pub fn parse(self, ctx: &mut Context, stream: &mut TokenStream) -> Result<ArenaPtr<Region>> {
-        Region::parse(self, ctx, stream)
-    }
-
-    /// Build the region.
-    ///
-    /// This will add the region to the parent operation, and store the index in
-    /// the parent operation.
-    pub fn build(self, ctx: &mut Context) -> Result<ArenaPtr<Region>> {
-        let kind = self.kind.ok_or_else(|| anyhow!("missing kind"))?;
-        let parent_op = self.parent_op.ok_or_else(|| anyhow!("missing parent_op"))?;
-        let index = self.index.ok_or_else(|| anyhow!("missing index"))?;
-
-        let above = parent_op.deref(&ctx.ops).as_ref().parent_region(ctx).map(|region| {
-            let region = region.deref(&ctx.regions);
-            Rc::downgrade(&region.symbol_table)
-        });
-
-        let self_ptr = ctx.regions.reserve();
-        parent_op.deref_mut(&mut ctx.ops).as_mut().set_region(index, self_ptr)?;
-        let symbol_table = Rc::new(RefCell::new(SymbolTable::new(above)));
-        let region = Region {
-            self_ptr,
-            kind,
-            layout: Layout::default(),
-            symbol_table,
-            block_names: RefCell::new(NameManager::default()),
-            parent_op,
-            index,
-        };
-        ctx.regions.fill(self_ptr, region);
-        Ok(self_ptr)
-    }
-}
-
-impl Region {
-    pub fn builder() -> RegionBuilder { RegionBuilder::default() }
-
-    pub fn register_symbol(&self, name: String, op: ArenaPtr<OpObj>) {
-        self.symbol_table.borrow_mut().insert(name, op);
-    }
-
-    pub fn lookup_symbol(&self, name: &str) -> Option<ArenaPtr<OpObj>> {
-        self.symbol_table.borrow().lookup(name)
+    pub fn lookup_symbol(&self, ctx: &Context, name: &str) -> Option<ArenaPtr<OpObj>> {
+        self.symbol_table.lookup(ctx, name)
     }
 }
 
 impl Parse for Region {
-    type Arg = RegionBuilder;
     type Item = ArenaPtr<Region>;
 
     /// Parse the region.
     ///
     /// This require the parent operation parser to pass the builder to the
     /// region parser, and set the kind and parent operation.
-    fn parse(
-        builder: Self::Arg,
-        ctx: &mut Context,
-        stream: &mut TokenStream,
-    ) -> Result<Self::Item> {
-        stream.expect(TokenKind::Char('{'))?;
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        state.stream.expect(token!('{'))?;
         // build the region at the beginning because the blocks may reference it.
-        let region_ptr = builder.build(ctx)?;
+        let (region_kind, index) = state.curr_region_info();
+        let parent_op = state.curr_op();
+        let region = Region::new(ctx, region_kind, parent_op, index);
         // parse the blocks inside the region.
+        state.enter_block_from(region);
         loop {
-            let token = stream.peek()?;
+            let token = state.stream.peek()?;
             match &token.kind {
-                TokenKind::BlockLabel(label) => {
-                    let builder =
-                        Block::builder().name(label.clone()).entry(false).parent_region(region_ptr);
-                    // consume the label, the block already has it.
-                    stream.consume()?;
-                    // the block parser will add the block to the layout.
-                    let _block_ptr = Block::parse(builder, ctx, stream)?;
-                }
                 TokenKind::Char('}') => {
-                    stream.consume()?;
-                    // end of the region.
+                    state.stream.consume()?;
+                    state.exit_block();
                     break;
                 }
                 _ => {
-                    let builder = Block::builder().entry(true).parent_region(region_ptr);
-                    // not consuming the token, the block parser will consume it.
-                    let _block_ptr = Block::parse(builder, ctx, stream)?;
+                    let block = Block::parse(ctx, state)?;
+                    region
+                        .deref_mut(&mut ctx.regions)
+                        .layout_mut()
+                        .append(block)
+                        .expect("should be able to append block when parsing a region")
                 }
             }
         }
-        Ok(region_ptr)
+        Ok(region)
     }
 }
 
 impl Print for Region {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> Result<()> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
         writeln!(state.buffer, "{{")?;
-        for block in self.layout.iter_blocks() {
+        for block in self.layout.iter() {
             block.deref(&ctx.blocks).print(ctx, state)?;
         }
         state.write_indent()?;
