@@ -158,8 +158,118 @@ macro_rules! token {
     ("->") => {
         $crate::TokenKind::Arrow
     };
-    ($c:literal) => {
-        $crate::TokenKind::Char($c)
+    (":") => {
+        $crate::TokenKind::Char(':')
+    };
+    ("=") => {
+        $crate::TokenKind::Char('=')
+    };
+    ("(") => {
+        $crate::TokenKind::Char('(')
+    };
+    (")") => {
+        $crate::TokenKind::Char(')')
+    };
+    ("{") => {
+        $crate::TokenKind::Char('{')
+    };
+    ("}") => {
+        $crate::TokenKind::Char('}')
+    };
+    ("[") => {
+        $crate::TokenKind::Char('[')
+    };
+    ("]") => {
+        $crate::TokenKind::Char(']')
+    };
+    ("<") => {
+        $crate::TokenKind::Char('<')
+    };
+    (">") => {
+        $crate::TokenKind::Char('>')
+    };
+    (",") => {
+        $crate::TokenKind::Char(',')
+    };
+    (";") => {
+        $crate::TokenKind::Char(';')
+    };
+    ("*") => {
+        $crate::TokenKind::Char('*')
+    };
+    ("-") => {
+        $crate::TokenKind::Char('-')
+    };
+    ("^") => {
+        $crate::TokenKind::Char('^')
+    };
+    ("%") => {
+        $crate::TokenKind::Char('%')
+    };
+    ("!") => {
+        $crate::TokenKind::Char('!')
+    };
+    ("@") => {
+        $crate::TokenKind::Char('@')
+    };
+
+    (':') => {
+        $crate::TokenKind::Char(':')
+    };
+    ('=') => {
+        $crate::TokenKind::Char('=')
+    };
+    ('(') => {
+        $crate::TokenKind::Char('(')
+    };
+    (')') => {
+        $crate::TokenKind::Char(')')
+    };
+    ('{') => {
+        $crate::TokenKind::Char('{')
+    };
+    ('}') => {
+        $crate::TokenKind::Char('}')
+    };
+    ('[') => {
+        $crate::TokenKind::Char('[')
+    };
+    (']') => {
+        $crate::TokenKind::Char(']')
+    };
+    ('<') => {
+        $crate::TokenKind::Char('<')
+    };
+    ('>') => {
+        $crate::TokenKind::Char('>')
+    };
+    (',') => {
+        $crate::TokenKind::Char(',')
+    };
+    (';') => {
+        $crate::TokenKind::Char(';')
+    };
+    ('*') => {
+        $crate::TokenKind::Char('*')
+    };
+    ('-') => {
+        $crate::TokenKind::Char('-')
+    };
+    ('^') => {
+        $crate::TokenKind::Char('^')
+    };
+    ('%') => {
+        $crate::TokenKind::Char('%')
+    };
+    ('!') => {
+        $crate::TokenKind::Char('!')
+    };
+    ('@') => {
+        $crate::TokenKind::Char('@')
+    };
+
+    ($s:literal) => {
+        $crate::TokenKind::Tokenized(Some($s.into()))
     };
 }
 
@@ -194,16 +304,16 @@ impl fmt::Display for TokenKind {
             TokenKind::Char(c) => write!(f, "`{}`", c),
             TokenKind::Arrow => write!(f, "`->`"),
             TokenKind::BlockLabel(s) => {
-                write!(f, "`^{}`", if let Some(s) = s { s } else { "`^...`" })
+                write!(f, "`^{}`", if let Some(s) = s { s } else { "..." })
             }
             TokenKind::ValueName(s) => {
-                write!(f, "`%{}`", if let Some(s) = s { s } else { "`%...`" })
+                write!(f, "`%{}`", if let Some(s) = s { s } else { "..." })
             }
-            TokenKind::TyAlias(s) => write!(f, "`!{}`", if let Some(s) = s { s } else { "`!...`" }),
+            TokenKind::TyAlias(s) => write!(f, "`!{}`", if let Some(s) = s { s } else { "..." }),
             TokenKind::SymbolName(s) => {
                 write!(f, "`@{}`", if let Some(s) = s { s } else { "`@...`" })
             }
-            TokenKind::Tokenized(s) => write!(f, "`{}`", if let Some(s) = s { s } else { "`...`" }),
+            TokenKind::Tokenized(s) => write!(f, "`{}`", if let Some(s) = s { s } else { "..." }),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
@@ -354,6 +464,9 @@ pub enum ParseErrorKind {
 
     #[error("invalid result number: expected {0}, got {1}")]
     InvalidResultNumber(usize, usize),
+
+    #[error("invalid trailing type number: expected {0}, got {1}")]
+    InvalidTrailingTypeNumber(usize, usize),
 }
 
 impl<'a> TokenStream<'a> {

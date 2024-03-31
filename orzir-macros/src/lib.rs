@@ -169,3 +169,27 @@ pub fn derive_data_flow(item: TokenStream) -> TokenStream {
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
+
+/// Derive the `Parse` trait for the given struct.
+///
+/// This support very simple grammar, for more complex grammar, the trait can be
+/// implemented manually.
+#[proc_macro_derive(Parse, attributes(format))]
+pub fn derive_parse(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    format::derive_parse_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive the `Print` trait for the given struct.
+///
+/// This support very simple grammar, for more complex grammar, the trait can be
+/// implemented manually.
+#[proc_macro_derive(Print, attributes(format))]
+pub fn derive_print(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    format::derive_print_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}

@@ -1,18 +1,17 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    parse_error, token, ArenaPtr, Context, ControlFlow, DataFlow, Dialect, Op, OpMetadata, OpObj,
-    Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Successor,
-    Value, Verify,
+    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, Successor, Value, Verify,
 };
-use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
 
 use crate::verifiers::{control_flow::*, *};
 
 /// The jump operation.
-#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "cf.jump"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
+#[format(pattern = "{succ}", num_results = 0)]
 pub struct Jump {
     #[metadata]
     metadata: OpMetadata,
@@ -23,48 +22,10 @@ pub struct Jump {
 
 impl Verify for Jump {}
 
-impl Parse for Jump {
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let op = ctx.ops.reserve();
-        state.enter_component_from(op);
-        let _start_pos = state.stream.curr_pos()?;
-
-        let successor = Successor::parse(ctx, state)?;
-
-        let _end_pos = state.stream.curr_pos()?;
-        state.exit_component();
-
-        let result_names = state.pop_result_names();
-        if !result_names.is_empty() {
-            let mut span = result_names[0].span;
-            for name in result_names.iter().skip(1) {
-                span = span.merge(&name.span);
-            }
-
-            return parse_error!(
-                span,
-                ParseErrorKind::InvalidResultNumber(0, result_names.len())
-            )
-            .into();
-        }
-
-        let op = Jump::new(ctx, op, successor);
-
-        Ok(op)
-    }
-}
-
-impl Print for Jump {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        self.get_successor(0).unwrap().print(ctx, state)
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "cf.branch"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
+#[format(pattern = "{cond} , {then_succ} , {else_succ}", num_results = 0)]
 pub struct Branch {
     #[metadata]
     metadata: OpMetadata,
@@ -80,61 +41,6 @@ pub struct Branch {
 }
 
 impl Verify for Branch {}
-
-impl Parse for Branch {
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        // cf.branch %cond, ^then(%a: int<32>), ^else(%b: float)
-        let op = ctx.ops.reserve();
-        state.enter_component_from(op);
-
-        let _start_pos = state.stream.curr_pos()?;
-
-        let cond = Value::parse(ctx, state)?;
-        state.stream.expect(token!(','))?;
-
-        let then_block = Successor::parse(ctx, state)?;
-        state.stream.expect(token!(','))?;
-
-        let else_block = Successor::parse(ctx, state)?;
-
-        let _end_pos = state.stream.curr_pos()?;
-        state.exit_component();
-
-        let result_names = state.pop_result_names();
-        if !result_names.is_empty() {
-            let mut span = result_names[0].span;
-            for name in result_names.iter().skip(1) {
-                span = span.merge(&name.span);
-            }
-
-            return parse_error!(
-                span,
-                ParseErrorKind::InvalidResultNumber(0, result_names.len())
-            )
-            .into();
-        }
-
-        let op = Branch::new(ctx, op, cond, then_block, else_block);
-
-        Ok(op)
-    }
-}
-
-impl Print for Branch {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        self.get_operand(0)
-            .unwrap()
-            .deref(&ctx.values)
-            .print(ctx, state)?;
-        write!(state.buffer, ", ")?;
-        self.get_successor(0).unwrap().print(ctx, state)?;
-        write!(state.buffer, ", ")?;
-        self.get_successor(1).unwrap().print(ctx, state)?;
-        Ok(())
-    }
-}
 
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("cf".into());
@@ -160,7 +66,7 @@ mod tests {
     fn test_0() {
         let src = r#"
         module {
-            func.func @foo () -> (int<32>, float) {
+            func.func @foo : fn() -> (int<32>, float) {
             ^entry(%x : float, %y: int<32>):
                 // nothing here
                 %0 = arith.iconst true : int<32>
@@ -205,7 +111,7 @@ mod tests {
     fn test_1() {
         let src = r#"
         module {
-            func.func @foo () -> int<32> {
+            func.func @foo : fn () -> int<32> {
             ^entry:
                 %a = arith.iconst 123 : int<32>
                 %b = arith.iconst 456 : int<32>
@@ -221,7 +127,7 @@ mod tests {
                 cf.jump ^return
 
             ^return:
-                func.return %a
+                func.return (%a)
             }
         }
         "#;

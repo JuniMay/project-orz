@@ -3,7 +3,7 @@ use quote::quote;
 use syn::spanned::Spanned;
 
 #[derive(Debug, Clone, Copy)]
-enum IndexKind {
+pub enum IndexKind {
     /// The `...` notation.
     All,
     /// A single index number.
@@ -19,6 +19,32 @@ impl syn::parse::Parse for IndexKind {
             let index = input.parse::<syn::LitInt>()?.base10_parse::<usize>()?;
             Ok(Self::Single(index))
         }
+    }
+}
+
+pub struct RegionMeta {
+    pub index: IndexKind,
+    pub kind: Option<syn::Path>,
+}
+
+impl syn::parse::Parse for RegionMeta {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let index = input.parse::<IndexKind>()?;
+
+        while !input.is_empty() {
+            input.parse::<syn::Token![,]>()?;
+            let key: syn::Ident = input.parse()?;
+            input.parse::<syn::Token![=]>()?;
+            let value: syn::Path = input.parse()?;
+            if key == "kind" {
+                return Ok(Self {
+                    index,
+                    kind: Some(value),
+                });
+            }
+        }
+
+        Ok(Self { index, kind: None })
     }
 }
 
@@ -47,7 +73,7 @@ fn derive_struct(data_struct: &syn::DataStruct, info: &mut DeriveInfo) -> syn::R
             continue;
         }
         let attr = attr.unwrap();
-        let index = attr.parse_args::<IndexKind>()?;
+        let index = attr.parse_args::<RegionMeta>()?.index;
         match (info.discrete, index) {
             (Some(true), IndexKind::All) | (Some(false), IndexKind::Single(_)) => {
                 return Err(syn::Error::new(

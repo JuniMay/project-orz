@@ -5,7 +5,7 @@ use orzir_core::{
     ParseResult, ParseState, Print, PrintResult, PrintState, Region, RegionInterface, RegionKind,
     RunVerifiers, TokenKind, Ty, TyObj, VerificationResult, Verify,
 };
-use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface, Ty};
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Ty};
 use thiserror::Error;
 
 use crate::verifiers::{control_flow::*, *};
@@ -66,21 +66,19 @@ impl From<&str> for Symbol {
     }
 }
 
-#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "builtin.module"]
-// #[interfaces(RegionKindInterface)]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
+#[format(pattern = "{symbol} {region}", num_results = 0)]
 pub struct ModuleOp {
     #[metadata]
     metadata: OpMetadata,
 
-    #[region(0)]
+    #[region(0, kind = RegionKind::Graph)]
     region: ArenaPtr<Region>,
 
     symbol: Option<Symbol>,
 }
-
-// impl RegionKindInterface for ModuleOp {}
 
 impl Verify for ModuleOp {
     fn verify(&self, ctx: &Context) -> VerificationResult<()> {
@@ -89,58 +87,6 @@ impl Verify for ModuleOp {
             .unwrap()
             .deref(&ctx.regions)
             .verify(ctx)?;
-        Ok(())
-    }
-}
-
-impl Parse for ModuleOp {
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let op = ctx.ops.reserve();
-        state.enter_component_from(op);
-        let _start_pos = state.stream.curr_pos()?;
-
-        let symbol = Option::<Symbol>::parse(ctx, state)?;
-
-        state.enter_region_with(RegionKind::Graph, 0);
-        let region = Region::parse(ctx, state)?;
-        state.exit_region();
-
-        let _end_pos = state.stream.curr_pos()?;
-        state.exit_component();
-
-        let result_names = state.pop_result_names();
-        if !result_names.is_empty() {
-            let mut span = result_names[0].span;
-            for name in result_names.iter().skip(1) {
-                span = span.merge(&name.span);
-            }
-
-            return parse_error!(
-                span,
-                ParseErrorKind::InvalidResultNumber(0, result_names.len())
-            )
-            .into();
-        }
-
-        let op = ModuleOp::new(ctx, op, region, symbol);
-
-        Ok(op)
-    }
-}
-
-impl Print for ModuleOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        if let Some(symbol) = &self.symbol {
-            symbol.print(ctx, state)?;
-            write!(state.buffer, " ")?;
-        }
-        self.get_region(0)
-            .unwrap()
-            .deref(&ctx.regions)
-            .print(ctx, state)?;
-
         Ok(())
     }
 }
@@ -411,12 +357,7 @@ impl Parse for MemRefTy {
                     return parse_error!(
                         token.span,
                         ParseErrorKind::InvalidToken(
-                            vec![
-                                token!("..."),
-                                token!('>'),
-                                TokenKind::Tokenized(Some("x".into()))
-                            ]
-                            .into(),
+                            vec![token!("..."), token!('>'), token!("x"),].into(),
                             token.kind.clone()
                         )
                     )

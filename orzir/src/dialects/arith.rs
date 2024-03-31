@@ -2,47 +2,18 @@ use std::fmt::Write;
 
 use num_bigint::BigInt;
 use orzir_core::{
-    parse_error, token, ArenaPtr, Context, DataFlow, Dialect, Op, OpMetadata, OpObj, Parse,
-    ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Span, TokenKind,
-    TyObj, Value, Verify,
+    parse_error, token, ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseErrorKind,
+    ParseResult, ParseState, Print, PrintResult, PrintState, TokenKind, Value, Verify,
 };
-use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
 use thiserror::Error;
 
 use crate::verifiers::*;
 
-fn parse_binary(
-    ctx: &mut Context,
-    state: &mut ParseState,
-) -> ParseResult<(ArenaPtr<Value>, ArenaPtr<Value>, ArenaPtr<TyObj>)> {
-    let lhs = Value::parse(ctx, state)?;
-    state.stream.expect(token!(','))?;
-    let rhs = Value::parse(ctx, state)?;
-    state.stream.expect(token!(':'))?;
-    let ty = TyObj::parse(ctx, state)?;
-    Ok((lhs, rhs, ty))
-}
-
-fn print_binary(ctx: &Context, state: &mut PrintState, op: &dyn Op) -> PrintResult<()> {
-    op.get_operand(0)
-        .unwrap()
-        .deref(&ctx.values)
-        .print(ctx, state)?;
-    write!(state.buffer, ", ")?;
-    op.get_operand(1)
-        .unwrap()
-        .deref(&ctx.values)
-        .print(ctx, state)?;
-    write!(state.buffer, ": ")?;
-    let result_tys = op.result_tys(ctx);
-    assert!(result_tys.len() == 1);
-    result_tys[0].deref(&ctx.tys).print(ctx, state)?;
-    Ok(())
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "arith.iconst"]
 #[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
+#[format(pattern = "{value}", num_results = 1)]
 pub struct IConstOp {
     #[metadata]
     metadata: OpMetadata,
@@ -108,71 +79,13 @@ impl Print for IntLiteral {
     }
 }
 
-impl Parse for IConstOp {
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let op = ctx.ops.reserve();
-        state.enter_component_from(op);
-
-        let start_pos = state.stream.curr_pos()?;
-
-        let value = IntLiteral::parse(ctx, state)?;
-        state.stream.expect(token!(':'))?;
-        let ty = TyObj::parse(ctx, state)?;
-
-        let _end_pos = state.stream.curr_pos()?;
-
-        state.exit_component();
-
-        let mut result_names = state.pop_result_names();
-        if result_names.len() != 1 {
-            if result_names.is_empty() {
-                return parse_error!(
-                    Span::new(start_pos, start_pos),
-                    ParseErrorKind::InvalidResultNumber(1, 0)
-                )
-                .into();
-            }
-
-            let mut span = result_names[0].span;
-            for name in result_names.iter().skip(1) {
-                span = span.merge(&name.span);
-            }
-
-            return parse_error!(
-                span,
-                ParseErrorKind::InvalidResultNumber(1, result_names.len())
-            )
-            .into();
-        }
-        let result_name = result_names.pop().unwrap().unwrap_value_name();
-        let result = Value::new_op_result(ctx, ty, op, 0, Some(result_name));
-
-        // construct the operation and fill
-        let op = IConstOp::new(ctx, op, result, value);
-
-        Ok(op)
-    }
-}
-
-impl Print for IConstOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        self.value.print(ctx, state)?;
-        write!(state.buffer, " : ")?;
-        let result_tys = self.result_tys(ctx);
-        assert!(result_tys.len() == 1);
-        result_tys[0].deref(&ctx.tys).print(ctx, state)?;
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "arith.iadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys
 )]
+#[format(pattern = "{lhs} , {rhs}", num_results = 1)]
 pub struct IAddOp {
     #[metadata]
     metadata: OpMetadata,
@@ -188,58 +101,6 @@ pub struct IAddOp {
 }
 
 impl Verify for IAddOp {}
-
-impl Parse for IAddOp {
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let op = ctx.ops.reserve();
-
-        state.enter_component_from(op);
-        let start_pos = state.stream.curr_pos()?;
-
-        let (lhs, rhs, ty) = parse_binary(ctx, state)?;
-
-        let _end_pos = state.stream.curr_pos()?;
-        state.exit_component();
-
-        let mut result_names = state.pop_result_names();
-
-        if result_names.len() != 1 {
-            if result_names.is_empty() {
-                return parse_error!(
-                    Span::new(start_pos, start_pos),
-                    ParseErrorKind::InvalidResultNumber(1, 0)
-                )
-                .into();
-            }
-
-            let mut span = result_names[0].span;
-            for name in result_names.iter().skip(1) {
-                span = span.merge(&name.span);
-            }
-
-            return parse_error!(
-                span,
-                ParseErrorKind::InvalidResultNumber(1, result_names.len())
-            )
-            .into();
-        }
-
-        let result_name = result_names.pop().unwrap().unwrap_value_name();
-        let result = Value::new_op_result(ctx, ty, op, 0, Some(result_name));
-
-        // construct the operation and fill
-        let op = IAddOp::new(ctx, op, result, lhs, rhs);
-        Ok(op)
-    }
-}
-
-impl Print for IAddOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        print_binary(ctx, state, self)
-    }
-}
 
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("arith".into());
@@ -284,7 +145,7 @@ mod tests {
     fn test_0() {
         let src = r#"
         module {
-            func.func @foo () -> (int<32>, float) {
+            func.func @foo : fn () -> (int<32>, float) {
             ^entry:
                 // nothing here
                 %0 = arith.iconst true : int<32>

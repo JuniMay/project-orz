@@ -1,32 +1,29 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    parse_error, token, ArenaPtr, Context, DataFlow, Dialect, Mnemonic, Op, OpMetadata, OpObj,
-    Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Region,
-    RegionInterface, RegionKind, RunVerifiers, Span, TokenKind, TyObj, Value, VerificationResult,
-    Verify,
+    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, Region, RegionInterface, RegionKind,
+    RunVerifiers, TyObj, Value, VerificationResult, Verify,
 };
-use orzir_macros::{ControlFlow, DataFlow, Op, RegionInterface};
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
 
-use super::builtin::{FunctionTy, Symbol};
+use super::builtin::Symbol;
 use crate::verifiers::{control_flow::*, *};
 
-#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.func"]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
+#[format(pattern = "{symbol} : {ty} {region}", num_results = 0)]
 pub struct FuncOp {
     #[metadata]
     metadata: OpMetadata,
 
-    #[region(0)]
+    #[region(0, kind = RegionKind::SsaCfg)]
     region: ArenaPtr<Region>,
 
     symbol: Symbol,
 
     ty: ArenaPtr<TyObj>,
 }
-
-// impl RegionKindInterface for FuncOp {}
 
 impl Verify for FuncOp {
     fn verify(&self, ctx: &Context) -> VerificationResult<()> {
@@ -40,141 +37,20 @@ impl Verify for FuncOp {
     }
 }
 
-impl Parse for FuncOp {
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let op = ctx.ops.reserve();
-
-        state.enter_component_from(op);
-        let symbol = Symbol::parse(ctx, state)?;
-
-        // just make the process canonical
-        let mnemonic = Mnemonic::new("builtin", "fn");
-        let parse_fn = ctx
-            .dialects
-            .get(mnemonic.primary())
-            .unwrap_or_else(|| panic!("dialect {} not found", mnemonic.primary().as_str()))
-            .get_ty_parse_fn(&mnemonic)
-            .unwrap_or_else(|| {
-                panic!(
-                    "parse function for {}.{} not found",
-                    mnemonic.primary().as_str(),
-                    mnemonic.secondary().as_str()
-                )
-            });
-
-        let ty = parse_fn(ctx, state)?;
-
-        state.enter_region_with(RegionKind::SsaCfg, 0);
-        let region = Region::parse(ctx, state)?;
-        state.exit_region();
-        state.exit_component();
-
-        let result_names = state.pop_result_names();
-        if !result_names.is_empty() {
-            let mut span = result_names[0].span;
-            for result_name in result_names.iter().skip(1) {
-                span = span.merge(&result_name.span);
-            }
-            return parse_error!(
-                span,
-                ParseErrorKind::InvalidResultNumber(0, result_names.len())
-            )
-            .into();
-        }
-
-        let op = FuncOp::new(ctx, op, region, symbol, ty);
-
-        Ok(op)
-    }
-}
-
-impl Print for FuncOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, " ")?;
-        self.symbol.print(ctx, state)?;
-        let func_ty = self.ty.deref(&ctx.tys).as_a::<FunctionTy>().unwrap();
-        func_ty.print(ctx, state)?;
-        write!(state.buffer, " ")?;
-        self.get_region(0)
-            .unwrap()
-            .deref(&ctx.regions)
-            .print(ctx, state)?;
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.return"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
+#[format(pattern = "{operands}", num_results = 0)]
 pub struct ReturnOp {
     #[metadata]
     metadata: OpMetadata,
 
     #[operand(...)]
+    #[format(sep = ",", leading = "(", trailing = ")")]
     operands: Vec<ArenaPtr<Value>>,
 }
 
 impl Verify for ReturnOp {}
-
-impl Parse for ReturnOp {
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        // func.return %1, %2
-        // func.return
-        let op = ctx.ops.reserve();
-
-        state.enter_component_from(op);
-        let _start_pos = state.stream.curr_pos()?;
-
-        let mut operands = Vec::new();
-        while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
-            let operand = Value::parse(ctx, state)?;
-            operands.push(operand);
-
-            if let TokenKind::Char(',') = state.stream.peek()?.kind {
-                state.stream.consume()?;
-            } else {
-                break;
-            }
-        }
-
-        let _end_pos = state.stream.curr_pos()?;
-        state.exit_component();
-
-        let result_names = state.pop_result_names();
-        if !result_names.is_empty() {
-            let mut span = result_names[0].span;
-            for result_name in result_names.iter().skip(1) {
-                span = span.merge(&result_name.span);
-            }
-
-            return parse_error!(
-                span,
-                ParseErrorKind::InvalidResultNumber(0, result_names.len())
-            )
-            .into();
-        }
-
-        let op = ReturnOp::new(ctx, op, operands);
-
-        Ok(op)
-    }
-}
-
-impl Print for ReturnOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        for (i, operand) in self.operands().into_iter().enumerate() {
-            if i > 0 {
-                write!(state.buffer, ", ")?;
-            }
-            operand.deref(&ctx.values).print(ctx, state)?;
-        }
-        Ok(())
-    }
-}
 
 /// A direct call operation.
 ///
@@ -182,9 +58,10 @@ impl Print for ReturnOp {
 /// ```text
 /// %result = func.call @callee(%arg1, %arg2) : int<32>
 /// ```
-#[derive(Op, DataFlow, RegionInterface, ControlFlow)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.call"]
 #[verifiers(VariadicResults, VariadicOperands, NumRegions<0>)]
+#[format(pattern = "{callee} {operands}")]
 pub struct CallOp {
     #[metadata]
     metadata: OpMetadata,
@@ -193,133 +70,13 @@ pub struct CallOp {
     results: Vec<ArenaPtr<Value>>,
 
     #[operand(...)]
+    #[format(sep = ",", leading = "(", trailing = ")")]
     operands: Vec<ArenaPtr<Value>>,
 
     callee: Symbol,
 }
 
 impl Verify for CallOp {}
-
-impl Parse for CallOp {
-    type Item = ArenaPtr<OpObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let op = ctx.ops.reserve();
-
-        state.enter_component_from(op);
-        let start_pos = state.stream.peek()?.span.start;
-
-        let callee;
-        let mut operands = Vec::new();
-        let mut result_tys = Vec::new();
-
-        {
-            callee = Symbol::parse(ctx, state)?;
-            state.stream.expect(token!('('))?;
-            while let TokenKind::ValueName(_) = state.stream.peek()?.kind {
-                let operand = Value::parse(ctx, state)?;
-                operands.push(operand);
-
-                if let TokenKind::Char(',') = state.stream.peek()?.kind {
-                    state.stream.consume()?;
-                } else {
-                    break;
-                }
-            }
-            state.stream.expect(token!(')'))?;
-            state.stream.expect(token!(':'))?;
-            // (tys,...) or ty
-            if let TokenKind::Char('(') = state.stream.peek()?.kind {
-                state.stream.consume()?;
-                loop {
-                    let ty = TyObj::parse(ctx, state)?;
-                    result_tys.push(ty);
-
-                    if let TokenKind::Char(')') = state.stream.peek()?.kind {
-                        state.stream.consume()?;
-                        break;
-                    } else {
-                        state.stream.expect(token!(','))?;
-                    }
-                }
-            } else {
-                let ty = TyObj::parse(ctx, state)?;
-                result_tys.push(ty);
-            }
-        }
-
-        let _end_pos = state.stream.curr_pos()?;
-        state.exit_component();
-
-        let mut result_names = state.pop_result_names();
-        let mut results = Vec::new();
-        if result_names.len() != result_tys.len() {
-            if result_names.is_empty() {
-                return parse_error!(
-                    Span::new(start_pos, start_pos),
-                    ParseErrorKind::InvalidResultNumber(result_tys.len(), 0)
-                )
-                .into();
-            }
-
-            let mut span = result_names[0].span;
-            for result_name in result_names.iter().skip(1) {
-                span = span.merge(&result_name.span);
-            }
-
-            return parse_error!(
-                span,
-                ParseErrorKind::InvalidResultNumber(result_tys.len(), result_names.len())
-            )
-            .into();
-        }
-
-        for (i, (result_name, ret_ty)) in
-            result_names.drain(..).zip(result_tys.drain(..)).enumerate()
-        {
-            let result =
-                Value::new_op_result(ctx, ret_ty, op, i, Some(result_name.unwrap_value_name()));
-            results.push(result);
-        }
-
-        let op = CallOp::new(ctx, op, results, operands, callee);
-        Ok(op)
-    }
-}
-
-impl Print for CallOp {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        self.callee.print(ctx, state)?;
-        write!(state.buffer, "(")?;
-        let operands = self.operands();
-        for (i, operand) in operands.iter().enumerate() {
-            operand.deref(&ctx.values).print(ctx, state)?;
-            if i != operands.len() - 1 {
-                write!(state.buffer, ", ")?;
-            }
-        }
-        write!(state.buffer, ") : ")?;
-
-        let result_tys = self.result_tys(ctx);
-
-        if result_tys.len() > 1 {
-            write!(state.buffer, "(")?;
-        }
-
-        for (i, ty) in result_tys.iter().enumerate() {
-            ty.deref(&ctx.tys).print(ctx, state)?;
-            if i != result_tys.len() - 1 {
-                write!(state.buffer, ", ")?;
-            }
-        }
-
-        if result_tys.len() > 1 {
-            write!(state.buffer, ")")?;
-        }
-
-        Ok(())
-    }
-}
 
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("func".into());
@@ -348,16 +105,16 @@ mod tests {
     fn test_func_op() {
         let src = r#"
         module {
-            func.func @foo () -> (int<32>, float) {
+            func.func @foo :  fn() -> (int<32>, float) {
             ^entry:
                 %x = arith.iconst 123 : int<32>
                 %y = arith.iconst 123 : int<32>
             ^return:
-                func.return %x, %y
+                func.return (%x, %y)
             ^single:
-                func.return %x
+                func.return (%x)
             ^null:
-                func.return
+                func.return ()
             }
         }
         "#;
@@ -389,19 +146,19 @@ mod tests {
     fn test_call_op() {
         let src = r#"
         module {
-            func.func @bar(int<32>) -> int<32> {
+            func.func @bar : fn(int<32>) -> int<32> {
             ^entry(%0 : int<32>):
-                func.return %0
+                func.return (%0)
             }
 
-            func.func @foo () -> (int<32>, int<32>) {
+            func.func @foo : fn() -> (int<32>, int<32>) {
             ^entry:
                 %x = arith.iconst 123 : int<32>
                 %y = arith.iconst 123 : int<32>
                 %z = func.call @bar(%x) : int<32>
                 cf.jump ^return(%x, %y)
             ^return:
-                func.return %x, %y
+                func.return (%x, %y)
             }
         }
         "#;
