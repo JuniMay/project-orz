@@ -1,348 +1,234 @@
 use proc_macro2::TokenStream;
 use quote::quote;
+use syn::spanned::Spanned;
 
-#[derive(Debug, Clone, Copy)]
-enum IndexKind {
-    /// The `...` notation.
-    All,
-    /// A single index number.
-    Single(usize),
-}
+fn derive_struct_ctor_metadata(
+    data_struct: &syn::DataStruct,
+) -> syn::Result<(TokenStream, TokenStream)> {
+    let mut ctor_args = Vec::new();
+    let mut metadata_ident = None;
+    let mut metadata_idx = None;
 
-impl syn::parse::Parse for IndexKind {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        if input.peek(syn::Token![...]) {
-            input.parse::<syn::Token![...]>()?;
-            Ok(Self::All)
+    let is_unnamed = match &data_struct.fields {
+        syn::Fields::Named(_) => false,
+        syn::Fields::Unnamed(_) => true,
+        syn::Fields::Unit => unimplemented!("cannot derive for unit structs"),
+    };
+
+    for (idx, field) in data_struct.fields.iter().enumerate() {
+        let attr = &field.attrs;
+
+        let metadata_attr = attr.iter().find(|attr| attr.path().is_ident("metadata"));
+
+        if let Some(metadata_attr) = metadata_attr {
+            if metadata_ident.is_some() {
+                return Err(syn::Error::new(
+                    metadata_attr.span(),
+                    "duplicate metadata attribute",
+                ));
+            }
+
+            metadata_ident = Some(
+                field
+                    .ident
+                    .clone()
+                    .unwrap_or_else(|| syn::Ident::new(&format!("arg_{}", idx), field.span())),
+            );
+
+            metadata_idx = Some(idx);
+
+            ctor_args.push((metadata_ident.as_ref().unwrap().clone(), field.ty.clone()));
         } else {
-            let index = input.parse::<syn::LitInt>()?.base10_parse::<usize>()?;
-            Ok(Self::Single(index))
+            let ident = field
+                .ident
+                .clone()
+                .unwrap_or_else(|| syn::Ident::new(&format!("arg_{}", idx), field.span()));
+
+            ctor_args.push((ident, field.ty.clone()));
         }
     }
-}
 
-enum OpFieldMeta {
-    /// The metadata field.
-    Metadata { ident: syn::Ident },
-    /// Other fields.
-    Other {
-        /// Whether the field is optional.
-        optional: bool,
-        /// The corresponding field ident.
-        ident: syn::Ident,
-        /// The type of the field.
-        ty: syn::Type,
-    },
-}
+    if metadata_ident.is_none() {
+        return Err(syn::Error::new(
+            data_struct.fields.span(),
+            "missing metadata attribute",
+        ));
+    }
 
-#[derive(Default)]
-struct OpInfo {
-    /// The mnemonic of the operation.
-    mnemonic: Option<String>,
-    /// The verifiers of the operation.
-    verifiers: Vec<syn::Path>,
-    /// The interfaces of the operation.
-    interfaces: Vec<syn::Path>,
-    /// Fields
-    fields: Vec<OpFieldMeta>,
+    let metadata_ident = metadata_ident.unwrap();
+    let ctor_arg_tokens = ctor_args
+        .iter()
+        .filter(|(ident, _)| ident != &metadata_ident)
+        .map(|(ident, ty)| {
+            quote! { #ident: #ty }
+        });
 
-    /// The artifact for metadata.
-    metadata_artifact: TokenStream,
-}
-
-impl OpInfo {
-    /// Get the info from a [`syn::DeriveInput`].
-    fn from_ast(ast: &syn::DeriveInput) -> syn::Result<Self> {
-        let mut info = Self::default();
-
-        for attr in ast.attrs.iter() {
-            let ident = attr.path().get_ident();
-
-            if let Some(ident) = ident {
-                match ident.to_string().as_str() {
-                    "mnemonic" => {
-                        if let syn::Meta::NameValue(ref meta) = attr.meta {
-                            if let syn::Expr::Lit(ref lit) = meta.value {
-                                if let syn::Lit::Str(ref lit) = lit.lit {
-                                    info.mnemonic = Some(lit.value());
-                                }
-                            }
-                        }
-                    }
-                    "verifiers" => {
-                        if let syn::Meta::List(ref list) = attr.meta {
-                            let paths = list.parse_args_with(
-                                syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated)?;
-                            info.verifiers = paths.into_iter().collect();
-                        }
-                    }
-                    "interfaces" => {
-                        if let syn::Meta::List(ref list) = attr.meta {
-                            let paths = list.parse_args_with(
-                                syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated)?;
-                            info.interfaces = paths.into_iter().collect();
-                        }
-                    }
-                    _ => {
-                        continue;
-                    }
-                }
+    let mut ctor_body = TokenStream::new();
+    for (ident, _) in ctor_args.iter() {
+        if ident == &metadata_ident {
+            if is_unnamed {
+                ctor_body.extend(quote! {
+                    ::orzir_core::OpMetadata::new(self_ptr),
+                });
             } else {
-                continue;
+                ctor_body.extend(quote! {
+                    #ident: ::orzir_core::OpMetadata::new(self_ptr),
+                });
             }
-        }
-
-        match &ast.data {
-            syn::Data::Struct(s) => match &s.fields {
-                syn::Fields::Named(fields) => {
-                    for field in fields.named.iter() {
-                        let mut field_meta = OpFieldMeta::Other {
-                            ident: field.ident.clone().unwrap(),
-                            optional: false,
-                            ty: field.ty.clone(),
-                        };
-
-                        for attr in field.attrs.iter() {
-                            let ident = attr.path().get_ident();
-                            if let Some(ident) = ident {
-                                if ident == "metadata" {
-                                    field_meta = OpFieldMeta::Metadata {
-                                        ident: field.ident.clone().unwrap(),
-                                    };
-                                    break;
-                                }
-                            }
-                        }
-
-                        let ty = &field.ty;
-
-                        // basic type checking.
-                        match field_meta {
-                            OpFieldMeta::Metadata { .. } => {
-                                // type should be `OpMetadata`
-                                if let syn::Type::Path(ref path) = ty {
-                                    if let Some(segment) = path.path.segments.last() {
-                                        if segment.ident != "OpMetadata" {
-                                            return Err(syn::Error::new_spanned(
-                                                ty,
-                                                "metadata field should be of type `OpMetadata`",
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-                            OpFieldMeta::Other {
-                                ref mut optional,
-                                ref mut ty,
-                                ..
-                            } => {
-                                // if the field has `Option` type, it is optional
-                                if let syn::Type::Path(ref path) = ty {
-                                    if let Some(segment) = path.path.segments.last() {
-                                        if segment.ident == "Option" {
-                                            *optional = true;
-                                            if let syn::PathArguments::AngleBracketed(ref args) =
-                                                segment.arguments
-                                            {
-                                                if let Some(syn::GenericArgument::Type(
-                                                    ref inside,
-                                                )) = args.args.first()
-                                                {
-                                                    *ty = inside.clone();
-                                                }
-                                            } else {
-                                                return Err(syn::Error::new_spanned(
-                                                    ty,
-                                                    "expected type arguments for `Option`",
-                                                ));
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        info.fields.push(field_meta);
-                    }
-                }
-                _ => {
-                    return Err(syn::Error::new_spanned(
-                        ast,
-                        "only named fields are supported to derive `Op`",
-                    ))
-                }
-            },
-            _ => {
-                return Err(syn::Error::new_spanned(
-                    ast,
-                    "only structs are supported to derive `Op`",
-                ))
-            }
-        }
-
-        Ok(info)
-    }
-
-    /// To verify the indices of entities are valid
-    fn verify(&self) -> syn::Result<()> { Ok(()) }
-
-    /// Generate all artifact for different entities and methods.
-    fn generate_artifacts(&mut self) -> syn::Result<()> {
-        for field in &self.fields {
-            match field {
-                OpFieldMeta::Metadata { ident } => {
-                    self.metadata_artifact = quote! {
-                        fn metadata(&self) -> &::orzir_core::OpMetadata {
-                            &self.#ident
-                        }
-
-                        fn metadata_mut(&mut self) -> &mut ::orzir_core::OpMetadata {
-                            &mut self.#ident
-                        }
-                    };
-                }
-                OpFieldMeta::Other { .. } => {}
-            }
-        }
-
-        Ok(())
-    }
-
-    fn op_trait_impl(&mut self) -> syn::Result<TokenStream> {
-        self.verify()?;
-        self.generate_artifacts()?;
-
-        let metadata_methods = &self.metadata_artifact;
-
-        let result = quote! {
-            #metadata_methods
-        };
-
-        Ok(result)
-    }
-
-    /// Get the `new` constructor for op.
-    fn op_ctor(&self) -> TokenStream {
-        let ctor_args = self
-            .fields
-            .iter()
-            .filter(|field| !matches!(field, OpFieldMeta::Metadata { .. }))
-            .map(|field| {
-                let ident = match field {
-                    OpFieldMeta::Metadata { ident } => ident,
-                    OpFieldMeta::Other { ident, .. } => ident,
-                };
-                let ty = match field {
-                    OpFieldMeta::Metadata { .. } => quote! { ::orzir_core::OpMetadata },
-                    OpFieldMeta::Other {
-                        ty,
-                        optional: false,
-                        ..
-                    } => quote! { #ty },
-                    OpFieldMeta::Other {
-                        ty, optional: true, ..
-                    } => quote! { Option<#ty> },
-                };
-                quote! {
-                    #ident: #ty
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let ctor_arg_names = self
-            .fields
-            .iter()
-            .filter(|field| !matches!(field, OpFieldMeta::Metadata { .. }))
-            .map(|field| match field {
-                OpFieldMeta::Metadata { ident } => ident,
-                OpFieldMeta::Other { ident, .. } => ident,
+        } else {
+            ctor_body.extend(quote! {
+                #ident,
             });
-
-        let ctor = quote! {
-            fn new(
-                ctx: &mut ::orzir_core::Context,
-                self_ptr: ::orzir_core::ArenaPtr<::orzir_core::OpObj>,
-                #(#ctor_args),*
-            ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
-                let instance = Self {
-                    metadata: ::orzir_core::OpMetadata::new(self_ptr),
-                    #(#ctor_arg_names,)*
-                };
-                let instance = ::orzir_core::OpObj::from(instance);
-                ctx.ops.fill(self_ptr, instance);
-                self_ptr
-            }
-        };
-
-        ctor
+        }
     }
-}
 
-pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
-    let ast = syn::parse2::<syn::DeriveInput>(input).unwrap();
-    let mut info = OpInfo::from_ast(&ast)?;
-
-    let ident = &ast.ident;
-
-    let mnemonic = info
-        .mnemonic
-        .clone()
-        .ok_or_else(|| syn::Error::new_spanned(&ast, "missing mnemonic"))?;
-    let (primary, secondary) = mnemonic.split_once('.').unwrap();
-
-    let ctor = info.op_ctor();
-
-    let interface_register_casters = info
-        .interfaces
-        .iter()
-        .map(|path| {
-            quote! {
-                ::orzir_macros::register_caster!(ctx, #ident => #path);
-            }
-        })
-        .collect::<Vec<_>>();
-
-    let verifier_register_casters = info
-        .verifiers
-        .iter()
-        .map(|path| {
-            quote! {
-                ::orzir_macros::register_caster!(ctx, #ident => #path);
-            }
-        })
-        .collect::<Vec<_>>();
-
-    let verifier_impls = info
-        .verifiers
-        .iter()
-        .map(|path| {
-            quote! {
-                impl #path for #ident {}
-            }
-        })
-        .collect::<Vec<_>>();
-
-    let verifier_calls = info
-        .verifiers
-        .iter()
-        .map(|path| {
-            quote! {
-                <Self as #path>::verify(self, ctx)?;
-            }
-        })
-        .collect::<Vec<_>>();
-
-    let verify_interfaces_impl = quote! {
-        impl ::orzir_core::RunVerifiers for #ident {
-            fn run_verifiers(&self, ctx: &::orzir_core::Context) -> ::orzir_core::VerificationResult<()> {
-                #(#verifier_calls)*
-                Ok(())
-            }
+    let ctor_body = if is_unnamed {
+        quote! {
+            Self(#ctor_body)
+        }
+    } else {
+        quote! {
+            Self { #ctor_body }
         }
     };
 
-    let op_impl_methods = info.op_trait_impl()?;
-    let op_impl = quote! {
+    let ctor_body = quote! {
+        fn new(
+            ctx: &mut ::orzir_core::Context,
+            self_ptr: ::orzir_core::ArenaPtr<::orzir_core::OpObj>,
+            #(#ctor_arg_tokens),*
+        ) -> ::orzir_core::ArenaPtr<::orzir_core::OpObj> {
+            let instance = #ctor_body;
+            let obj = ::orzir_core::OpObj::from(instance);
+            ctx.ops.fill(self_ptr, obj);
+            self_ptr
+        }
+    };
+
+    let metadata_field = if is_unnamed {
+        let index = syn::Index::from(metadata_idx.unwrap());
+        quote! { self.#index }
+    } else {
+        quote! { self.#metadata_ident }
+    };
+
+    let metadata_body = quote! {
+        fn metadata(&self) -> &::orzir_core::OpMetadata {
+            &#metadata_field
+        }
+
+        fn metadata_mut(&mut self) -> &mut ::orzir_core::OpMetadata {
+            &mut #metadata_field
+        }
+    };
+
+    Ok((ctor_body, metadata_body))
+}
+
+pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
+    let mut mnemonic = None;
+    let mut verifiers = Vec::new();
+    let mut interfaces = Vec::new();
+
+    for attr in ast.attrs.iter() {
+        if let Some(ident) = attr.path().get_ident() {
+            match ident.to_string().as_str() {
+                "mnemonic" => {
+                    // #[mnemonic = "xxx.xxx"]
+                    if let syn::Meta::NameValue(ref meta) = attr.meta {
+                        if let syn::Expr::Lit(ref lit) = meta.value {
+                            if let syn::Lit::Str(ref lit) = lit.lit {
+                                if mnemonic.is_some() {
+                                    return Err(syn::Error::new(
+                                        lit.span(),
+                                        "duplicate mnemonic attribute",
+                                    ));
+                                }
+                                mnemonic = Some(lit.value());
+                            }
+                        }
+                    }
+                    if mnemonic.is_none() {
+                        return Err(syn::Error::new(attr.span(), "invalid mnemonic attribute"));
+                    }
+                }
+                "verifiers" => {
+                    if let syn::Meta::List(ref list) = attr.meta {
+                        let paths = list.parse_args_with(
+                            syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+                        )?;
+                        verifiers.extend(paths);
+                    }
+                }
+                "interfaces" => {
+                    if let syn::Meta::List(ref list) = attr.meta {
+                        let paths = list.parse_args_with(
+                            syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+                        )?;
+                        interfaces.extend(paths);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    if mnemonic.is_none() {
+        return Err(syn::Error::new(
+            ast.ident.span(),
+            "missing mnemonic attribute",
+        ));
+    }
+
+    let mnemonic = mnemonic.unwrap();
+    let (primary, secondary) = mnemonic.split_once('.').ok_or_else(|| {
+        syn::Error::new(
+            ast.ident.span(),
+            "invalid mnemonic format, expected `<primary>.<secondary>`",
+        )
+    })?;
+
+    let (ctor_body, metadata_body) = if let syn::Data::Struct(ref data_struct) = ast.data {
+        derive_struct_ctor_metadata(data_struct)?
+    } else {
+        unimplemented!("items other than structs are not supported yet")
+    };
+
+    let ident = &ast.ident;
+
+    let interface_register_casters = interfaces
+        .iter()
+        .map(|path| {
+            quote! { ::orzir_macros::register_caster!(ctx, #ident => #path); }
+        })
+        .collect::<TokenStream>();
+
+    let verifier_register_casters = verifiers
+        .iter()
+        .map(|path| {
+            quote! { ::orzir_macros::register_caster!(ctx, #ident => #path); }
+        })
+        .collect::<TokenStream>();
+
+    let verifier_impls = verifiers
+        .iter()
+        .map(|path| {
+            quote! { impl #path for #ident {} }
+        })
+        .collect::<TokenStream>();
+
+    let verifier_calls = verifiers
+        .iter()
+        .map(|path| {
+            quote! { <Self as #path>::verify(self, ctx)?; }
+        })
+        .collect::<TokenStream>();
+
+    let output = quote! {
+        impl #ident {
+            pub #ctor_body
+        }
+
         impl ::orzir_core::Op for #ident {
             fn mnemonic(&self) -> ::orzir_core::Mnemonic {
                 ::orzir_core::Mnemonic::new(#primary, #secondary)
@@ -359,58 +245,46 @@ pub fn derive_op(input: TokenStream) -> syn::Result<TokenStream> {
                 let mnemonic = Self::mnemonic_static();
                 ctx.dialects.get_mut(mnemonic.primary()).unwrap().add_op(mnemonic, parse_fn);
 
-                #(#interface_register_casters)*
-                #(#verifier_register_casters)*
+                #interface_register_casters
+                #verifier_register_casters
             }
 
-            #op_impl_methods
+            #metadata_body
+        }
+
+        #verifier_impls
+
+        impl ::orzir_core::RunVerifiers for #ident {
+            fn run_verifiers(&self, ctx: &::orzir_core::Context) -> ::orzir_core::VerificationResult<()> {
+                #verifier_calls
+                Ok(())
+            }
         }
     };
 
-    let result = quote! {
-        impl #ident {
-            pub #ctor
-        }
-
-        #op_impl
-
-        #(#verifier_impls)*
-
-        #verify_interfaces_impl
-    };
-
-    Ok(result)
+    Ok(output)
 }
 
 #[cfg(test)]
 mod tests {
     use quote::quote;
 
-    use super::derive_op;
+    use crate::op::derive_impl;
 
     #[test]
     fn test_0() {
         let src = quote! {
-            #[derive(Op)]
-            #[mnemonic = "func.return"]
-            // #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
-            pub struct ReturnOp {
-                #[metadata]
-                metadata: OpMetadata,
-
-                #[operand(...)]
-                operands: Vec<ArenaPtr<Value>>,
-            }
+            #[mnemonic = "macro.test"]
+            #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
+            #[interfaces(SomeInterface)]
+            pub struct TestOp(#[operand(...)] Vec<ArenaPtr<Value>>, #[metadata] OpMetadata);
         };
 
-        let output = derive_op(src).unwrap();
-
+        let ast = syn::parse2::<syn::DeriveInput>(src).unwrap();
+        let output = derive_impl(&ast).unwrap();
         println!("{}", output);
-
         let ast = syn::parse_file(&output.to_string()).unwrap();
-
         let ast = prettyplease::unparse(&ast);
-
         println!("{}", ast);
     }
 }

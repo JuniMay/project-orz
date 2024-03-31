@@ -1,12 +1,6 @@
 use cast::{caster_impl, register_caster_impl};
-use interfaces::{
-    control_flow::derive_control_flow_impl, data_flow::derive_data_flow_impl,
-    region_interface::derive_region_interface_impl,
-};
+use interfaces::{control_flow, data_flow, region_interface};
 use proc_macro::TokenStream;
-use ty::derive_ty;
-
-use crate::op::derive_op;
 
 mod cast;
 mod format;
@@ -59,7 +53,8 @@ mod ty;
 /// They can be derived or implemented manually.
 #[proc_macro_derive(Op, attributes(mnemonic, verifiers, interfaces, metadata))]
 pub fn op(item: TokenStream) -> TokenStream {
-    derive_op(item.into())
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    op::derive_impl(&ast)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
@@ -68,10 +63,13 @@ pub fn op(item: TokenStream) -> TokenStream {
 ///
 /// This is similar to the [`Op`] derive, but for the `Ty` trait, except that
 /// the constructor will be `get` for singleton style construction.
-///
-/// TODO: Error handling.
 #[proc_macro_derive(Ty, attributes(mnemonic, verifiers, interfaces))]
-pub fn ty(item: TokenStream) -> TokenStream { derive_ty(item.into()).unwrap().into() }
+pub fn ty(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    ty::derive_impl(&ast)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
 
 /// Create a caster for casting from one trait object to another.
 ///
@@ -124,7 +122,8 @@ pub fn register_caster(input: TokenStream) -> TokenStream {
 /// `Vec<ArenaPtr<Region>>`.
 #[proc_macro_derive(RegionInterface, attributes(region))]
 pub fn derive_region_interface(item: TokenStream) -> TokenStream {
-    derive_region_interface_impl(item.into())
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    region_interface::derive_impl(&ast)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
@@ -143,7 +142,8 @@ pub fn derive_region_interface(item: TokenStream) -> TokenStream {
 /// The type of the fields should be `Successor` or `Vec<Successor>`.
 #[proc_macro_derive(ControlFlow, attributes(successor))]
 pub fn derive_control_flow(item: TokenStream) -> TokenStream {
-    derive_control_flow_impl(item.into())
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    control_flow::derive_impl(&ast)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
@@ -164,7 +164,8 @@ pub fn derive_control_flow(item: TokenStream) -> TokenStream {
 /// `Vec<ArenaPtr<Value>>`.
 #[proc_macro_derive(DataFlow, attributes(result, operand))]
 pub fn derive_data_flow(item: TokenStream) -> TokenStream {
-    derive_data_flow_impl(item.into())
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    data_flow::derive_impl(&ast)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }

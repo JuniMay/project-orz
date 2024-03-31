@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
+use syn::spanned::Spanned;
 
 #[derive(Debug, Clone, Copy)]
 enum IndexKind {
@@ -21,310 +22,198 @@ impl syn::parse::Parse for IndexKind {
     }
 }
 
-struct FieldMeta {
-    ident: syn::Ident,
-    index: IndexKind,
-}
-
 #[derive(Default)]
 struct DeriveInfo {
-    fields: Vec<FieldMeta>,
-
-    num_artifact: TokenStream,
-    get_artifacts: Vec<TokenStream>,
-    set_artifacts: Vec<TokenStream>,
-
-    need_match: bool,
+    field_cnt: Option<usize>,
+    /// The `num_successors` method.
+    num_impl: Option<TokenStream>,
+    /// The `get_successor` method.
+    getter_impl: Option<TokenStream>,
+    /// The `set_successor` method.
+    setter_impl: Option<TokenStream>,
+    /// If the members are discrete, i.e. they only store a single entity.
+    ///
+    /// If this is `None`, this is not yet determined.
+    discrete: Option<bool>,
 }
 
-impl DeriveInfo {
-    fn from_ast(ast: &syn::DeriveInput) -> syn::Result<Self> {
-        let mut info = DeriveInfo::default();
-
-        match &ast.data {
-            syn::Data::Struct(s) => match &s.fields {
-                syn::Fields::Named(fields) => {
-                    for field in fields.named.iter() {
-                        let mut index = None;
-                        for attr in field.attrs.iter() {
-                            let ident = attr.path().get_ident();
-                            if let Some(ident) = ident {
-                                if ident == "successor" {
-                                    index = Some(attr.parse_args::<IndexKind>()?);
-                                }
-                            }
-                        }
-
-                        if index.is_none() {
-                            continue;
-                        }
-
-                        let index = index.unwrap();
-
-                        let ty = &field.ty;
-
-                        match index {
-                            IndexKind::All => {
-                                if let syn::Type::Path(ref path) = ty {
-                                    if let Some(segment) = path.path.segments.last() {
-                                        if segment.ident != "Vec" {
-                                            return Err(syn::Error::new_spanned(
-                                                ty,
-                                                "expect type `Vec<Successor>`",
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-                            IndexKind::Single(_) => {
-                                if let syn::Type::Path(ref path) = ty {
-                                    if let Some(segment) = path.path.segments.last() {
-                                        if segment.ident != "Successor" {
-                                            return Err(syn::Error::new_spanned(
-                                                ty,
-                                                "expect type `Successor`",
-                                            ));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        info.fields.push(FieldMeta {
-                            ident: field.ident.clone().unwrap(),
-                            index,
-                        });
-                    }
-                }
-                _ => {
-                    return Err(syn::Error::new_spanned(
-                        ast,
-                        "only named fields are supported to derive `ControlFlow`",
-                    ))
-                }
-            },
-            _ => {
-                return Err(syn::Error::new_spanned(
-                    ast,
-                    "only structs are supported to derive `ControlFlow`",
+fn derive_struct(data_struct: &syn::DataStruct, info: &mut DeriveInfo) -> syn::Result<()> {
+    for (idx, field) in data_struct.fields.iter().enumerate() {
+        let attr = field
+            .attrs
+            .iter()
+            .find(|attr| attr.path().is_ident("successor"));
+        if attr.is_none() {
+            continue;
+        }
+        let attr = attr.unwrap();
+        let index = attr.parse_args::<IndexKind>()?;
+        match (info.discrete, index) {
+            (Some(true), IndexKind::All) | (Some(false), IndexKind::Single(_)) => {
+                return Err(syn::Error::new(
+                    attr.span(),
+                    "cannot have both `...` and discrete indices",
                 ))
             }
-        }
-
-        Ok(info)
-    }
-
-    fn verify(&self) -> syn::Result<()> {
-        // only allow one `...` field, and cannot coexist with other fields
-        let mut index_kind = None;
-
-        for field in self.fields.iter() {
-            match field.index {
-                IndexKind::All => {
-                    if index_kind.is_some() {
-                        return Err(syn::Error::new_spanned(
-                            field.ident.clone(),
-                            "only one `...` field is allowed",
-                        ));
-                    } else {
-                        index_kind = Some(IndexKind::All);
-                    }
-                }
-                IndexKind::Single(i) => {
-                    if let Some(IndexKind::All) = index_kind {
-                        return Err(syn::Error::new_spanned(
-                            field.ident.clone(),
-                            "cannot coexist with `...` field",
-                        ));
-                    } else {
-                        index_kind = Some(IndexKind::Single(i));
-                    }
-                }
+            (Some(false), IndexKind::All) => {
+                return Err(syn::Error::new(
+                    attr.span(),
+                    "cannot have both multiple `...` indices",
+                ))
             }
+            (_, IndexKind::All) => info.discrete = Some(false),
+            (_, IndexKind::Single(_)) => info.discrete = Some(true),
         }
 
-        Ok(())
-    }
-
-    fn genrate_artifacts(&mut self) -> syn::Result<()> {
-        let mut cnt = 0;
-
-        self.num_artifact = quote! {
-            0
+        let field = match &field.ident {
+            Some(ident) => quote! { self.#ident },
+            None => {
+                let index = syn::Index::from(idx);
+                quote! { self.#index }
+            }
         };
 
-        if self.fields.is_empty() {
-            self.get_artifacts = vec![quote! {
-                None
-            }];
-            self.set_artifacts = vec![quote! {
-                panic!("inedx out of bounds");
-            }];
-        }
-
-        for field in &self.fields {
-            let ident = &field.ident;
-            let index = &field.index;
-
-            match index {
-                IndexKind::All => {
-                    self.num_artifact = quote! {
-                        self.#ident.len()
-                    };
-                    self.get_artifacts = vec![quote! {
-                        self.#ident.get(index)
-                    }];
-                    self.set_artifacts = vec![quote! {
-                        if index > self.#ident.len() {
-                            panic!("index out of bounds")
-                        }
-                        if index == self.#ident.len() {
-                            self.#ident.push(successor);
-                            None
-                        } else {
-                            Some(std::mem::replace(&mut self.#ident[index], successor))
-                        }
-                    }]
-                }
-                IndexKind::Single(i) => {
-                    cnt += 1;
-                    self.get_artifacts.push(quote! {
-                        #i => Some(&self.#ident)
-                    });
-                    self.set_artifacts.push(quote! {
-                        #i => Some(std::mem::replace(&mut self.#ident, successor))
-                    });
-                    self.need_match = true;
-                }
-            }
-        }
-
-        if self.need_match {
-            self.num_artifact = quote! {
-                #cnt
-            };
-        }
-
-        Ok(())
-    }
-
-    fn num_method(&self) -> TokenStream {
-        let artifact = &self.num_artifact;
-        quote! {
-            fn num_successors(&self) -> usize {
-                #artifact as usize
-            }
-        }
-    }
-
-    fn get_method(&mut self) -> TokenStream {
-        let mut artifacts = self.get_artifacts.drain(..).collect::<Vec<_>>();
-
-        if self.need_match {
-            quote! {
-                fn get_successor(&self, index: usize) -> Option<&::orzir_core::Successor> {
-                    match index {
-                        #(#artifacts,)*
-                        _ => None
+        match index {
+            IndexKind::All => {
+                info.num_impl = Some(quote! { #field.len() });
+                info.getter_impl = Some(quote! { #field.get(index) });
+                info.setter_impl = Some(quote! {
+                    if index > #field.len() {
+                        panic!("index out of bounds");
                     }
-                }
-            }
-        } else {
-            let artifact = artifacts.pop().unwrap();
-            quote! {
-                fn get_successor(&self, index: usize) -> Option<&::orzir_core::Successor> {
-                    #artifact
-                }
-            }
-        }
-    }
-
-    fn set_method(&mut self) -> TokenStream {
-        let mut artifacts = self.set_artifacts.drain(..).collect::<Vec<_>>();
-
-        if self.need_match {
-            quote! {
-                fn set_successor(
-                    &mut self,
-                    index: usize,
-                    successor: ::orzir_core::Successor,
-                ) -> Option<::orzir_core::Successor> {
-                    match index {
-                        #(#artifacts,)*
-                        _ => panic!("index out of bounds")
+                    if index == #field.len() {
+                        #field.push(successor);
+                        None
+                    } else {
+                        Some(std::mem::replace(&mut #field[index], successor))
                     }
-                }
+                });
             }
-        } else {
-            let artifact = artifacts.pop().unwrap();
-            quote! {
-                fn set_successor(
-                    &mut self,
-                    index: usize,
-                    successor: ::orzir_core::Successor,
-                ) -> Option<::orzir_core::Successor> {
-                    #artifact
+            IndexKind::Single(idx) => {
+                info.field_cnt = Some(info.field_cnt.unwrap_or(0) + 1);
+
+                if info.getter_impl.is_none() {
+                    info.getter_impl = Some(TokenStream::new());
+                }
+
+                if info.setter_impl.is_none() {
+                    info.setter_impl = Some(TokenStream::new());
+                }
+
+                if let Some(ref mut method) = info.getter_impl.as_mut() {
+                    method.extend(quote! {
+                        #idx => Some(&#field),
+                    });
+                } else {
+                    unreachable!()
+                }
+
+                if let Some(ref mut method) = info.setter_impl.as_mut() {
+                    method.extend(quote! {
+                        #idx => Some(std::mem::replace(&mut #field, successor)),
+                    });
+                } else {
+                    unreachable!()
                 }
             }
         }
     }
+
+    if let Some(discrete) = info.discrete {
+        if discrete {
+            let num = info.field_cnt.unwrap();
+            info.num_impl = Some(quote! { #num });
+
+            let getters = info.getter_impl.as_mut().unwrap();
+            let setters = info.setter_impl.as_mut().unwrap();
+            info.getter_impl = Some(quote! {
+                match index {
+                    #getters
+                    _ => None,
+                }
+            });
+            info.setter_impl = Some(quote! {
+                match index {
+                    #setters
+                    _ => None,
+                }
+            });
+        }
+    } else {
+        info.num_impl = Some(quote! { 0 });
+        info.getter_impl = Some(quote! { None });
+        info.setter_impl = Some(quote! { panic!("index out of bounds") });
+    }
+
+    Ok(())
 }
 
-pub fn derive_control_flow_impl(item: TokenStream) -> syn::Result<TokenStream> {
-    let ast = syn::parse2::<syn::DeriveInput>(item)?;
-    let mut info = DeriveInfo::from_ast(&ast)?;
+pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
+    let mut info = DeriveInfo::default();
 
+    match &ast.data {
+        syn::Data::Struct(data_struct) => {
+            derive_struct(data_struct, &mut info)?;
+        }
+        _ => unimplemented!("items other than structs are not supported yet"),
+    }
+
+    let num_impl = info.num_impl.unwrap();
+    let num_impl = quote! {
+        fn num_successors(&self) -> usize {
+            #num_impl
+        }
+    };
+    let getter_impl = info.getter_impl.unwrap();
+    let getter_impl = quote! {
+        fn get_successor(&self, index: usize) -> Option<&::orzir_core::Successor> {
+            #getter_impl
+        }
+    };
+    let setter_impl = info.setter_impl.unwrap();
+    let setter_impl = quote! {
+        fn set_successor(
+            &mut self,
+            index: usize,
+            successor: ::orzir_core::Successor,
+        ) -> Option<::orzir_core::Successor> {
+            #setter_impl
+        }
+    };
     let ident = &ast.ident;
-
-    info.verify()?;
-    info.genrate_artifacts()?;
-
-    let num_method = info.num_method();
-    let get_method = info.get_method();
-    let set_method = info.set_method();
-
-    let expanded = quote! {
+    let output = quote! {
         impl ::orzir_core::ControlFlow for #ident {
-            #num_method
-            #get_method
-            #set_method
+            #num_impl
+            #getter_impl
+            #setter_impl
         }
     };
 
-    Ok(expanded)
+    Ok(output)
 }
 
 #[cfg(test)]
 mod tests {
     use quote::quote;
 
-    use crate::interfaces::control_flow::derive_control_flow_impl;
+    use crate::interfaces::control_flow::derive_impl;
+
     #[test]
     fn test_0() {
         let src = quote! {
-            #[derive(Op, ControlFlow)]
-            #[mnemonic = "func.return"]
-            // #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
-            pub struct ReturnOp {
+            pub struct TestOp {
                 #[metadata]
                 metadata: OpMetadata,
 
-                #[operand(...)]
-                operands: Vec<ArenaPtr<Value>>,
-
-                #[successor(...)]
-                xs: Vec<Successor>,
+                #[successor(0)]
+                succ: Successor,
             }
         };
-
-        let output = derive_control_flow_impl(src).unwrap();
-
+        let ast = syn::parse2::<syn::DeriveInput>(src).unwrap();
+        let output = derive_impl(&ast).unwrap();
         println!("{}", output);
-
         let ast = syn::parse_file(&output.to_string()).unwrap();
-
         let ast = prettyplease::unparse(&ast);
-
         println!("{}", ast);
     }
 }
