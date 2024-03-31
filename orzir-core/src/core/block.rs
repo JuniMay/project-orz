@@ -154,7 +154,7 @@ impl Parse for Block {
             TokenKind::BlockLabel(_) => {
                 let token = state.stream.consume()?;
                 if let TokenKind::BlockLabel(label) = token.kind {
-                    // block.deref(&ctx.blocks).set_name(ctx, label)?;
+                    let label = label.unwrap();
                     Block::new(ctx, false, state.curr_region(), Some(label))
                 } else {
                     unreachable!()
@@ -178,8 +178,8 @@ impl Parse for Block {
                                 state.stream.consume()?;
                                 break;
                             }
-                            TokenKind::ValueName(ref name) => {
-                                let name = name.clone();
+                            TokenKind::ValueName(name) => {
+                                let name = name.clone().unwrap();
                                 let _arg = Value::parse(ctx, state)?;
 
                                 state.stream.expect(token!(':'))?;

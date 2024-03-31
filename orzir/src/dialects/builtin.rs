@@ -19,6 +19,7 @@ impl Parse for Symbol {
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         if let TokenKind::SymbolName(name) = token.kind {
+            let name = name.unwrap();
             let op = state.curr_op();
             // register the symbol
             let region = state.curr_region();
@@ -156,7 +157,8 @@ impl Parse for IntTy {
         state.stream.expect(token!('<'))?;
         let token = state.stream.consume()?;
         let size = if let TokenKind::Tokenized(s) = token.kind {
-            s.parse::<usize>()
+            s.unwrap()
+                .parse::<usize>()
                 .map_err(|_| parse_error!(token.span, InvalidSizeLiteral))?
         } else {
             return parse_error!(
@@ -383,11 +385,11 @@ impl Parse for MemRefTy {
         loop {
             let token = state.stream.peek()?;
             match &token.kind {
-                TokenKind::Tokenized(s) if s == "x" => {
+                TokenKind::Tokenized(s) if s.as_ref().unwrap() == "x" => {
                     state.stream.consume()?;
                 }
                 TokenKind::Tokenized(s) => {
-                    let dim = s.parse::<usize>().ok();
+                    let dim = s.as_ref().unwrap().parse::<usize>().ok();
                     if let Some(dim) = dim {
                         state.stream.consume()?;
                         shape.push(dim);
@@ -403,7 +405,12 @@ impl Parse for MemRefTy {
                     return parse_error!(
                         token.span,
                         ParseErrorKind::InvalidToken(
-                            vec![token!("..."), token!('>')].into(),
+                            vec![
+                                token!("..."),
+                                token!('>'),
+                                TokenKind::Tokenized(Some("x".into()))
+                            ]
+                            .into(),
                             token.kind.clone()
                         )
                     )

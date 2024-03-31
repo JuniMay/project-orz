@@ -58,6 +58,7 @@ impl Parse for Successor {
         let token = state.stream.consume()?;
         let region = state.curr_region();
         if let TokenKind::BlockLabel(label) = &token.kind {
+            let label = label.as_ref().unwrap();
             let block = Block::reserve_with_name(ctx, label.clone(), region);
             let mut args = Vec::new();
             if state.stream.consume_if(TokenKind::Char('('))?.is_some() {
@@ -252,7 +253,7 @@ impl Parse for OpObj {
                     let token = state.stream.consume()?;
 
                     if let TokenKind::ValueName(name) = token.kind {
-                        result_names.push(name);
+                        result_names.push(name.unwrap());
                     } else {
                         unreachable!();
                     }

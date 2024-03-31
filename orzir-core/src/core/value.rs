@@ -173,11 +173,12 @@ impl Parse for Value {
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let name_token = state.stream.consume()?;
         let self_ptr = if let TokenKind::ValueName(name) = &name_token.kind {
+            let name = name.clone().unwrap();
             // try to get the value by name, or reserve a new one.
             let self_ptr = ctx
                 .value_names
                 .borrow()
-                .get_by_name(name)
+                .get_by_name(&name)
                 .unwrap_or_else(|| ctx.values.reserve());
             // set the name of the value.
             ctx.value_names

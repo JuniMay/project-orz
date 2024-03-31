@@ -61,8 +61,9 @@ impl Parse for Mnemonic {
     fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         match token.kind {
-            TokenKind::Tokenized(ref s) => {
+            TokenKind::Tokenized(s) => {
                 // remove the quotes.
+                let s = s.unwrap();
                 let s = if s.starts_with('"') && s.ends_with('"') {
                     &s[1..s.len() - 1]
                 } else {

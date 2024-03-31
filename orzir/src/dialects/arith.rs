@@ -73,6 +73,7 @@ impl Parse for IntLiteral {
         let token = state.stream.consume()?;
 
         let value = if let TokenKind::Tokenized(s) = token.kind {
+            let s = s.unwrap();
             if s == "true" {
                 BigInt::from(1)
             } else if s == "false" {

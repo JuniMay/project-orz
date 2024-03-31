@@ -188,7 +188,8 @@ pub struct CallOp {
     #[operand(...)]
     operands: Vec<ArenaPtr<Value>>,
 
-    callee: String,
+    callee: Symbol,
+
     ret_ty: Vec<ArenaPtr<TyObj>>,
 }
 
@@ -198,16 +199,7 @@ impl Parse for CallOp {
     type Item = ArenaPtr<OpObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let token = state.stream.consume()?;
-        let callee = if let TokenKind::SymbolName(s) = token.kind {
-            s
-        } else {
-            return parse_error!(
-                token.span,
-                ParseErrorKind::InvalidToken(vec![token!("@...")].into(), token.kind)
-            )
-            .into();
-        };
+        let callee = Symbol::parse(ctx, state)?;
 
         state.stream.expect(token!('('))?;
 
@@ -274,7 +266,8 @@ impl Parse for CallOp {
 
 impl Print for CallOp {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, " @{}", self.callee)?;
+        write!(state.buffer, " ")?;
+        self.callee.print(ctx, state)?;
         write!(state.buffer, "(")?;
         let operands = self.operands();
         for (i, operand) in operands.iter().enumerate() {

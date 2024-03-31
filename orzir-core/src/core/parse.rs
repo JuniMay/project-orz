@@ -91,127 +91,94 @@ impl Span {
     pub(super) fn new(start: Pos, end: Pos) -> Self { Self { start, end } }
 }
 
+/// A token kind.
+///
+/// For identifiers, if the inner string is None, the token is a wildcard, which
+/// can match any identifier, and should not be produced by the tokenizer and
+/// can just be unwrapped in the parsers.
 #[derive(Clone, PartialEq, Eq)]
 pub enum TokenKind {
     /// A character
     ///
-    /// For delimiters, only `:`, `=`, `,`, `;` and `-` are supported. And for
-    /// brackets, only `(`, `)`, `{`, `}`, `[`, `]`, `<`, `>` are supported.
+    /// For delimiters, only `:`, `=`, `,`, `;`, `*` and `-` are supported. And
+    /// for brackets, only `(`, `)`, `{`, `}`, `[`, `]`, `<`, `>` are supported.
+    /// `^`, `%`, `!`, `@` will be used for block label, value name, type alias
+    /// and symbol name respectively if they are not followed by an identifier,
+    /// otherwise they will be treated as normal characters.
     Char(char),
     /// `->`
     Arrow,
     /// A block label starting with `^`.
-    BlockLabel(String),
+    BlockLabel(Option<String>),
     /// A block name starting with `%`.
-    ValueName(String),
+    ValueName(Option<String>),
     /// A type alias starting with `!`.
     ///
     /// This is the same with MLIR, but not used yet.
-    TyAlias(String),
+    TyAlias(Option<String>),
     /// A symbol name starting with `@`.
-    SymbolName(String),
+    SymbolName(Option<String>),
     /// Other tokenized string.
     ///
     /// This represents contiguous alphanumeric or with `_`, `-`, `.`
     /// characters. And if the string is quoted, there can be escape sequences.
-    Tokenized(String),
+    Tokenized(Option<String>),
     /// End of file.
     Eof,
 }
 
-/// This is used as placeholder for the expected token kind.
-pub enum ExpectedTokenKind {
-    Char(char),
-    Arrow,
-    BlockLabel,
-    ValueName,
-    TyAlias,
-    SymbolName,
-    Tokenized,
-    Eof,
-}
-
-impl ExpectedTokenKind {
-    pub fn is_compatible(&self, kind: &TokenKind) -> bool {
-        match self {
-            ExpectedTokenKind::Char(c) => {
-                if let TokenKind::Char(ch) = kind {
-                    c == ch
-                } else {
-                    false
-                }
-            }
-            ExpectedTokenKind::Arrow => matches!(kind, TokenKind::Arrow),
-            ExpectedTokenKind::BlockLabel => matches!(kind, TokenKind::BlockLabel(_)),
-            ExpectedTokenKind::ValueName => matches!(kind, TokenKind::ValueName(_)),
-            ExpectedTokenKind::TyAlias => matches!(kind, TokenKind::TyAlias(_)),
-            ExpectedTokenKind::SymbolName => matches!(kind, TokenKind::SymbolName(_)),
-            ExpectedTokenKind::Tokenized => matches!(kind, TokenKind::Tokenized(_)),
-            ExpectedTokenKind::Eof => matches!(kind, TokenKind::Eof),
-        }
-    }
-}
-
-/// Get an expected token kind.
+/// Shortcut for the token kind.
+///
+/// This does not support specifying the inner string for the identifier kinds.
 #[macro_export]
 macro_rules! token {
-    (':') => {
-        $crate::ExpectedTokenKind::Char(':')
-    };
-    ('=') => {
-        $crate::ExpectedTokenKind::Char('=')
-    };
-    ('(') => {
-        $crate::ExpectedTokenKind::Char('(')
-    };
-    (')') => {
-        $crate::ExpectedTokenKind::Char(')')
-    };
-    ('{') => {
-        $crate::ExpectedTokenKind::Char('{')
-    };
-    ('}') => {
-        $crate::ExpectedTokenKind::Char('}')
-    };
-    ('[') => {
-        $crate::ExpectedTokenKind::Char('[')
-    };
-    (']') => {
-        $crate::ExpectedTokenKind::Char(']')
-    };
-    ('<') => {
-        $crate::ExpectedTokenKind::Char('<')
-    };
-    ('>') => {
-        $crate::ExpectedTokenKind::Char('>')
-    };
-    (',') => {
-        $crate::ExpectedTokenKind::Char(',')
-    };
-    (';') => {
-        $crate::ExpectedTokenKind::Char(';')
-    };
-    ("->") => {
-        $crate::ExpectedTokenKind::Arrow
+    // char
+    ("...") => {
+        $crate::TokenKind::Tokenized(None)
     };
     ("^...") => {
-        $crate::ExpectedTokenKind::BlockLabel
+        $crate::TokenKind::BlockLabel(None)
     };
     ("%...") => {
-        $crate::ExpectedTokenKind::ValueName
+        $crate::TokenKind::ValueName(None)
     };
     ("!...") => {
-        $crate::ExpectedTokenKind::TyAlias
+        $crate::TokenKind::TyAlias(None)
     };
     ("@...") => {
-        $crate::ExpectedTokenKind::SymbolName
+        $crate::TokenKind::SymbolName(None)
     };
-    ("...") => {
-        $crate::ExpectedTokenKind::Tokenized
+    ("->") => {
+        $crate::TokenKind::Arrow
     };
-    ("EOF") => {
-        $crate::ExpectedTokenKind::Eof
+    ($c:literal) => {
+        $crate::TokenKind::Char($c)
     };
+}
+
+impl TokenKind {
+    /// Check if this token kind is compatible with the other.
+    pub fn is_compatible(&self, other: &Self) -> bool {
+        match (self, other) {
+            // concrete characters, no wildcard
+            (TokenKind::Char(ch_0), TokenKind::Char(ch_1)) => ch_0 == ch_1,
+            (TokenKind::Arrow, TokenKind::Arrow) => true,
+            // wildcard, if this is none, the other can be any.
+            (TokenKind::BlockLabel(None), TokenKind::BlockLabel(_)) => true,
+            (TokenKind::ValueName(None), TokenKind::ValueName(_)) => true,
+            (TokenKind::TyAlias(None), TokenKind::TyAlias(_)) => true,
+            (TokenKind::SymbolName(None), TokenKind::SymbolName(_)) => true,
+            (TokenKind::Tokenized(None), TokenKind::Tokenized(_)) => true,
+            (TokenKind::Eof, TokenKind::Eof) => true,
+            // if this is not none, the other should be the same.
+            (TokenKind::BlockLabel(s_0), TokenKind::BlockLabel(s_1)) => s_0 == s_1,
+            (TokenKind::ValueName(s_0), TokenKind::ValueName(s_1)) => s_0 == s_1,
+            (TokenKind::TyAlias(s_0), TokenKind::TyAlias(s_1)) => s_0 == s_1,
+            (TokenKind::SymbolName(s_0), TokenKind::SymbolName(s_1)) => s_0 == s_1,
+            (TokenKind::Tokenized(s_0), TokenKind::Tokenized(s_1)) => s_0 == s_1,
+            _ => false,
+        }
+    }
 }
 
 impl fmt::Display for TokenKind {
@@ -219,36 +186,23 @@ impl fmt::Display for TokenKind {
         match self {
             TokenKind::Char(c) => write!(f, "`{}`", c),
             TokenKind::Arrow => write!(f, "`->`"),
-            TokenKind::BlockLabel(s) => write!(f, "`^{}`", s),
-            TokenKind::ValueName(s) => write!(f, "`%{}`", s),
-            TokenKind::TyAlias(s) => write!(f, "`!{}`", s),
-            TokenKind::SymbolName(s) => write!(f, "`@{}`", s),
-            TokenKind::Tokenized(s) => write!(f, "`{}`", s),
+            TokenKind::BlockLabel(s) => {
+                write!(f, "`^{}`", if let Some(s) = s { s } else { "`^...`" })
+            }
+            TokenKind::ValueName(s) => {
+                write!(f, "`%{}`", if let Some(s) = s { s } else { "`%...`" })
+            }
+            TokenKind::TyAlias(s) => write!(f, "`!{}`", if let Some(s) = s { s } else { "`!...`" }),
+            TokenKind::SymbolName(s) => {
+                write!(f, "`@{}`", if let Some(s) = s { s } else { "`@...`" })
+            }
+            TokenKind::Tokenized(s) => write!(f, "`{}`", if let Some(s) = s { s } else { "`...`" }),
             TokenKind::Eof => write!(f, "EOF"),
         }
     }
 }
 
 impl fmt::Debug for TokenKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self) }
-}
-
-impl fmt::Display for ExpectedTokenKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ExpectedTokenKind::Char(c) => write!(f, "`{}`", c),
-            ExpectedTokenKind::Arrow => write!(f, "`->`"),
-            ExpectedTokenKind::BlockLabel => write!(f, "block label (`^...`)"),
-            ExpectedTokenKind::ValueName => write!(f, "value name (`%...`)"),
-            ExpectedTokenKind::TyAlias => write!(f, "type alias (`!...`)"),
-            ExpectedTokenKind::SymbolName => write!(f, "symbol name (`@...`)"),
-            ExpectedTokenKind::Tokenized => write!(f, "tokenized string (`...`)"),
-            ExpectedTokenKind::Eof => write!(f, "EOF"),
-        }
-    }
-}
-
-impl fmt::Debug for ExpectedTokenKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self) }
 }
 
@@ -339,19 +293,19 @@ pub enum ParseErrorKind {
     #[error("unclosed block comment")]
     UnclosedBlockComment,
 
-    #[error("invalid character: {1}, expected one of {0}")]
+    #[error("invalid character: expected one of {0}, got {1}")]
     InvalidCharacter(ExpectedList<char>, char),
 
     #[error("unexpected eof")]
     UnexpectedEof,
 
-    #[error("invalid token: {1}, expected one of {0}")]
-    InvalidToken(ExpectedList<ExpectedTokenKind>, TokenKind),
+    #[error("invalid token: expected one of {0}, got {1}")]
+    InvalidToken(ExpectedList<TokenKind>, TokenKind),
 
     #[error("duplicated value name: {0}")]
     DuplicatedValueName(String),
 
-    #[error("invalid result number: {1}, expected {0}")]
+    #[error("invalid result number: expected {0}, got {1}")]
     InvalidResultNumber(usize, usize),
 }
 
@@ -478,7 +432,7 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('^')
                 } else {
-                    TokenKind::BlockLabel(s)
+                    TokenKind::BlockLabel(Some(s))
                 }
             }
             Some('%') => {
@@ -487,7 +441,7 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('%')
                 } else {
-                    TokenKind::ValueName(s)
+                    TokenKind::ValueName(Some(s))
                 }
             }
             Some('!') => {
@@ -496,7 +450,7 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('!')
                 } else {
-                    TokenKind::TyAlias(s)
+                    TokenKind::TyAlias(Some(s))
                 }
             }
             Some('@') => {
@@ -505,13 +459,13 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('@')
                 } else {
-                    TokenKind::SymbolName(s)
+                    TokenKind::SymbolName(Some(s))
                 }
             }
             Some(c)
                 if matches!(
                     c,
-                    ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';'
+                    ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '*'
                 ) =>
             {
                 self.consume_char();
@@ -527,7 +481,7 @@ impl<'a> TokenStream<'a> {
                     _ => TokenKind::Char('-'),
                 }
             }
-            Some(_) => TokenKind::Tokenized(self.handle_identifier()?),
+            Some(_) => TokenKind::Tokenized(Some(self.handle_identifier()?)),
             None => TokenKind::Eof,
         };
 
@@ -635,7 +589,7 @@ impl<'a> TokenStream<'a> {
         Ok(s)
     }
 
-    pub fn expect(&mut self, kind: ExpectedTokenKind) -> ParseResult<()> {
+    pub fn expect(&mut self, kind: TokenKind) -> ParseResult<()> {
         let token = self.consume()?;
         if kind.is_compatible(&token.kind) {
             Ok(())
@@ -763,17 +717,17 @@ mod tests {
         let pos = stream.peek().unwrap().span.start;
         assert_eq!(
             stream.consume().unwrap().kind,
-            TokenKind::Tokenized("a".to_string())
+            TokenKind::Tokenized(Some("a".into()))
         );
         assert_eq!(
             stream.consume().unwrap().kind,
-            TokenKind::Tokenized("b".to_string())
+            TokenKind::Tokenized(Some("b".into()))
         );
         stream.rollback();
         let pos2 = stream.peek().unwrap().span.start;
         assert_eq!(
             stream.consume().unwrap().kind,
-            TokenKind::Tokenized("a".to_string())
+            TokenKind::Tokenized(Some("a".into()))
         );
 
         assert_eq!(pos, pos2);
