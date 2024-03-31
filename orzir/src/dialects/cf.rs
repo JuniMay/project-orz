@@ -127,7 +127,7 @@ mod tests {
                 cf.jump ^return
 
             ^return:
-                func.return (%a)
+                func.return %a
             }
         }
         "#;

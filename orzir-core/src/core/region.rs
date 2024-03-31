@@ -154,7 +154,7 @@ impl Parse for Region {
 
 impl Print for Region {
     fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        writeln!(state.buffer, "{{")?;
+        writeln!(state.buffer, " {{")?;
         for block in self.layout.iter() {
             block.deref(&ctx.blocks).print(ctx, state)?;
         }

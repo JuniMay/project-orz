@@ -65,8 +65,8 @@ struct FormatConfig {
 /// The field format config
 struct FieldFormatConfig {
     sep: String,
-    leading: String,
-    trailing: String,
+    leading: Option<String>,
+    trailing: Option<String>,
 }
 
 impl syn::parse::Parse for FieldFormatConfig {
@@ -102,8 +102,8 @@ impl syn::parse::Parse for FieldFormatConfig {
 
         let config = Self {
             sep: sep.ok_or_else(|| syn::Error::new(input.span(), "missing sep"))?,
-            leading: leading.ok_or_else(|| syn::Error::new(input.span(), "missing leading"))?,
-            trailing: trailing.ok_or_else(|| syn::Error::new(input.span(), "missing trailing"))?,
+            leading,
+            trailing,
         };
 
         Ok(config)
@@ -284,11 +284,24 @@ fn derive_print_struct(
                         quote! { item }
                     };
 
+                    let leading_space = if sep == "," {
+                        quote! {}
+                    } else {
+                        quote! { write!(__state.buffer, " ")?; }
+                    };
+
+                    let leading = leading
+                        .map(|s| quote! { #s })
+                        .unwrap_or_else(|| quote! { "" });
+                    let trailing = trailing
+                        .map(|s| quote! { #s })
+                        .unwrap_or_else(|| quote! { "" });
+
                     field_print_body = quote! {
                         write!(__state.buffer, "{}", #leading)?;
                         for (idx, item) in #ident.iter().enumerate() {
                             if idx > 0 {
-                                write!(__state.buffer, " ")?;
+                                #leading_space
                                 write!(__state.buffer, #sep)?;
                                 write!(__state.buffer, " ")?;
                             }
@@ -324,8 +337,16 @@ fn derive_print_struct(
                 print_body.extend(field_print_body);
             }
             FormatToken::Punct(punct) => {
+                if punct == "," {
+                    // no leading space.
+                } else {
+                    // add leading space for puncts other than a comma
+                    print_body.extend(quote! {
+                        write!(__state.buffer, " ")?;
+                    });
+                }
+
                 print_body.extend(quote! {
-                    write!(__state.buffer, " ")?;
                     write!(__state.buffer, #punct)?;
                     write!(__state.buffer, " ")?;
                 });
@@ -487,8 +508,6 @@ fn derive_parse_struct(
                     let field_config = field_config
                         .ok_or_else(|| syn::Error::new(ident.span(), "missing format attribute"))?;
                     let sep = field_config.sep;
-                    let leading = field_config.leading;
-                    let trailing = field_config.trailing;
 
                     let parse_stmt = if is_region {
                         let region_kind = region_kind.ok_or_else(|| {
@@ -502,37 +521,82 @@ fn derive_parse_struct(
                         }
                         quote! {
                             __state.enter_region_with(#region_kind, __idx);
-                            let __item = <#ty as ::orzir_core::Parse>::parse(__ctx, __state)?;
+                            let __item_result = <#ty as ::orzir_core::Parse>::parse(__ctx, __state);
                             __state.exit_region();
                         }
                     } else {
                         quote! {
-                            let __item = <#ty as ::orzir_core::Parse>::parse(__ctx, __state)?;
+                            let __item_result = <#ty as ::orzir_core::Parse>::parse(__ctx, __state);
                         }
                     };
 
-                    field_parse_body = quote! {
-                        let mut #ident = Vec::new();
-                        if let ::orzir_core::token!(#leading) = __state.stream.peek()?.kind {
+                    // backtracking to handle the first optional item
+                    let parse_stmt = if field_config.trailing.is_none() {
+                        // rolling back
+                        quote! {
+                            __state.stream.checkpoint();
+                            #parse_stmt
+                            if let Err(_) = __item_result {
+                                __state.stream.rollback();
+                                break;
+                            }
+                            __state.stream.commit();
+                            let __item = __item_result.unwrap();
+                        }
+                    } else {
+                        quote! {
+                            #parse_stmt
+                            let __item = __item_result?;
+                        }
+                    };
+
+                    let field_parse_loop_body = quote! {
+                        #parse_stmt
+                        #ident.push(__item);
+                        __idx += 1;
+
+                        if let ::orzir_core::token!(#sep) = __state.stream.peek()?.kind {
                             __state.stream.consume()?;
+                        } else {
+                            break;
+                        }
+                    };
+
+                    let field_parse_loop_body = if let Some(ref trailing) = field_config.trailing {
+                        quote! {
                             let mut __idx = 0;
                             loop {
                                 if let ::orzir_core::token!(#trailing) = __state.stream.peek()?.kind {
                                     break;
                                 }
 
-                                #parse_stmt
-                                #ident.push(__item);
-                                __idx += 1;
-
-                                if let ::orzir_core::token!(#sep) = __state.stream.peek()?.kind {
-                                    __state.stream.consume()?;
-                                } else {
-                                    break;
-                                }
+                                #field_parse_loop_body
                             }
                             __state.stream.expect(::orzir_core::token!(#trailing))?;
                         }
+                    } else {
+                        quote! {
+                            let mut __idx = 0;
+                            loop {
+                                #field_parse_loop_body
+                            }
+                        }
+                    };
+
+                    let field_parse_loop_body = if let Some(ref leading) = field_config.leading {
+                        quote! {
+                            if let ::orzir_core::token!(#leading) = __state.stream.peek()?.kind {
+                                __state.stream.consume()?;
+                                #field_parse_loop_body
+                            }
+                        }
+                    } else {
+                        field_parse_loop_body
+                    };
+
+                    field_parse_body = quote! {
+                        let mut #ident = Vec::new();
+                        #field_parse_loop_body
                     }
                 } else if is_region {
                     let region_kind = region_kind.ok_or_else(|| {

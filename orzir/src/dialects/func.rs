@@ -46,7 +46,7 @@ pub struct ReturnOp {
     metadata: OpMetadata,
 
     #[operand(...)]
-    #[format(sep = ",", leading = "(", trailing = ")")]
+    #[format(sep = ",")]
     operands: Vec<ArenaPtr<Value>>,
 }
 
@@ -110,11 +110,11 @@ mod tests {
                 %x = arith.iconst 123 : int<32>
                 %y = arith.iconst 123 : int<32>
             ^return:
-                func.return (%x, %y)
+                func.return %x, %y
             ^single:
-                func.return (%x)
+                func.return %x
             ^null:
-                func.return ()
+                func.return
             }
         }
         "#;
@@ -148,7 +148,7 @@ mod tests {
         module {
             func.func @bar : fn(int<32>) -> int<32> {
             ^entry(%0 : int<32>):
-                func.return (%0)
+                func.return %0
             }
 
             func.func @foo : fn() -> (int<32>, int<32>) {
@@ -158,7 +158,7 @@ mod tests {
                 %z = func.call @bar(%x) : int<32>
                 cf.jump ^return(%x, %y)
             ^return:
-                func.return (%x, %y)
+                func.return %x, %y
             }
         }
         "#;

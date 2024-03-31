@@ -664,6 +664,9 @@ impl<'a> TokenStream<'a> {
     /// Set a checkpoint.
     pub fn checkpoint(&mut self) { self.ckpts.push(self.pos); }
 
+    /// Pop the last checkpoint and commit the changes.
+    pub fn commit(&mut self) { self.ckpts.pop(); }
+
     /// Rollback to the last checkpoint.
     ///
     /// This will also reset the buffered token.
@@ -862,7 +865,10 @@ impl<T: Parse> Parse for Option<T> {
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         state.stream.checkpoint();
         match T::parse(ctx, state) {
-            Ok(item) => Ok(Some(item)),
+            Ok(item) => {
+                state.stream.commit();
+                Ok(Some(item))
+            }
             Err(_) => {
                 state.stream.rollback();
                 Ok(None)
