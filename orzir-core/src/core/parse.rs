@@ -418,7 +418,11 @@ pub struct TokenStream<'a> {
     /// The buffered token for peeking.
     buffered_token: Option<Token>,
     /// Current position.
-    pos: Pos,
+    /// 
+    /// This will be set to peeked position after consuming the buffered token.
+    curr_pos: Pos,
+    /// The peeked position.
+    peeked_pos: Pos,
     /// Checkpoint stack.
     ///
     /// This is used for backtracking the stream, which is useful if there are
@@ -475,7 +479,8 @@ impl<'a> TokenStream<'a> {
             reader: SliceReader::new(slice),
             buffered_char: None,
             buffered_token: None,
-            pos: Pos::new(),
+            curr_pos: Pos::new(),
+            peeked_pos: Pos::new(),
             ckpts: Vec::new(),
         }
     }
@@ -496,7 +501,7 @@ impl<'a> TokenStream<'a> {
     /// Consume the buffered character.
     fn consume_char(&mut self) {
         if let Some(c) = self.buffered_char {
-            self.pos.update(c);
+            self.peeked_pos.update(c);
             self.buffered_char = None;
         }
     }
@@ -519,7 +524,7 @@ impl<'a> TokenStream<'a> {
 
     fn skip_block_comment(&mut self) -> ParseResult<()> {
         let mut depth = 1;
-        let start = self.pos;
+        let start = self.peeked_pos;
         while depth > 0 {
             match self.next_char() {
                 Some('/') => {
@@ -535,7 +540,7 @@ impl<'a> TokenStream<'a> {
                 Some(_) => {}
                 None => {
                     return parse_error!(
-                        Span::new(start, self.pos),
+                        Span::new(start, self.peeked_pos),
                         ParseErrorKind::UnclosedBlockComment
                     )
                     .into();
@@ -564,7 +569,7 @@ impl<'a> TokenStream<'a> {
                         }
                         Some(c) => {
                             return parse_error!(
-                                Span::new(self.pos, self.pos),
+                                Span::new(self.peeked_pos, self.peeked_pos),
                                 ParseErrorKind::InvalidCharacter(vec!['/', '*'].into(), c)
                             )
                             .into();
@@ -584,7 +589,7 @@ impl<'a> TokenStream<'a> {
     /// This will get the next token, buffer it and return the reference.
     fn buffer_next(&mut self) -> ParseResult<&Token> {
         self.skip_whitespace()?;
-        let start = self.pos;
+        let start = self.peeked_pos;
         let kind = match self.peek_char() {
             Some('^') => {
                 self.consume_char();
@@ -645,7 +650,7 @@ impl<'a> TokenStream<'a> {
             None => TokenKind::Eof,
         };
 
-        let end = self.pos;
+        let end = self.peeked_pos;
         let token = Token::new(kind, Span::new(start, end));
 
         if let Some(last) = &self.buffered_token {
@@ -662,7 +667,7 @@ impl<'a> TokenStream<'a> {
     }
 
     /// Set a checkpoint.
-    pub fn checkpoint(&mut self) { self.ckpts.push(self.pos); }
+    pub fn checkpoint(&mut self) { self.ckpts.push(self.curr_pos); }
 
     /// Pop the last checkpoint and commit the changes.
     pub fn commit(&mut self) { self.ckpts.pop(); }
@@ -671,8 +676,9 @@ impl<'a> TokenStream<'a> {
     ///
     /// This will also reset the buffered token.
     pub fn rollback(&mut self) {
-        self.pos = self.ckpts.pop().unwrap();
-        self.reader.rollback(&self.pos);
+        self.curr_pos = self.ckpts.pop().unwrap();
+        self.peeked_pos = self.curr_pos;
+        self.reader.rollback(&self.curr_pos);
         self.buffered_char = None;
         self.buffered_token = None;
     }
@@ -693,6 +699,7 @@ impl<'a> TokenStream<'a> {
             self.buffer_next()?;
         }
         let token = self.buffered_token.take().unwrap();
+        self.curr_pos = self.peeked_pos;
         Ok(token)
     }
 
@@ -731,7 +738,7 @@ impl<'a> TokenStream<'a> {
                         Some(c) => s.push(c),
                         None => {
                             return parse_error!(
-                                Span::new(self.pos, self.pos),
+                                Span::new(self.peeked_pos, self.peeked_pos),
                                 ParseErrorKind::UnexpectedEof
                             )
                             .into();
@@ -767,7 +774,7 @@ impl<'a> TokenStream<'a> {
 
     pub fn curr_pos(&mut self) -> ParseResult<Pos> {
         self.skip_whitespace()?;
-        Ok(self.pos)
+        Ok(self.peeked_pos)
     }
 }
 
@@ -883,12 +890,13 @@ mod tests {
 
     #[test]
     fn test_ckpt() {
-        let mut stream = TokenStream::new("a b c");
+        let mut stream = TokenStream::new("aaaa b c");
+        let pos0 = stream.peek().unwrap().span.start;
         stream.checkpoint();
-        let pos = stream.peek().unwrap().span.start;
+        let pos1 = stream.peek().unwrap().span.start;
         assert_eq!(
             stream.consume().unwrap().kind,
-            TokenKind::Tokenized(Some("a".into()))
+            TokenKind::Tokenized(Some("aaaa".into()))
         );
         assert_eq!(
             stream.consume().unwrap().kind,
@@ -898,9 +906,10 @@ mod tests {
         let pos2 = stream.peek().unwrap().span.start;
         assert_eq!(
             stream.consume().unwrap().kind,
-            TokenKind::Tokenized(Some("a".into()))
+            TokenKind::Tokenized(Some("aaaa".into()))
         );
 
-        assert_eq!(pos, pos2);
+        assert_eq!(pos0, pos1);
+        assert_eq!(pos1, pos2);
     }
 }
