@@ -170,10 +170,10 @@ pub fn derive_data_flow(item: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive the `Parse` trait for the given struct.
+/// Derive the `Parse` trait for the given operation.
 ///
-/// This support very simple grammar, for more complex grammar, the trait can be
-/// implemented manually.
+/// This support very simple grammar and only for operations, for more complex
+/// grammar, the trait can be implemented manually.
 #[proc_macro_derive(Parse, attributes(format))]
 pub fn derive_parse(item: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(item as syn::DeriveInput);
@@ -182,10 +182,10 @@ pub fn derive_parse(item: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive the `Print` trait for the given struct.
+/// Derive the `Print` trait for the given operation.
 ///
-/// This support very simple grammar, for more complex grammar, the trait can be
-/// implemented manually.
+/// This support very simple grammar and only for operations, for more complex
+/// grammar, the trait can be implemented manually.
 #[proc_macro_derive(Print, attributes(format))]
 pub fn derive_print(item: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(item as syn::DeriveInput);
