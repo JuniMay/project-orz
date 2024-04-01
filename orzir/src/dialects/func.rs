@@ -9,6 +9,9 @@ use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
 use super::builtin::Symbol;
 use crate::verifiers::{control_flow::*, *};
 
+/// A function operation.
+/// 
+/// This represents a function definition.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.func"]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
@@ -16,12 +19,12 @@ use crate::verifiers::{control_flow::*, *};
 pub struct FuncOp {
     #[metadata]
     metadata: OpMetadata,
-
+    /// The region of the function.
     #[region(0, kind = RegionKind::SsaCfg)]
     region: ArenaPtr<Region>,
-
+    /// The symbol of the function, this is mandatory.
     symbol: Symbol,
-
+    /// The type of the function.
     ty: ArenaPtr<TyObj>,
 }
 
@@ -37,6 +40,9 @@ impl Verify for FuncOp {
     }
 }
 
+/// A return operation.
+/// 
+/// This represents a return statement in a function.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.return"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
@@ -44,7 +50,7 @@ impl Verify for FuncOp {
 pub struct ReturnOp {
     #[metadata]
     metadata: OpMetadata,
-
+    /// The operands to return.
     #[operand(...)]
     #[format(sep = ",")]
     operands: Vec<ArenaPtr<Value>>,
@@ -54,10 +60,7 @@ impl Verify for ReturnOp {}
 
 /// A direct call operation.
 ///
-/// Format (example):
-/// ```text
-/// %result = func.call @callee(%arg1, %arg2) : int<32>
-/// ```
+/// This represents a direct call to a function by the symbol.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.call"]
 #[verifiers(VariadicResults, VariadicOperands, NumRegions<0>)]
@@ -65,19 +68,20 @@ impl Verify for ReturnOp {}
 pub struct CallOp {
     #[metadata]
     metadata: OpMetadata,
-
+    /// The results of the call.
     #[result(...)]
     results: Vec<ArenaPtr<Value>>,
-
+    /// The operands of the call.
     #[operand(...)]
     #[format(sep = ",", leading = "(", trailing = ")")]
     operands: Vec<ArenaPtr<Value>>,
-
+    /// The symbol of the callee.
     callee: Symbol,
 }
 
 impl Verify for CallOp {}
 
+/// Register the `func` dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("func".into());
     ctx.dialects.insert("func".into(), dialect);

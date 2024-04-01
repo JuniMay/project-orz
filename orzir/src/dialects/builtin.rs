@@ -10,6 +10,10 @@ use thiserror::Error;
 
 use crate::verifiers::{control_flow::*, *};
 
+/// A symbol.
+///
+/// This is currently a simple wrapper around a string, just with implementation
+/// of [Parse] and [Print].
 #[derive(Debug, Default, Clone)]
 pub struct Symbol(String);
 
@@ -66,6 +70,10 @@ impl From<&str> for Symbol {
     }
 }
 
+/// The module operation.
+/// 
+/// This is usually the top level operation. And if this is at the top level, it
+/// cannot have the symbol field.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "builtin.module"]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
@@ -73,10 +81,10 @@ impl From<&str> for Symbol {
 pub struct ModuleOp {
     #[metadata]
     metadata: OpMetadata,
-
+    /// The region of the module.
     #[region(0, kind = RegionKind::Graph)]
     region: ArenaPtr<Region>,
-
+    /// The symbol of the module (optional).
     symbol: Option<Symbol>,
 }
 

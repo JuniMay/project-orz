@@ -8,6 +8,8 @@ use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
 use crate::verifiers::{control_flow::*, *};
 
 /// The jump operation.
+///
+/// This represents an unconditional jump to another block with some arguments.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "cf.jump"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
@@ -15,13 +17,16 @@ use crate::verifiers::{control_flow::*, *};
 pub struct Jump {
     #[metadata]
     metadata: OpMetadata,
-
+    /// The successor of this jump operation.
     #[successor(0)]
     succ: Successor,
 }
 
 impl Verify for Jump {}
 
+/// The branch operation.
+///
+/// This represents a conditional branch to two different blocks.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "cf.branch"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
@@ -29,19 +34,20 @@ impl Verify for Jump {}
 pub struct Branch {
     #[metadata]
     metadata: OpMetadata,
-
+    /// The condition of the branch.
     #[operand(0)]
     cond: ArenaPtr<Value>,
-
+    /// The successor of the branch if the condition is true.
     #[successor(0)]
     then_succ: Successor,
-
+    /// The successor of the branch if the condition is false.
     #[successor(1)]
     else_succ: Successor,
 }
 
 impl Verify for Branch {}
 
+/// Register the control flow dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("cf".into());
     ctx.dialects.insert("cf".into(), dialect);

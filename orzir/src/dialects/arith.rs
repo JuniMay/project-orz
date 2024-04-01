@@ -10,6 +10,9 @@ use thiserror::Error;
 
 use crate::verifiers::*;
 
+/// An integer constant operation.
+/// 
+/// This will generate an integer constant with the given value.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "arith.iconst"]
 #[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
@@ -17,15 +20,18 @@ use crate::verifiers::*;
 pub struct IConstOp {
     #[metadata]
     metadata: OpMetadata,
-
+    /// The result of the operation.
     #[result(0)]
     result: ArenaPtr<Value>,
-
+    /// The value of the integer constant.
     value: IntLiteral,
 }
 
 impl Verify for IConstOp {}
 
+/// An integer literal.
+/// 
+/// This includes `true`, `false`, hexadecimal, binary, octal, and decimal literals.
 pub struct IntLiteral(pub BigInt);
 
 #[derive(Debug, Error)]
@@ -79,6 +85,7 @@ impl Print for IntLiteral {
     }
 }
 
+/// An integer addition operation.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "arith.iadd"]
 #[verifiers(
@@ -89,19 +96,20 @@ impl Print for IntLiteral {
 pub struct IAddOp {
     #[metadata]
     metadata: OpMetadata,
-
+    /// The result of the operation.
     #[result(0)]
     result: ArenaPtr<Value>,
-
+    /// The left-hand side operand.
     #[operand(0)]
     lhs: ArenaPtr<Value>,
-
+    /// The right-hand side operand.
     #[operand(1)]
     rhs: ArenaPtr<Value>,
 }
 
 impl Verify for IAddOp {}
 
+/// Register the `arith` dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("arith".into());
     ctx.dialects.insert("arith".into(), dialect);
