@@ -2,6 +2,53 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
 
+#[derive(Debug, Clone, Copy)]
+pub enum IndexKind {
+    /// The `...` notation.
+    All,
+    /// A single index number.
+    Single(usize),
+}
+
+impl syn::parse::Parse for IndexKind {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        if input.peek(syn::Token![...]) {
+            input.parse::<syn::Token![...]>()?;
+            Ok(Self::All)
+        } else {
+            let index = input.parse::<syn::LitInt>()?.base10_parse::<usize>()?;
+            Ok(Self::Single(index))
+        }
+    }
+}
+
+pub struct RegionMeta {
+    pub index: IndexKind,
+    pub kind: Option<syn::Path>,
+}
+
+impl syn::parse::Parse for RegionMeta {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let index = input.parse::<IndexKind>()?;
+
+        while !input.is_empty() {
+            input.parse::<syn::Token![,]>()?;
+            let key: syn::Ident = input.parse()?;
+            input.parse::<syn::Token![=]>()?;
+            let value: syn::Path = input.parse()?;
+            if key == "kind" {
+                return Ok(Self {
+                    index,
+                    kind: Some(value),
+                });
+            }
+        }
+
+        Ok(Self { index, kind: None })
+    }
+}
+
+
 fn derive_struct_ctor_metadata(
     data_struct: &syn::DataStruct,
 ) -> syn::Result<(TokenStream, TokenStream)> {

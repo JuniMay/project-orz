@@ -2,25 +2,8 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::spanned::Spanned;
 
-#[derive(Debug, Clone, Copy)]
-enum IndexKind {
-    /// The `...` notation.
-    All,
-    /// A single index number.
-    Single(usize),
-}
+use crate::op::IndexKind;
 
-impl syn::parse::Parse for IndexKind {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        if input.peek(syn::Token![...]) {
-            input.parse::<syn::Token![...]>()?;
-            Ok(Self::All)
-        } else {
-            let index = input.parse::<syn::LitInt>()?.base10_parse::<usize>()?;
-            Ok(Self::Single(index))
-        }
-    }
-}
 
 #[derive(Default)]
 struct DeriveInfo {

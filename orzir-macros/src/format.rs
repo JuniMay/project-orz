@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::spanned::Spanned;
 
-use crate::interfaces::region_interface::{IndexKind, RegionMeta};
+use crate::op::{IndexKind, RegionMeta};
 
 /// A format token is embraced by `{}` or just a tokenizer-compatible
 /// character/str.
@@ -18,7 +18,7 @@ use crate::interfaces::region_interface::{IndexKind, RegionMeta};
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum FormatToken {
     Ident(String),
-    Punct(String),
+    Delimiter(String),
 }
 
 impl FormatToken {
@@ -26,11 +26,11 @@ impl FormatToken {
         if token.starts_with('{') && token.ends_with('}') {
             Ok(Self::Ident(token[1..token.len() - 1].to_string()))
         } else if token == "{{" {
-            Ok(Self::Punct("{".to_string()))
+            Ok(Self::Delimiter("{".to_string()))
         } else if token == "}}" {
-            Ok(Self::Punct("}".to_string()))
+            Ok(Self::Delimiter("}".to_string()))
         } else {
-            Ok(Self::Punct(token.to_string()))
+            Ok(Self::Delimiter(token.to_string()))
         }
     }
 }
@@ -336,7 +336,7 @@ fn derive_print_struct(
 
                 print_body.extend(field_print_body);
             }
-            FormatToken::Punct(punct) => {
+            FormatToken::Delimiter(punct) => {
                 if punct == "," {
                     // no leading space.
                 } else {
@@ -628,7 +628,7 @@ fn derive_parse_struct(
 
                 parse_body.extend(field_parse_body);
             }
-            FormatToken::Punct(punct) => {
+            FormatToken::Delimiter(punct) => {
                 parse_body.extend(quote! {
                     __state.stream.expect(::orzir_core::token!(#punct))?;
                 });
