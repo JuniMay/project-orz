@@ -22,5 +22,7 @@ pub use crate::{
             ParseError, ParseResult, PrintError, PrintResult, VerificationError, VerificationResult,
         },
         storage::{Arena, ArenaBase, ArenaPtr, UniqueArena},
+        list,
+        graph,
     },
 };
