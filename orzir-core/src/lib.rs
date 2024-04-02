@@ -21,8 +21,7 @@ pub use crate::{
         error::{
             ParseError, ParseResult, PrintError, PrintResult, VerificationError, VerificationResult,
         },
+        graph, list,
         storage::{Arena, ArenaBase, ArenaPtr, UniqueArena},
-        list,
-        graph,
     },
 };

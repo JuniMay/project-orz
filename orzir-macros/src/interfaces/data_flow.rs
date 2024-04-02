@@ -1,149 +1,134 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::spanned::Spanned;
 
-use crate::op::IndexKind;
-
+use crate::op::{FieldIdent, IndexKind, OpDeriveInfo, OpFieldMeta};
 
 #[derive(Default)]
-struct DeriveInfo {
-    field_cnt: Option<usize>,
+struct DeriveArtifacts {
     /// The `num_result/operands` method.
-    num_impl: Option<TokenStream>,
+    num_impl: TokenStream,
     /// The `get_result/operand` method.
-    getter_impl: Option<TokenStream>,
+    getter_impl: TokenStream,
     /// The `set_result/operand` method.
-    setter_impl: Option<TokenStream>,
-    /// If the members are discrete, i.e. they only store a single entity.
-    ///
-    /// If this is `None`, this is not yet determined.
-    discrete: Option<bool>,
+    setter_impl: TokenStream,
+
+    getter_has_default_arm: bool,
+    setter_has_default_arm: bool,
 }
 
 fn derive_struct(
-    data_struct: &syn::DataStruct,
-    info: &mut DeriveInfo,
+    derive_info: &OpDeriveInfo,
+    artifacts: &mut DeriveArtifacts,
     attr_name: &str,
 ) -> syn::Result<()> {
-    for (idx, field) in data_struct.fields.iter().enumerate() {
-        let attr = field
-            .attrs
-            .iter()
-            .find(|attr| attr.path().is_ident(attr_name));
-        if attr.is_none() {
-            continue;
-        }
-        let attr = attr.unwrap();
-        let index = attr.parse_args::<IndexKind>()?;
-        match (info.discrete, index) {
-            (Some(true), IndexKind::All) | (Some(false), IndexKind::Single(_)) => {
-                return Err(syn::Error::new(
-                    attr.span(),
-                    "cannot have both `...` and discrete indices",
-                ))
+    artifacts.num_impl = quote! { 0 };
+    artifacts.getter_impl = TokenStream::new();
+    artifacts.setter_impl = TokenStream::new();
+
+    artifacts.getter_has_default_arm = false;
+    artifacts.setter_has_default_arm = false;
+
+    for (ident, meta) in derive_info.fields.iter() {
+        match attr_name {
+            "result" => {
+                if !matches!(meta, OpFieldMeta::Result(_)) {
+                    continue;
+                }
             }
-            (Some(false), IndexKind::All) => {
-                return Err(syn::Error::new(
-                    attr.span(),
-                    "cannot have both multiple `...` indices",
-                ))
+            "operand" => {
+                if !matches!(meta, OpFieldMeta::Operand(_)) {
+                    continue;
+                }
             }
-            (_, IndexKind::All) => info.discrete = Some(false),
-            (_, IndexKind::Single(_)) => info.discrete = Some(true),
+            _ => unreachable!(),
         }
 
-        let field = match &field.ident {
-            Some(ident) => quote! { self.#ident },
-            None => {
-                let index = syn::Index::from(idx);
+        let index = match &meta {
+            OpFieldMeta::Result(index) => index,
+            OpFieldMeta::Operand(index) => index,
+            _ => unreachable!(),
+        };
+
+        let field = match &ident {
+            FieldIdent::Ident(ident) => {
+                let ident = syn::Ident::new(ident, Span::call_site());
+                quote! { self.#ident }
+            }
+            FieldIdent::Index(index) => {
+                let index = syn::Index::from(*index);
                 quote! { self.#index }
             }
         };
 
         match index {
             IndexKind::All => {
-                info.num_impl = Some(quote! { #field.len() });
-                info.getter_impl = Some(quote! { #field.get(index).copied() });
-                info.setter_impl = Some(quote! {
-                    if index > #field.len() {
-                        panic!("index out of bounds");
-                    }
-                    if index == #field.len() {
-                        #field.push(value);
-                        None
-                    } else {
-                        Some(std::mem::replace(&mut #field[index], value))
+                artifacts.num_impl.extend(quote! { + #field.len() });
+                artifacts
+                    .getter_impl
+                    .extend(quote! { _ => #field.get(index).copied() });
+                artifacts.setter_impl.extend(quote! {
+                    _ => {
+                        if index > #field.len() {
+                            panic!("index out of bounds");
+                        }
+                        if index == #field.len() {
+                            #field.push(value);
+                            None
+                        } else {
+                            Some(std::mem::replace(&mut #field[index], value))
+                        }
                     }
                 });
+                artifacts.getter_has_default_arm = true;
+                artifacts.setter_has_default_arm = true;
             }
             IndexKind::Single(idx) => {
-                info.field_cnt = Some(info.field_cnt.unwrap_or(0) + 1);
-
-                if info.getter_impl.is_none() {
-                    info.getter_impl = Some(TokenStream::new());
-                }
-
-                if info.setter_impl.is_none() {
-                    info.setter_impl = Some(TokenStream::new());
-                }
-
-                if let Some(ref mut method) = info.getter_impl.as_mut() {
-                    method.extend(quote! {
-                        #idx => Some(#field),
-                    });
-                } else {
-                    unreachable!()
-                }
-
-                if let Some(ref mut method) = info.setter_impl.as_mut() {
-                    method.extend(quote! {
-                        #idx => Some(std::mem::replace(&mut #field, value)),
-                    });
-                } else {
-                    unreachable!()
-                }
+                artifacts.num_impl.extend(quote! { + 1 });
+                artifacts.getter_impl.extend(quote! {
+                    #idx => Some(#field),
+                });
+                artifacts.setter_impl.extend(quote! {
+                    #idx => Some(std::mem::replace(&mut #field, value)),
+                });
             }
         }
     }
 
-    if let Some(discrete) = info.discrete {
-        if discrete {
-            let num = info.field_cnt.unwrap();
-            info.num_impl = Some(quote! { #num });
-
-            let getters = info.getter_impl.as_mut().unwrap();
-            let setters = info.setter_impl.as_mut().unwrap();
-            info.getter_impl = Some(quote! {
-                match index {
-                    #getters
-                    _ => None,
-                }
-            });
-            info.setter_impl = Some(quote! {
-                match index {
-                    #setters
-                    _ => None,
-                }
-            });
-        }
-    } else {
-        info.num_impl = Some(quote! { 0 });
-        info.getter_impl = Some(quote! { None });
-        info.setter_impl = Some(quote! { panic!("index out of bounds") });
+    if !artifacts.getter_has_default_arm {
+        artifacts.getter_impl.extend(quote! {
+            _ => None,
+        });
     }
+
+    if !artifacts.setter_has_default_arm {
+        artifacts.setter_impl.extend(quote! {
+            _ => None,
+        });
+    }
+
+    let getter_impl = &artifacts.getter_impl;
+    let setter_impl = &artifacts.setter_impl;
+
+    artifacts.getter_impl = quote! {
+        match index {
+            #getter_impl
+        }
+    };
+
+    artifacts.setter_impl = quote! {
+        match index {
+            #setter_impl
+        }
+    };
 
     Ok(())
 }
 
 fn derive_impl_helper(ast: &syn::DeriveInput, attr_name: &str) -> syn::Result<TokenStream> {
-    let mut info = DeriveInfo::default();
+    let derive_info = OpDeriveInfo::from_ast(ast)?;
+    let mut artifacts = DeriveArtifacts::default();
 
-    match &ast.data {
-        syn::Data::Struct(data_struct) => {
-            derive_struct(data_struct, &mut info, attr_name)?;
-        }
-        _ => unimplemented!("items other than structs are not supported yet"),
-    }
+    derive_struct(&derive_info, &mut artifacts, attr_name)?;
 
     let num_method_name =
         syn::Ident::new(format!("num_{}s", attr_name).as_str(), Span::call_site());
@@ -152,19 +137,19 @@ fn derive_impl_helper(ast: &syn::DeriveInput, attr_name: &str) -> syn::Result<To
     let setter_method_name =
         syn::Ident::new(format!("set_{}", attr_name).as_str(), Span::call_site());
 
-    let num_impl = info.num_impl.unwrap();
+    let num_impl = artifacts.num_impl;
     let num_impl = quote! {
         fn #num_method_name(&self) -> usize {
             #num_impl
         }
     };
-    let getter_impl = info.getter_impl.unwrap();
+    let getter_impl = artifacts.getter_impl;
     let getter_impl = quote! {
         fn #getter_method_name(&self, index: usize) -> Option<::orzir_core::ArenaPtr<::orzir_core::Value>> {
             #getter_impl
         }
     };
-    let setter_impl = info.setter_impl.unwrap();
+    let setter_impl = artifacts.setter_impl;
     let setter_impl = quote! {
         fn #setter_method_name(
             &mut self,
@@ -209,6 +194,7 @@ mod tests {
     #[test]
     fn test_0() {
         let src = quote! {
+            #[mnemonic = "test.test"]
             pub struct TestOp {
                 #[metadata]
                 metadata: OpMetadata,

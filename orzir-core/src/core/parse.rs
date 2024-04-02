@@ -418,7 +418,7 @@ pub struct TokenStream<'a> {
     /// The buffered token for peeking.
     buffered_token: Option<Token>,
     /// Current position.
-    /// 
+    ///
     /// This will be set to peeked position after consuming the buffered token.
     curr_pos: Pos,
     /// The peeked position.

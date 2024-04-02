@@ -97,9 +97,7 @@ where
     /// Add a node to the graph.
     pub fn add_node(&mut self, node: N) { self.nodes.insert(node.key(), node); }
 
-    pub fn add_node_by_key(&mut self, key: K) {
-        self.nodes.entry(key).or_insert_with(N::default);
-    }
+    pub fn add_node_by_key(&mut self, key: K) { self.nodes.entry(key).or_insert_with(N::default); }
 
     /// Get a node from the graph.
     pub fn node(&self, key: K) -> Option<&N> { self.nodes.get(&key) }

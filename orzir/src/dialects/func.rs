@@ -10,7 +10,7 @@ use super::builtin::Symbol;
 use crate::verifiers::{control_flow::*, *};
 
 /// A function operation.
-/// 
+///
 /// This represents a function definition.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.func"]
@@ -41,7 +41,7 @@ impl Verify for FuncOp {
 }
 
 /// A return operation.
-/// 
+///
 /// This represents a return statement in a function.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.return"]

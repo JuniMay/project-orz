@@ -241,13 +241,14 @@ impl Parse for OpObj {
     /// ```text
     /// <result_name_list> `=` <mnemonic> <dialect_specific_text>
     /// ````
-    /// 
+    ///
     /// # Notes
-    /// 
-    /// The components of an operation needs to accept the corresponding `ArenaPtr<OpObj>`, and
-    /// thus it is necessary to call `ctx.ops.reserve()` to get the `ArenaPtr<OpObj>` and then
-    /// enter the parsing process. Of course, after the operation is constructed, the slot should
-    /// be filled.
+    ///
+    /// The components of an operation needs to accept the corresponding
+    /// `ArenaPtr<OpObj>`, and thus it is necessary to call
+    /// `ctx.ops.reserve()` to get the `ArenaPtr<OpObj>` and then
+    /// enter the parsing process. Of course, after the operation is
+    /// constructed, the slot should be filled.
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let mut result_names = Vec::new();
         let parent = state.curr_block();

@@ -71,7 +71,7 @@ impl From<&str> for Symbol {
 }
 
 /// The module operation.
-/// 
+///
 /// This is usually the top level operation. And if this is at the top level, it
 /// cannot have the symbol field.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]

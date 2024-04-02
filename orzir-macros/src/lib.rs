@@ -174,7 +174,7 @@ pub fn derive_data_flow(item: TokenStream) -> TokenStream {
 ///
 /// This support very simple grammar and only for operations, for more complex
 /// grammar, the trait can be implemented manually.
-/// 
+///
 /// TODO: The parsing process is yet crappy and need to be improved.
 #[proc_macro_derive(Parse, attributes(format))]
 pub fn derive_parse(item: TokenStream) -> TokenStream {

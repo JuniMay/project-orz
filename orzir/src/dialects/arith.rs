@@ -11,7 +11,7 @@ use thiserror::Error;
 use crate::verifiers::*;
 
 /// An integer constant operation.
-/// 
+///
 /// This will generate an integer constant with the given value.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "arith.iconst"]
@@ -30,8 +30,9 @@ pub struct IConstOp {
 impl Verify for IConstOp {}
 
 /// An integer literal.
-/// 
-/// This includes `true`, `false`, hexadecimal, binary, octal, and decimal literals.
+///
+/// This includes `true`, `false`, hexadecimal, binary, octal, and decimal
+/// literals.
 pub struct IntLiteral(pub BigInt);
 
 #[derive(Debug, Error)]
