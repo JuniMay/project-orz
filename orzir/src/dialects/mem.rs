@@ -40,12 +40,32 @@ pub struct LoadOp {
     indices: Vec<ArenaPtr<Value>>,
 }
 
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "mem.store"]
+#[verifiers(NumResults<0>, NumRegions<0>, VariadicOperands)]
+#[format(pattern = "{value} , {ptr} {indices}", kind = "op", num_results = 0)]
+pub struct StoreOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The value to store.
+    #[operand(0)]
+    value: ArenaPtr<Value>,
+    /// The memory slot to store into.
+    #[operand(1)]
+    ptr: ArenaPtr<Value>,
+    /// The indices to access the memory slot.
+    #[operand(2..)]
+    #[repeat(sep = ",", leading = "[", trailing = "]")]
+    indices: Vec<ArenaPtr<Value>>,
+}
+
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("mem".into());
     ctx.dialects.insert("mem".into(), dialect);
 
     AllocaOp::register(ctx, AllocaOp::parse);
     LoadOp::register(ctx, LoadOp::parse);
+    StoreOp::register(ctx, StoreOp::parse);
 }
 
 #[cfg(test)]
@@ -85,7 +105,7 @@ mod tests {
     fn test_mem_op_2() {
         let src = r#"
         module {
-            func.func @test_mem : fn() -> unit {
+            func.func @test_mem : fn() -> int<32> {
                 %slot = mem.alloca int<32> : memref<int<32>, [2 * 3 * 4]>
                 cf.jump ^main
             ^main:
@@ -95,7 +115,9 @@ mod tests {
                 
                 %val = mem.load %slot[%a, %b, %c] : int<32>
 
-                func.return
+                mem.store %val, %slot[%a, %b, %c]
+
+                func.return %val
             }
         }
 
