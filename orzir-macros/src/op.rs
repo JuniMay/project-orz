@@ -8,6 +8,8 @@ pub enum IndexKind {
     All,
     /// A single index number.
     Single(usize),
+    /// A range, `x..y` or `x..=y` or `x..`, the end is inclusive.
+    Range(usize, Option<usize>),
 }
 
 impl syn::parse::Parse for IndexKind {
@@ -17,7 +19,22 @@ impl syn::parse::Parse for IndexKind {
             Ok(Self::All)
         } else {
             let index = input.parse::<syn::LitInt>()?.base10_parse::<usize>()?;
-            Ok(Self::Single(index))
+            if input.peek(syn::Token![..]) {
+                input.parse::<syn::Token![..]>()?;
+                // `x..y` or `x..`, if ends with a index, there is an upper bound.
+                let end = if input.peek(syn::LitInt) {
+                    Some(input.parse::<syn::LitInt>()?.base10_parse::<usize>()? - 1)
+                } else {
+                    None
+                };
+                Ok(Self::Range(index, end))
+            } else if input.peek(syn::Token![..=]) {
+                input.parse::<syn::Token![..=]>()?;
+                let end = input.parse::<syn::LitInt>()?.base10_parse::<usize>()?;
+                Ok(Self::Range(index, Some(end)))
+            } else {
+                Ok(Self::Single(index))
+            }
         }
     }
 }
@@ -258,7 +275,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
             match meta {
                 OpFieldMeta::Metadata => unreachable!(),
                 OpFieldMeta::Operand(index) => match index {
-                    IndexKind::All => {
+                    IndexKind::All | IndexKind::Range(..) => {
                         quote! { #ident: Vec<::orzir_core::ArenaPtr<::orzir_core::Value>>, }
                     }
                     IndexKind::Single(_) => {
@@ -266,7 +283,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                     }
                 },
                 OpFieldMeta::Region(meta) => match meta.index {
-                    IndexKind::All => {
+                    IndexKind::All | IndexKind::Range(..) => {
                         quote! { #ident: Vec<::orzir_core::ArenaPtr<::orzir_core::Region>>, }
                     }
                     IndexKind::Single(_) => {
@@ -274,7 +291,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                     }
                 },
                 OpFieldMeta::Result(index) => match index {
-                    IndexKind::All => {
+                    IndexKind::All | IndexKind::Range(..) => {
                         quote! { #ident: Vec<::orzir_core::ArenaPtr<::orzir_core::Value>>, }
                     }
                     IndexKind::Single(_) => {
@@ -282,7 +299,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                     }
                 },
                 OpFieldMeta::Successor(index) => match index {
-                    IndexKind::All => {
+                    IndexKind::All | IndexKind::Range(..) => {
                         quote! { #ident: Vec<Successor>, }
                     }
                     IndexKind::Single(_) => {

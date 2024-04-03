@@ -527,7 +527,7 @@ fn generate_field_parser(
         | OpFieldMeta::Region(RegionMeta { index, .. })
         | OpFieldMeta::Result(index)
         | OpFieldMeta::Successor(index) => match index {
-            IndexKind::All => {
+            IndexKind::All | IndexKind::Range(..) => {
                 let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
                     sep: None,
                     leading: None,
@@ -626,7 +626,7 @@ fn generate_field_printer(
         | OpFieldMeta::Region(RegionMeta { index, .. })
         | OpFieldMeta::Result(index)
         | OpFieldMeta::Successor(index) => match index {
-            IndexKind::All => {
+            IndexKind::All | IndexKind::Range(..) => {
                 let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
                     sep: None,
                     leading: None,
@@ -878,6 +878,18 @@ fn generate_parser(
                                 let #ident = __results;
                             });
                         }
+                        IndexKind::Range(start, end) => match end {
+                            Some(end) => {
+                                result_assign.extend(quote! {
+                                    let #ident = __results[#start..#end].to_vec();
+                                });
+                            }
+                            None => {
+                                result_assign.extend(quote! {
+                                    let #ident = __results[#start..].to_vec();
+                                });
+                            }
+                        },
                         IndexKind::Single(idx) => {
                             result_assign.extend(quote! {
                                 let #ident = __results[#idx];
