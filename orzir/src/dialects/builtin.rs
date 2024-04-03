@@ -104,6 +104,12 @@ impl Verify for ModuleOp {
 pub struct IntTy(usize);
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
+#[mnemonic = "builtin.index"]
+#[verifiers(IntegerLikeTy)]
+#[format(pattern = "", kind = "ty")]
+pub struct IndexTy;
+
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.float"]
 #[verifiers(FloatLikeTy)]
 #[format(pattern = "", kind = "ty")]
@@ -241,6 +247,7 @@ pub fn register(ctx: &mut Context) {
 
     UnitTy::register(ctx, UnitTy::parse);
     IntTy::register(ctx, IntTy::parse);
+    IndexTy::register(ctx, IndexTy::parse);
     FloatTy::register(ctx, FloatTy::parse);
     DoubleTy::register(ctx, DoubleTy::parse);
     TupleTy::register(ctx, TupleTy::parse);
