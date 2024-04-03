@@ -1,36 +1,87 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::spanned::Spanned;
 
-use crate::op::{IndexKind, RegionMeta};
+use crate::op::{FieldIdent, IndexKind, OpDeriveInfo, OpFieldMeta, RegionMeta};
 
 /// A format token is embraced by `{}` or just a tokenizer-compatible
 /// character/str.
-///
-/// The compatible puntuations are:
-/// ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '-'
-/// or an arrow `->`
-///
-/// Other punctuations are cannot be tokenized in the
 /// [`TokenStream`](orzir_core::TokenStream).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum FormatToken {
-    Ident(String),
+    Field(String),
     Delimiter(String),
+}
+
+fn is_delimiter(c: char) -> bool {
+    matches!(
+        c,
+        ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '*'
+    )
 }
 
 impl FormatToken {
     fn from_str(token: &str) -> syn::Result<Self> {
         if token.starts_with('{') && token.ends_with('}') {
-            Ok(Self::Ident(token[1..token.len() - 1].to_string()))
-        } else if token == "{{" {
-            Ok(Self::Delimiter("{".to_string()))
-        } else if token == "}}" {
-            Ok(Self::Delimiter("}".to_string()))
-        } else {
+            Ok(Self::Field(token[1..token.len() - 1].to_string()))
+        } else if token == "{{" || token == "}}" {
+            Ok(Self::Delimiter(token.chars().next().unwrap().to_string()))
+        } else if token == "->" || (token.len() == 1 && token.chars().all(is_delimiter)) {
             Ok(Self::Delimiter(token.to_string()))
+        } else {
+            Err(syn::Error::new(token.span(), "invalid format token"))
+        }
+    }
+
+    /// if this is an ident or an arrow, return a rust string literal, otherwise
+    /// return a rust char literal.
+    fn to_string_or_char(&self) -> TokenStream {
+        match self {
+            Self::Delimiter(delimiter) => {
+                let delimiter = delimiter.as_str();
+                quote! { #delimiter }
+            }
+            _ => unreachable!("should not convert field to string"),
+        }
+    }
+
+    #[allow(clippy::let_and_return)]
+    fn generate_printer(&self) -> TokenStream {
+        match self {
+            Self::Delimiter(delimiter) => {
+                let delimiter = delimiter.as_str();
+
+                let output = quote! {
+                    write!(__state.buffer, "{}", #delimiter)?;
+                };
+
+                let output = if delimiter == ":" || delimiter == "->" {
+                    quote! {
+                        write!(__state.buffer, " ")?;
+                        #output
+                    }
+                } else {
+                    output
+                };
+
+                let output = if delimiter == ":"
+                    || delimiter == "->"
+                    || delimiter == ","
+                    || delimiter == ";"
+                {
+                    quote! {
+                        #output
+                        write!(__state.buffer, " ")?;
+                    }
+                } else {
+                    output
+                };
+
+                output
+            }
+            _ => unreachable!("should not generate printer for field"),
         }
     }
 }
@@ -49,27 +100,71 @@ impl FormatPattern {
     }
 }
 
-/// The format config
-///
-/// #[format(pattern = "...", num_results = 1, trailing = false)]
-struct FormatConfig {
-    /// The pattern
+enum FormatKind {
+    Op,
+    Ty,
+    Other,
+}
+
+struct FormatMeta {
     pattern: FormatPattern,
-    /// Number of results
-    ///
-    /// This can be none, and the number of results will be determined by the
-    /// trailing types.
+    kind: FormatKind,
     num_results: Option<usize>,
 }
 
-/// The field format config
-struct FieldFormatConfig {
-    sep: String,
-    leading: Option<String>,
-    trailing: Option<String>,
+impl syn::parse::Parse for FormatMeta {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let mut pattern = None;
+        let mut kind = FormatKind::Other;
+        let mut num_results = None;
+
+        while !input.is_empty() {
+            let ident: syn::Ident = input.parse()?;
+            match ident.to_string().as_str() {
+                "pattern" => {
+                    input.parse::<syn::Token![=]>()?;
+                    let pattern_str: syn::LitStr = input.parse()?;
+                    pattern = Some(FormatPattern::from_str(&pattern_str.value())?);
+                }
+                "kind" => {
+                    input.parse::<syn::Token![=]>()?;
+                    let kind_str: syn::LitStr = input.parse()?;
+                    match kind_str.value().as_str() {
+                        "op" => kind = FormatKind::Op,
+                        "ty" => kind = FormatKind::Ty,
+                        _ => kind = FormatKind::Other,
+                    }
+                }
+                "num_results" => {
+                    input.parse::<syn::Token![=]>()?;
+                    num_results = Some(input.parse::<syn::LitInt>()?.base10_parse()?);
+                }
+                _ => {
+                    return Err(syn::Error::new(ident.span(), "unknown format attribute"));
+                }
+            }
+
+            if input.peek(syn::Token![,]) {
+                input.parse::<syn::Token![,]>()?;
+            }
+        }
+
+        Ok(Self {
+            pattern: pattern
+                .ok_or_else(|| syn::Error::new(input.span(), "missing format pattern"))?,
+            kind,
+            num_results,
+        })
+    }
 }
 
-impl syn::parse::Parse for FieldFormatConfig {
+struct RepeatMeta {
+    sep: Option<FormatToken>,
+    leading: Option<FormatToken>,
+    trailing: Option<FormatToken>,
+}
+
+impl syn::parse::Parse for RepeatMeta {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         let mut sep = None;
         let mut leading = None;
@@ -77,760 +172,910 @@ impl syn::parse::Parse for FieldFormatConfig {
 
         while !input.is_empty() {
             let ident: syn::Ident = input.parse()?;
-            input.parse::<syn::Token![=]>()?;
             match ident.to_string().as_str() {
                 "sep" => {
-                    let lit: syn::LitStr = input.parse()?;
-                    sep = Some(lit.value());
+                    input.parse::<syn::Token![=]>()?;
+                    sep = Some(FormatToken::from_str(
+                        &input.parse::<syn::LitStr>()?.value(),
+                    )?);
                 }
                 "leading" => {
-                    let lit: syn::LitStr = input.parse()?;
-                    leading = Some(lit.value());
+                    input.parse::<syn::Token![=]>()?;
+                    leading = Some(FormatToken::from_str(
+                        &input.parse::<syn::LitStr>()?.value(),
+                    )?);
                 }
                 "trailing" => {
-                    let lit: syn::LitStr = input.parse()?;
-                    trailing = Some(lit.value());
+                    input.parse::<syn::Token![=]>()?;
+                    trailing = Some(FormatToken::from_str(
+                        &input.parse::<syn::LitStr>()?.value(),
+                    )?);
                 }
                 _ => {
-                    return Err(syn::Error::new(ident.span(), "unknown attribute"));
+                    return Err(syn::Error::new(ident.span(), "unknown repeat attribute"));
                 }
             }
-            if !input.is_empty() {
+
+            if input.peek(syn::Token![,]) {
                 input.parse::<syn::Token![,]>()?;
             }
         }
 
-        let config = Self {
-            sep: sep.ok_or_else(|| syn::Error::new(input.span(), "missing sep"))?,
+        Ok(Self {
+            sep,
             leading,
             trailing,
-        };
-
-        Ok(config)
+        })
     }
 }
 
-impl syn::parse::Parse for FormatConfig {
-    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        let mut pattern = None;
-        let mut num_results = None;
+struct FormatInfo {
+    meta: FormatMeta,
+    repeats: HashMap<FieldIdent, RepeatMeta>,
+}
 
-        while !input.is_empty() {
-            let ident: syn::Ident = input.parse()?;
-            input.parse::<syn::Token![=]>()?;
-            match ident.to_string().as_str() {
-                "pattern" => {
-                    let lit: syn::LitStr = input.parse()?;
-                    pattern = Some(FormatPattern::from_str(&lit.value())?);
+impl FormatInfo {
+    fn from_ast(ast: &syn::DeriveInput) -> syn::Result<Self> {
+        let mut meta = None;
+        let mut repeats = HashMap::new();
+
+        for attr in &ast.attrs {
+            if attr.path().is_ident("format") {
+                let meta_ = attr.parse_args::<FormatMeta>()?;
+                if meta.is_some() {
+                    return Err(syn::Error::new(attr.span(), "duplicate format attribute"));
                 }
-                "num_results" => {
-                    let lit: syn::LitInt = input.parse()?;
-                    num_results = Some(lit.base10_parse()?);
-                }
-                _ => {
-                    return Err(syn::Error::new(ident.span(), "unknown attribute"));
-                }
-            }
-            if !input.is_empty() {
-                input.parse::<syn::Token![,]>()?;
+                meta = Some(meta_);
             }
         }
 
-        let config = Self {
-            pattern: pattern.ok_or_else(|| syn::Error::new(input.span(), "missing pattern"))?,
-            num_results,
-        };
+        if let syn::Data::Struct(ref data_struct) = ast.data {
+            for (idx, field) in data_struct.fields.iter().enumerate() {
+                let ident = match field.ident {
+                    Some(ref ident) => FieldIdent::Ident(ident.to_string()),
+                    None => FieldIdent::Index(idx),
+                };
 
-        Ok(config)
+                for attr in field.attrs.iter() {
+                    if attr.path().is_ident("repeat") {
+                        let repeat_meta = attr.parse_args::<RepeatMeta>()?;
+                        if repeats.insert(ident.clone(), repeat_meta).is_some() {
+                            return Err(syn::Error::new(attr.span(), "duplicate repeat attribute"));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(Self {
+            meta: meta.ok_or_else(|| syn::Error::new(ast.span(), "missing format attribute"))?,
+            repeats,
+        })
     }
 }
 
-fn derive_print_struct(
-    data_struct_ident: &syn::Ident,
-    data_struct: &syn::DataStruct,
-    config: &FormatConfig,
+fn generate_repeat_parser(
+    field_ident: &FieldIdent,
+    op_field_meta: &OpFieldMeta,
+    repeat_meta: &RepeatMeta,
 ) -> syn::Result<TokenStream> {
-    let fields = data_struct
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(idx, field)| {
-            if let Some(ident) = &field.ident {
-                (ident.to_string(), field)
-            } else {
-                (format!("arg_{}", idx), field)
+    let field_ident = match field_ident {
+        FieldIdent::Ident(field_ident) => syn::Ident::new(field_ident, Span::call_site()),
+        FieldIdent::Index(idx) => syn::Ident::new(&format!("arg_{}", idx), Span::call_site()),
+    };
+
+    let parse_stmts = match op_field_meta {
+        OpFieldMeta::Metadata => unreachable!("should not parse metadata field"),
+        OpFieldMeta::Region(RegionMeta { index, kind }) => {
+            if let IndexKind::Single(_) = index {
+                unreachable!("should not parse single region field");
             }
-        })
-        .collect::<BTreeMap<_, _>>();
 
-    let mut print_body = TokenStream::new();
+            if kind.is_none() {
+                return Err(syn::Error::new(
+                    // TODO: Span may not be correct here
+                    field_ident.span(),
+                    "region field must have a kind attribute",
+                ));
+            }
 
-    for token in config.pattern.tokens.iter() {
-        match token {
-            FormatToken::Ident(ident) => {
-                let ident_key = if ident.chars().all(char::is_numeric) {
-                    format!("arg_{}", ident)
-                } else {
-                    ident.clone()
+            let kind = kind.as_ref().unwrap();
+
+            quote! {
+                __state.enter_region_with(#kind, __idx);
+                let __item_result = <::orzir_core::Region as ::orzir_core::Parse>::parse(__ctx, __state);
+                __state.exit_region();
+            }
+        }
+        OpFieldMeta::Result(index) | OpFieldMeta::Operand(index) => {
+            if let IndexKind::Single(_) = index {
+                unreachable!("should not parse single result/operand field");
+            }
+            quote! {
+                let __item_result = <::orzir_core::Value as ::orzir_core::Parse>::parse(__ctx, __state);
+            }
+        }
+        OpFieldMeta::Successor(index) => {
+            if let IndexKind::Single(_) = index {
+                unreachable!("should not parse single successor field");
+            }
+            quote! {
+                let __item_result = <::orzir_core::Successor as ::orzir_core::Parse>::parse(__ctx, __state);
+            }
+        }
+        OpFieldMeta::Other { is_vec, ty } => {
+            if !is_vec {
+                unreachable!("should not parse non-vec field with repeat attribute");
+            }
+            quote! {
+                let __item_result = <#ty as ::orzir_core::Parse>::parse(__ctx, __state);
+            }
+        }
+    };
+
+    let parse_stmts = match repeat_meta.trailing {
+        Some(_) => {
+            // if there is a trailing delimiter, just match it to check if break.
+            quote! {
+                #parse_stmts
+                let __item = __item_result?;
+            }
+        }
+        None => {
+            // if the trailing is none, handle the first optional item by backtracking
+            quote! {
+                __state.stream.checkpoint();
+                #parse_stmts
+                if __item_result.is_err() {
+                    __state.stream.rollback();
+                    break;
+                }
+                __state.stream.commit();
+                let __item = __item_result.unwrap();
+            }
+        }
+    };
+
+    let parse_stmts = quote! {
+        #parse_stmts
+        #field_ident.push(__item);
+        __idx += 1;
+    };
+
+    let parse_stmts = if let Some(sep) = &repeat_meta.sep {
+        let sep_token = sep.to_string_or_char();
+        quote! {
+            #parse_stmts
+
+            if let ::orzir_core::token!(#sep_token) = __state.stream.peek()?.kind {
+                __state.stream.consume()?;
+            } else {
+                break;
+            }
+        }
+    } else {
+        parse_stmts
+    };
+
+    let output = if let Some(trailing) = &repeat_meta.trailing {
+        let trailing_token = trailing.to_string_or_char();
+        quote! {
+            let mut #field_ident = Vec::new();
+            let mut __idx = 0;
+            loop {
+                if let ::orzir_core::token!(#trailing_token) = __state.stream.peek()?.kind {
+                    break;
+                }
+                #parse_stmts
+            }
+            __state.stream.expect(::orzir_core::token!(#trailing_token))?;
+        }
+    } else {
+        quote! {
+            let mut #field_ident = Vec::new();
+            let mut __idx = 0;
+            loop {
+                #parse_stmts
+            }
+        }
+    };
+
+    let output = if let Some(leading) = &repeat_meta.leading {
+        let leading_token = leading.to_string_or_char();
+        quote! {
+            __state.stream.expect(::orzir_core::token!(#leading_token))?;
+            #output
+        }
+    } else {
+        output
+    };
+
+    Ok(output)
+}
+
+fn generate_repeat_printer(
+    field_ident: &FieldIdent,
+    op_field_meta: &OpFieldMeta,
+    repeat_meta: &RepeatMeta,
+) -> syn::Result<TokenStream> {
+    let field = match field_ident {
+        FieldIdent::Ident(ident) => {
+            let ident = syn::Ident::new(ident, Span::call_site());
+            quote! { self.#ident }
+        }
+        FieldIdent::Index(idx) => {
+            let index = syn::Index::from(*idx);
+            quote! { self.#index }
+        }
+    };
+
+    let print_stmts = match op_field_meta {
+        OpFieldMeta::Metadata => unreachable!("should not print metadata field"),
+        OpFieldMeta::Region(RegionMeta { index, .. }) => {
+            if let IndexKind::Single(_) = index {
+                unreachable!("should not print single region field");
+            }
+            quote! {
+                <::orzir_core::Region as ::orzir_core::Print>::print(__item.deref(&__ctx.regions), __ctx, __state)?;
+            }
+        }
+        OpFieldMeta::Result(index) | OpFieldMeta::Operand(index) => {
+            if let IndexKind::Single(_) = index {
+                unreachable!("should not print single result/operand field");
+            }
+            quote! {
+                <::orzir_core::Value as ::orzir_core::Print>::print(__item.deref(&__ctx.values), __ctx, __state)?;
+            }
+        }
+        OpFieldMeta::Successor(index) => {
+            if let IndexKind::Single(_) = index {
+                unreachable!("should not print single successor field");
+            }
+            quote! {
+                <::orzir_core::Successor as ::orzir_core::Print>::print(__item, __ctx, __state)?;
+            }
+        }
+        OpFieldMeta::Other { is_vec, ty } => {
+            if !is_vec {
+                unreachable!("should not print non-vec field with repeat attribute");
+            }
+            quote! {
+                <#ty as ::orzir_core::Print>::print(__item, __ctx, __state)?;
+            }
+        }
+    };
+
+    let sep_printer = if let Some(sep) = &repeat_meta.sep {
+        sep.generate_printer()
+    } else {
+        quote! {
+            write!(__state.buffer, " ")?;
+        }
+    };
+
+    let output = if let Some(leading) = &repeat_meta.leading {
+        let leading_printer = leading.generate_printer();
+        quote! {
+            #leading_printer
+            for (__idx, __item) in #field.iter().enumerate() {
+                #print_stmts
+                if __idx + 1 < #field.len() {
+                    #sep_printer
+                }
+            }
+        }
+    } else {
+        quote! {
+            for (__idx, __item) in #field.iter().enumerate() {
+                #print_stmts
+                if __idx + 1 < #field.len() {
+                    #sep_printer
+                }
+            }
+        }
+    };
+
+    let output = if let Some(trailing) = &repeat_meta.trailing {
+        let trailing_printer = trailing.generate_printer();
+        quote! {
+            #output
+            #trailing_printer
+        }
+    } else {
+        output
+    };
+
+    Ok(output)
+}
+
+fn generate_field_parser(
+    field_ident: &FieldIdent,
+    op_field_meta: &OpFieldMeta,
+    format_info: &FormatInfo,
+) -> syn::Result<TokenStream> {
+    match op_field_meta {
+        OpFieldMeta::Metadata => {
+            // just skip.
+            Ok(quote! {})
+        }
+        OpFieldMeta::Operand(index)
+        | OpFieldMeta::Region(RegionMeta { index, .. })
+        | OpFieldMeta::Result(index)
+        | OpFieldMeta::Successor(index) => match index {
+            IndexKind::All => {
+                let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
+                    sep: None,
+                    leading: None,
+                    trailing: None,
+                });
+                generate_repeat_parser(field_ident, op_field_meta, repeat_meta)
+            }
+            IndexKind::Single(_) => {
+                let field_ident = match field_ident {
+                    FieldIdent::Ident(field_ident) => {
+                        syn::Ident::new(field_ident, Span::call_site())
+                    }
+                    FieldIdent::Index(idx) => {
+                        syn::Ident::new(&format!("arg_{}", idx), Span::call_site())
+                    }
                 };
 
-                let field = fields.get(&ident_key).ok_or_else(|| {
-                    syn::Error::new(ident.span(), format!("`{}` not found in the struct", ident))
-                })?;
-
-                let ident = if ident.chars().all(char::is_numeric) {
-                    let index = syn::Index::from(ident.parse::<usize>().unwrap());
-                    quote! { self.#index }
-                } else {
-                    let ident = syn::Ident::new(ident, proc_macro2::Span::call_site());
-                    quote! { self.#ident }
-                };
-
-                let mut ty = &field.ty;
-                let attrs = &field.attrs;
-
-                let mut is_vec = false;
-                let mut is_arena_ptr = false;
-
-                let mut is_ty = false;
-                let mut is_region = false;
-                let mut is_value = false;
-
-                // if the type is Vec<...>, `#[format(sep = "...")]` is required
-
-                // very basic type checking
-                if let syn::Type::Path(path) = ty {
-                    if let Some(segment) = path.path.segments.last() {
-                        if segment.ident == "Vec" {
-                            is_vec = true;
-                            ty = if let syn::PathArguments::AngleBracketed(args) =
-                                &segment.arguments
-                            {
-                                if let Some(syn::GenericArgument::Type(ty)) = args.args.first() {
-                                    ty
-                                } else {
-                                    return Err(syn::Error::new(
-                                        ident.span(),
-                                        "missing type argument for Vec",
-                                    ));
-                                }
-                            } else {
-                                return Err(syn::Error::new(
-                                    ident.span(),
-                                    "missing type argument for Vec",
-                                ));
-                            };
-                        }
-                    }
-                }
-
-                if let syn::Type::Path(path) = ty {
-                    if let Some(segment) = path.path.segments.last() {
-                        if segment.ident == "ArenaPtr" {
-                            if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                                if let Some(syn::GenericArgument::Type(
-                                    inner_ty @ syn::Type::Path(_),
-                                )) = args.args.first()
-                                {
-                                    is_arena_ptr = true;
-                                    ty = inner_ty;
-
-                                    if let syn::Type::Path(path) = &inner_ty {
-                                        if let Some(segment) = path.path.segments.last() {
-                                            if segment.ident == "Region" {
-                                                is_region = true;
-                                            } else if segment.ident == "Value" {
-                                                is_value = true;
-                                            } else if segment.ident == "TyObj" {
-                                                is_ty = true;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let field_config = attrs
-                    .iter()
-                    .find(|attr| attr.path().is_ident("format"))
-                    .map(|attr| attr.parse_args::<FieldFormatConfig>())
-                    .transpose()?;
-
-                let field_print_body;
-
-                if is_vec {
-                    let field_config = field_config
-                        .ok_or_else(|| syn::Error::new(ident.span(), "missing format attribute"))?;
-                    let sep = field_config.sep;
-                    let leading = field_config.leading;
-                    let trailing = field_config.trailing;
-
-                    let item = if is_arena_ptr {
-                        if is_region {
-                            quote! { item.deref(&__ctx.regions) }
-                        } else if is_value {
-                            quote! { item.deref(&__ctx.values) }
-                        } else if is_ty {
-                            quote! { item.deref(&__ctx.tys) }
-                        } else {
+                let parse_stmts = match op_field_meta {
+                    OpFieldMeta::Region(RegionMeta { index, kind }) => {
+                        if kind.is_none() {
                             return Err(syn::Error::new(
-                                ident.span(),
-                                "unsupported ArenaPtr type, expected Region, Value or TyObj",
+                                // TODO: Span may not be correct here
+                                field_ident.span(),
+                                "region field must have a kind attribute",
                             ));
                         }
-                    } else {
-                        quote! { item }
-                    };
 
-                    let leading_space = if sep == "," {
-                        quote! {}
-                    } else {
-                        quote! { write!(__state.buffer, " ")?; }
-                    };
+                        let kind = kind.as_ref().unwrap();
 
-                    let leading = leading
-                        .map(|s| quote! { #s })
-                        .unwrap_or_else(|| quote! { "" });
-                    let trailing = trailing
-                        .map(|s| quote! { #s })
-                        .unwrap_or_else(|| quote! { "" });
+                        let index = match index {
+                            IndexKind::Single(idx) => idx,
+                            _ => unreachable!(),
+                        };
 
-                    field_print_body = quote! {
-                        write!(__state.buffer, "{}", #leading)?;
-                        for (idx, item) in #ident.iter().enumerate() {
-                            if idx > 0 {
-                                #leading_space
-                                write!(__state.buffer, #sep)?;
-                                write!(__state.buffer, " ")?;
-                            }
-                            <#ty as ::orzir_core::Print>::print(#item, __ctx, __state)?;
+                        quote! {
+                            __state.enter_region_with(#kind, #index);
+                            let #field_ident = <::orzir_core::Region as ::orzir_core::Parse>::parse(__ctx, __state)?;
+                            __state.exit_region();
                         }
-                        write!(__state.buffer, "{}", #trailing)?;
-                    };
-                } else if is_arena_ptr {
-                    if is_region {
-                        field_print_body = quote! {
-                            <#ty as ::orzir_core::Print>::print(#ident.deref(&__ctx.regions), __ctx, __state)?;
-                        };
-                    } else if is_value {
-                        field_print_body = quote! {
-                            <#ty as ::orzir_core::Print>::print(#ident.deref(&__ctx.values), __ctx, __state)?;
-                        };
-                    } else if is_ty {
-                        field_print_body = quote! {
-                            <#ty as ::orzir_core::Print>::print(#ident.deref(&__ctx.tys), __ctx, __state)?;
-                        };
-                    } else {
-                        return Err(syn::Error::new(
-                            ident.span(),
-                            "unsupported ArenaPtr type, expected Region, Value or TyObj",
-                        ));
                     }
-                } else {
-                    field_print_body = quote! {
-                        <#ty as ::orzir_core::Print>::print(&#ident, __ctx, __state)?;
-                    };
-                }
+                    OpFieldMeta::Result(_) | OpFieldMeta::Operand(_) => {
+                        quote! {
+                            let #field_ident = <::orzir_core::Value as ::orzir_core::Parse>::parse(__ctx, __state)?;
+                        }
+                    }
+                    OpFieldMeta::Successor(_) => {
+                        quote! {
+                            let #field_ident = <::orzir_core::Successor as ::orzir_core::Parse>::parse(__ctx, __state)?;
+                        }
+                    }
+                    _ => unreachable!(),
+                };
 
-                print_body.extend(field_print_body);
+                Ok(parse_stmts)
             }
-            FormatToken::Delimiter(punct) => {
-                if punct == "," {
-                    // no leading space.
-                } else {
-                    // add leading space for puncts other than a comma
-                    print_body.extend(quote! {
-                        write!(__state.buffer, " ")?;
-                    });
-                }
+        },
+        OpFieldMeta::Other { is_vec, ty } => {
+            if *is_vec {
+                let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
+                    sep: None,
+                    leading: None,
+                    trailing: None,
+                });
+                generate_repeat_parser(field_ident, op_field_meta, repeat_meta)
+            } else {
+                let field_ident = match field_ident {
+                    FieldIdent::Ident(field_ident) => {
+                        syn::Ident::new(field_ident, Span::call_site())
+                    }
+                    FieldIdent::Index(idx) => {
+                        syn::Ident::new(&format!("arg_{}", idx), Span::call_site())
+                    }
+                };
 
-                print_body.extend(quote! {
-                    write!(__state.buffer, #punct)?;
-                    write!(__state.buffer, " ")?;
+                let parse_stmts = quote! {
+                    let #field_ident = <#ty as ::orzir_core::Parse>::parse(__ctx, __state)?;
+                };
+
+                Ok(parse_stmts)
+            }
+        }
+    }
+}
+
+fn generate_field_printer(
+    field_ident: &FieldIdent,
+    op_field_meta: &OpFieldMeta,
+    format_info: &FormatInfo,
+) -> syn::Result<TokenStream> {
+    match op_field_meta {
+        OpFieldMeta::Metadata => {
+            // just skip.
+            Ok(quote! {})
+        }
+        OpFieldMeta::Operand(index)
+        | OpFieldMeta::Region(RegionMeta { index, .. })
+        | OpFieldMeta::Result(index)
+        | OpFieldMeta::Successor(index) => match index {
+            IndexKind::All => {
+                let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
+                    sep: None,
+                    leading: None,
+                    trailing: None,
+                });
+                generate_repeat_printer(field_ident, op_field_meta, repeat_meta)
+            }
+            IndexKind::Single(_) => {
+                let field = match field_ident {
+                    FieldIdent::Ident(field_ident) => {
+                        let ident = syn::Ident::new(field_ident, Span::call_site());
+                        quote! { self.#ident }
+                    }
+                    FieldIdent::Index(idx) => {
+                        let index = syn::Index::from(*idx);
+                        quote! { self.#index }
+                    }
+                };
+
+                let print_stmts = match op_field_meta {
+                    OpFieldMeta::Region(RegionMeta { .. }) => {
+                        quote! {
+                            <::orzir_core::Region as ::orzir_core::Print>::print(#field.deref(&__ctx.regions), __ctx, __state)?;
+                        }
+                    }
+                    OpFieldMeta::Result(_) | OpFieldMeta::Operand(_) => {
+                        quote! {
+                            <::orzir_core::Value as ::orzir_core::Print>::print(#field.deref(&__ctx.values), __ctx, __state)?;
+                        }
+                    }
+                    OpFieldMeta::Successor(_) => {
+                        quote! {
+                            <::orzir_core::Successor as ::orzir_core::Print>::print(&#field, __ctx, __state)?;
+                        }
+                    }
+                    _ => unreachable!(),
+                };
+
+                Ok(print_stmts)
+            }
+        },
+        OpFieldMeta::Other { is_vec, ty } => {
+            if *is_vec {
+                let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
+                    sep: None,
+                    leading: None,
+                    trailing: None,
+                });
+                generate_repeat_printer(field_ident, op_field_meta, repeat_meta)
+            } else {
+                let field = match field_ident {
+                    FieldIdent::Ident(field_ident) => {
+                        let ident = syn::Ident::new(field_ident, Span::call_site());
+                        quote! { self.#ident }
+                    }
+                    FieldIdent::Index(idx) => {
+                        let index = syn::Index::from(*idx);
+                        quote! { self.#index }
+                    }
+                };
+
+                let print_stmts = quote! {
+                    <#ty as ::orzir_core::Print>::print(&#field, __ctx, __state)?;
+                };
+
+                Ok(print_stmts)
+            }
+        }
+    }
+}
+
+fn generate_parser(
+    struct_ident: &syn::Ident,
+    derive_info: &OpDeriveInfo,
+    format_info: &FormatInfo,
+) -> syn::Result<TokenStream> {
+    let mut parse_stmts = TokenStream::new();
+
+    // format token to field mapping
+    let token2field = derive_info
+        .fields
+        .iter()
+        .map(|(field_ident, field_meta)| match field_ident {
+            FieldIdent::Ident(ident) => (ident.clone(), (field_ident, field_meta)),
+            FieldIdent::Index(idx) => (format!("{}", idx), (field_ident, field_meta)),
+        })
+        .collect::<HashMap<_, _>>();
+
+    for token in &format_info.meta.pattern.tokens {
+        match token {
+            FormatToken::Field(field) => {
+                let (field_ident, field_meta) = token2field.get(field).ok_or_else(|| {
+                    syn::Error::new(
+                        // TODO: Better span.
+                        Span::call_site(),
+                        format!("field `{}` not found in struct", field),
+                    )
+                })?;
+                let field_parser = generate_field_parser(field_ident, field_meta, format_info)?;
+                parse_stmts.extend(field_parser);
+            }
+            FormatToken::Delimiter(_) => {
+                let delimiter_token = token.to_string_or_char();
+                parse_stmts.extend(quote! {
+                    __state.stream.expect(::orzir_core::token!(#delimiter_token))?;
                 });
             }
         }
     }
 
-    if let Some(0) = config.num_results {
-        // no trailing types
-    } else {
-        print_body.extend(quote! {
-            write!(__state.buffer, " : ")?;
-            let __tys = <Self as ::orzir_core::DataFlow>::result_tys(self, __ctx);
-        });
-        print_body.extend(quote! {
-            if __tys.len() > 1 {
-                write!(__state.buffer, "(")?;
-            }
+    if let FormatKind::Op = format_info.meta.kind {
+        let mut epilogue = quote! {
+            let mut __result_names = __state.pop_result_names();
+        };
 
-            for (__idx, __ty) in __tys.iter().enumerate() {
-                if __idx > 0 {
-                    write!(__state.buffer, ", ")?;
-                }
-                <::orzir_core::TyObj as ::orzir_core::Print>::print(__ty.deref(&__ctx.tys), __ctx, __state)?;
-            }
-
-            if __tys.len() > 1 {
-                write!(__state.buffer, ")")?;
-            }
-        });
-    }
-
-    let print_impl = quote! {
-        impl ::orzir_core::Print for #data_struct_ident {
-            fn print(&self, __ctx: &::orzir_core::Context, __state: &mut ::orzir_core::PrintState) -> ::orzir_core::PrintResult<()> {
-                #print_body
-                Ok(())
-            }
-        }
-    };
-
-    Ok(print_impl)
-}
-
-fn derive_parse_struct(
-    data_struct_ident: &syn::Ident,
-    data_struct: &syn::DataStruct,
-    config: &FormatConfig,
-) -> syn::Result<TokenStream> {
-    // get the ident to field mapping
-    let fields = data_struct
-        .fields
-        .iter()
-        .enumerate()
-        .map(|(idx, field)| {
-            if let Some(ident) = &field.ident {
-                (ident.to_string(), field)
-            } else {
-                (format!("arg_{}", idx), field)
-            }
-        })
-        .collect::<BTreeMap<_, _>>();
-
-    let mut parse_body = TokenStream::new();
-
-    for token in config.pattern.tokens.iter() {
-        match token {
-            FormatToken::Ident(ident) => {
-                let ident = if ident.chars().all(char::is_numeric) {
-                    format!("arg_{}", ident)
-                } else {
-                    ident.clone()
-                };
-
-                let field = fields.get(&ident).ok_or_else(|| {
-                    syn::Error::new(ident.span(), format!("`{}` not found in the struct", ident))
-                })?;
-
-                // cannot use the field's ident directly, because it may be an index
-                let ident = syn::Ident::new(&ident, proc_macro2::Span::call_site());
-
-                let mut ty = &field.ty;
-                let attrs = &field.attrs;
-
-                let mut is_vec = false;
-                let mut is_region = false;
-
-                // if the type is Vec<...>, `#[format(sep = "...")]` is required
-                // if the type is ArenaPtr<Region>, `#[region(<idx>, <kind>)]` is required
-
-                // very basic type checking
-                if let syn::Type::Path(path) = ty {
-                    if let Some(segment) = path.path.segments.last() {
-                        if segment.ident == "Vec" {
-                            is_vec = true;
-                            ty = if let syn::PathArguments::AngleBracketed(args) =
-                                &segment.arguments
-                            {
-                                if let Some(syn::GenericArgument::Type(ty)) = args.args.first() {
-                                    ty
-                                } else {
-                                    return Err(syn::Error::new(
-                                        ident.span(),
-                                        "missing type argument for Vec",
-                                    ));
-                                }
-                            } else {
-                                return Err(syn::Error::new(
-                                    ident.span(),
-                                    "missing type argument for Vec",
-                                ));
-                            };
-                        }
+        if let Some(0) = format_info.meta.num_results {
+            // no trailing result types.
+            epilogue.extend(quote! {
+                if !__result_names.is_empty() {
+                    let mut __span = __result_names[0].span;
+                    for __name in __result_names.iter().skip(1) {
+                        __span = __span.merge(&__name.span);
                     }
+                    return ::orzir_core::parse_error!(
+                        __span,
+                        ::orzir_core::ParseErrorKind::InvalidResultNumber(0, __result_names.len())
+                    )
+                    .into();
                 }
+            });
+        } else {
+            epilogue.extend(quote! {
+                let mut __tys = Vec::new();
+                __state.stream.expect(::orzir_core::token!(':'))?;
+                let __trailing_start_pos = __state.stream.curr_pos()?;
 
-                if let syn::Type::Path(path) = ty {
-                    if let Some(segment) = path.path.segments.last() {
-                        if segment.ident == "ArenaPtr" {
-                            if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                                if let Some(syn::GenericArgument::Type(
-                                    inner_ty @ syn::Type::Path(path),
-                                )) = args.args.first()
-                                {
-                                    if let Some(segment) = path.path.segments.last() {
-                                        if segment.ident == "Region" {
-                                            is_region = true;
-                                        }
-                                    }
-                                    ty = inner_ty;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let region_meta = if is_region {
-                    attrs
-                        .iter()
-                        .find(|attr| attr.path().is_ident("region"))
-                        .map(|attr| attr.parse_args::<RegionMeta>())
-                } else {
-                    None
-                }
-                .transpose()?;
-
-                let field_config = attrs
-                    .iter()
-                    .find(|attr| attr.path().is_ident("format"))
-                    .map(|attr| attr.parse_args::<FieldFormatConfig>())
-                    .transpose()?;
-
-                let field_parse_body;
-
-                let region_kind = region_meta.as_ref().and_then(|meta| meta.kind.clone());
-                let region_index = region_meta.as_ref().map(|meta| meta.index);
-
-                if is_vec {
-                    let field_config = field_config
-                        .ok_or_else(|| syn::Error::new(ident.span(), "missing format attribute"))?;
-                    let sep = field_config.sep;
-
-                    let parse_stmt = if is_region {
-                        let region_kind = region_kind.ok_or_else(|| {
-                            syn::Error::new(ident.span(), "missing region kind attribute")
-                        })?;
-                        if let Some(IndexKind::Single(_)) = region_index {
-                            return Err(syn::Error::new(
-                                ident.span(),
-                                "region index cannot be discrete for Vec<...>",
-                            ));
-                        }
-                        quote! {
-                            __state.enter_region_with(#region_kind, __idx);
-                            let __item_result = <#ty as ::orzir_core::Parse>::parse(__ctx, __state);
-                            __state.exit_region();
-                        }
-                    } else {
-                        quote! {
-                            let __item_result = <#ty as ::orzir_core::Parse>::parse(__ctx, __state);
-                        }
-                    };
-
-                    // backtracking to handle the first optional item
-                    let parse_stmt = if field_config.trailing.is_none() {
-                        // rolling back
-                        quote! {
-                            __state.stream.checkpoint();
-                            #parse_stmt
-                            if let Err(_) = __item_result {
-                                __state.stream.rollback();
-                                break;
-                            }
-                            __state.stream.commit();
-                            let __item = __item_result.unwrap();
-                        }
-                    } else {
-                        quote! {
-                            #parse_stmt
-                            let __item = __item_result?;
-                        }
-                    };
-
-                    let field_parse_loop_body = quote! {
-                        #parse_stmt
-                        #ident.push(__item);
-                        __idx += 1;
-
-                        if let ::orzir_core::token!(#sep) = __state.stream.peek()?.kind {
+                if let ::orzir_core::token!('(') = __state.stream.peek()?.kind {
+                    __state.stream.consume()?;
+                    loop {
+                        let __ty = <::orzir_core::TyObj as ::orzir_core::Parse>::parse(__ctx, __state)?;
+                        __tys.push(__ty);
+                        if let ::orzir_core::token!(',') = __state.stream.peek()?.kind {
                             __state.stream.consume()?;
                         } else {
                             break;
                         }
-                    };
-
-                    let field_parse_loop_body = if let Some(ref trailing) = field_config.trailing {
-                        quote! {
-                            let mut __idx = 0;
-                            loop {
-                                if let ::orzir_core::token!(#trailing) = __state.stream.peek()?.kind {
-                                    break;
-                                }
-
-                                #field_parse_loop_body
-                            }
-                            __state.stream.expect(::orzir_core::token!(#trailing))?;
-                        }
-                    } else {
-                        quote! {
-                            let mut __idx = 0;
-                            loop {
-                                #field_parse_loop_body
-                            }
-                        }
-                    };
-
-                    let field_parse_loop_body = if let Some(ref leading) = field_config.leading {
-                        quote! {
-                            if let ::orzir_core::token!(#leading) = __state.stream.peek()?.kind {
-                                __state.stream.consume()?;
-                                #field_parse_loop_body
-                            }
-                        }
-                    } else {
-                        field_parse_loop_body
-                    };
-
-                    field_parse_body = quote! {
-                        let mut #ident = Vec::new();
-                        #field_parse_loop_body
                     }
-                } else if is_region {
-                    let region_kind = region_kind.ok_or_else(|| {
-                        syn::Error::new(ident.span(), "missing region kind attribute")
-                    })?;
-                    let region_index = region_index.ok_or_else(|| {
-                        syn::Error::new(ident.span(), "missing region index attribute")
-                    })?;
-                    let region_index = match region_index {
-                        IndexKind::Single(idx) => quote! { #idx },
-                        IndexKind::All => {
-                            return Err(syn::Error::new(
-                                ident.span(),
-                                "region index cannot be `...`",
-                            ))
-                        }
-                    };
-
-                    field_parse_body = quote! {
-                        __state.enter_region_with(#region_kind, #region_index);
-                        let #ident = <#ty as ::orzir_core::Parse>::parse(__ctx, __state)?;
-                        __state.exit_region();
-                    }
+                    __state.stream.expect(::orzir_core::token!(')'))?;
                 } else {
-                    field_parse_body = quote! {
-                        let #ident = <#ty as ::orzir_core::Parse>::parse(__ctx, __state)?;
-                    }
-                }
-
-                parse_body.extend(field_parse_body);
-            }
-            FormatToken::Delimiter(punct) => {
-                parse_body.extend(quote! {
-                    __state.stream.expect(::orzir_core::token!(#punct))?;
-                });
-            }
-        }
-    }
-
-    if let Some(0) = config.num_results {
-        // for 0 results, no trailing types are allowed
-    } else {
-        // for 1 or unknown number of results, trailing types should be parsed
-        parse_body.extend(quote! {
-            let mut __tys = Vec::new();
-            __state.stream.expect(::orzir_core::token!(':'))?;
-            let __trailing_start_pos = __state.stream.curr_pos()?;
-            if let ::orzir_core::token!('(') = __state.stream.peek()?.kind {
-                __state.stream.consume()?;
-                loop {
                     let __ty = <::orzir_core::TyObj as ::orzir_core::Parse>::parse(__ctx, __state)?;
                     __tys.push(__ty);
-                    if let ::orzir_core::token!(',') = __state.stream.peek()?.kind {
-                        __state.stream.consume()?;
-                    } else {
-                        break;
+                }
+                let __trailing_end_pos = __state.stream.curr_pos()?;
+            });
+
+            if let Some(num) = format_info.meta.num_results {
+                epilogue.extend(quote! {
+                    if __tys.len() != #num {
+                        return ::orzir_core::parse_error!(
+                            ::orzir_core::Span::new(__trailing_start_pos, __trailing_end_pos),
+                            ::orzir_core::ParseErrorKind::InvalidTrailingTypeNumber(#num, __tys.len())
+                        )
+                        .into();
+                    }
+
+                    if __result_names.len() != #num {
+                        let mut __span = __result_names[0].span;
+                        for __name in __result_names.iter().skip(1) {
+                            __span = __span.merge(&__name.span);
+                        }
+                        return ::orzir_core::parse_error!(
+                            __span,
+                            ::orzir_core::ParseErrorKind::InvalidResultNumber(#num, __result_names.len())
+                        )
+                        .into();
+                    }
+                });
+            } else {
+                epilogue.extend(quote! {
+                    if __result_names.len() != __tys.len() {
+                        let mut __span = __result_names[0].span;
+                        for __name in __result_names.iter().skip(1) {
+                            __span = __span.merge(&__name.span);
+                        }
+                        return ::orzir_core::parse_error!(
+                            __span,
+                            ::orzir_core::ParseErrorKind::InvalidResultNumber(__tys.len(), __result_names.len())
+                        )
+                        .into();
+                    }
+                });
+            }
+
+            epilogue.extend(
+                quote! {
+                    let mut __results = Vec::new();
+                    for (__idx, (__name, __ty)) in __result_names.drain(..).zip(__tys.drain(..)).enumerate() {
+                        let __result = ::orzir_core::Value::new_op_result(__ctx, __ty, __op, __idx, Some(__name.unwrap_value_name()));
+                        __results.push(__result);
                     }
                 }
-                __state.stream.expect(::orzir_core::token!(')'))?;
-            } else {
-                let __ty = <::orzir_core::TyObj as ::orzir_core::Parse>::parse(__ctx, __state)?;
-                __tys.push(__ty);
+            );
+        }
+
+        let mut result_assign = quote! {};
+
+        let mut construction = quote! {};
+
+        for (field_ident, field_meta) in derive_info.fields.iter() {
+            let ident = match field_ident {
+                FieldIdent::Ident(ident) => syn::Ident::new(ident, Span::call_site()),
+                FieldIdent::Index(index) => {
+                    syn::Ident::new(&format!("arg_{}", index), Span::call_site())
+                }
+            };
+
+            match field_meta {
+                OpFieldMeta::Result(index) => {
+                    match index {
+                        IndexKind::All => {
+                            result_assign.extend(quote! {
+                                let #ident = __results;
+                            });
+                        }
+                        IndexKind::Single(idx) => {
+                            result_assign.extend(quote! {
+                                let #ident = __results[#idx];
+                            });
+                        }
+                    }
+                    construction.extend(quote! {
+                        #ident,
+                    });
+                }
+                OpFieldMeta::Metadata => match field_ident {
+                    FieldIdent::Ident(_) => construction.extend(quote! {
+                        #ident: ::orzir_core::OpMetadata::new(__op),
+                    }),
+                    FieldIdent::Index(_) => construction.extend(quote! {
+                        ::orzir_core::OpMetadata::new(__op),
+                    }),
+                },
+                _ => construction.extend(quote! {
+                    #ident,
+                }),
             }
-            let __trailing_end_pos = __state.stream.curr_pos()?;
-        });
+        }
+
+        let construction = if derive_info.is_named {
+            quote! {
+                let __instance = Self {
+                    #construction
+                };
+            }
+        } else {
+            quote! {
+                let __instance = Self(
+                    #construction
+                );
+            }
+        };
+
+        let construction = quote! {
+            #construction
+            let __obj = ::orzir_core::OpObj::from(__instance);
+            __ctx.ops.fill(__op, __obj);
+        };
+
+        parse_stmts = quote! {
+            let __op = __ctx.ops.reserve();
+            let __start_pos = __state.stream.curr_pos()?;
+
+            __state.enter_component_from(__op);
+
+            #parse_stmts
+
+            let __end_pos = __state.stream.curr_pos()?;
+            __state.exit_component();
+
+            #epilogue
+            #result_assign
+            #construction
+
+            Ok(__op)
+        };
+
+        parse_stmts = quote! {
+            impl ::orzir_core::Parse for #struct_ident {
+                type Item = ::orzir_core::ArenaPtr<::orzir_core::OpObj>;
+
+                fn parse(__ctx: &mut ::orzir_core::Context, __state: &mut ::orzir_core::ParseState) -> ::orzir_core::ParseResult<Self::Item> {
+                    #parse_stmts
+                }
+            }
+        }
+    } else if let FormatKind::Ty = format_info.meta.kind {
+        let mut construction = quote! {};
+
+        for (field_ident, _) in derive_info.fields.iter() {
+            let ident = match field_ident {
+                FieldIdent::Ident(ident) => syn::Ident::new(ident, Span::call_site()),
+                FieldIdent::Index(index) => {
+                    syn::Ident::new(&format!("arg_{}", index), Span::call_site())
+                }
+            };
+
+            construction.extend(quote! {
+                #ident,
+            });
+        }
+
+        let construction = quote! {
+            let __ty = #struct_ident::get(__ctx, #construction);
+        };
+
+        parse_stmts = quote! {
+            #parse_stmts
+            #construction
+            Ok(__ty)
+        };
+
+        parse_stmts = quote! {
+            impl ::orzir_core::Parse for #struct_ident {
+                type Item = ::orzir_core::ArenaPtr<::orzir_core::TyObj>;
+
+                fn parse(__ctx: &mut ::orzir_core::Context, __state: &mut ::orzir_core::ParseState) -> ::orzir_core::ParseResult<Self::Item> {
+                    #parse_stmts
+                }
+            }
+        }
+    } else {
+        let mut construction = quote! {};
+
+        for (field_ident, _) in derive_info.fields.iter() {
+            let ident = match field_ident {
+                FieldIdent::Ident(ident) => syn::Ident::new(ident, Span::call_site()),
+                FieldIdent::Index(index) => {
+                    syn::Ident::new(&format!("arg_{}", index), Span::call_site())
+                }
+            };
+
+            construction.extend(quote! {
+                #ident,
+            });
+        }
+
+        let construction = if derive_info.is_named {
+            quote! {
+                let __instance = Self {
+                    #construction
+                };
+            }
+        } else {
+            quote! {
+                let __instance = Self(
+                    #construction
+                );
+            }
+        };
+
+        parse_stmts = quote! {
+            #parse_stmts
+            #construction
+            Ok(__instance)
+        };
+
+        parse_stmts = quote! {
+            impl ::orzir_core::Parse for #struct_ident {
+                type Item = Self;
+
+                fn parse(__ctx: &mut ::orzir_core::Context, __state: &mut ::orzir_core::ParseState) -> ::orzir_core::ParseResult<Self::Item> {
+                    #parse_stmts
+                }
+            }
+        }
     }
 
-    let num_results = if let Some(0) = config.num_results {
-        quote! { 0 }
-    } else if let Some(num) = config.num_results {
-        // if there are trailing types and the number is set, do the check
-        parse_body.extend(quote! {
-            if __tys.len() != #num {
-                return Err(::orzir_core::parse_error!(
-                    ::orzir_core::Span::new(__trailing_start_pos, __trailing_end_pos),
-                    ::orzir_core::ParseErrorKind::InvalidTrailingTypeNumber(#num, __tys.len())
-                ));
-            }
-        });
-        quote! { #num }
-    } else {
-        // if the type is not specified, the number of results is determined by the
-        // trailing types
-        quote! { __tys.len() }
-    };
+    Ok(parse_stmts)
+}
 
-    // the result names
-    if let Some(0) = config.num_results {
-        parse_body.extend(quote! {
-            let mut __result_names = __state.pop_result_names();
-            if !__result_names.is_empty() {
-                let mut __span = __result_names[0].span;
-                for __name in __result_names.iter().skip(1) {
-                    __span = __span.merge(&__name.span);
-                }
-                return ::orzir_core::parse_error!(
-                    __span,
-                    ::orzir_core::ParseErrorKind::InvalidResultNumber(0, __result_names.len())
-                )
-                .into();
-            }
+fn generate_printer(
+    struct_ident: &syn::Ident,
+    derive_info: &OpDeriveInfo,
+    format_info: &FormatInfo,
+) -> syn::Result<TokenStream> {
+    let mut print_stmts = TokenStream::new();
+
+    // format token to field mapping
+    let token2field = derive_info
+        .fields
+        .iter()
+        .map(|(field_ident, field_meta)| match field_ident {
+            FieldIdent::Ident(ident) => (ident.clone(), (field_ident, field_meta)),
+            FieldIdent::Index(idx) => (format!("{}", idx), (field_ident, field_meta)),
         })
-    } else {
-        parse_body.extend(
-        quote! {
-            let mut __result_names = __state.pop_result_names();
-            let mut __results = Vec::new();
-            if __result_names.len() != #num_results {
-                if __result_names.is_empty() {
-                    return ::orzir_core::parse_error!(
-                        ::orzir_core::Span::new(__start_pos, __start_pos),
-                        ::orzir_core::ParseErrorKind::InvalidResultNumber(#num_results, 0)
+        .collect::<HashMap<_, _>>();
+
+    for token in &format_info.meta.pattern.tokens {
+        match token {
+            FormatToken::Field(field) => {
+                let (field_ident, field_meta) = token2field.get(field).ok_or_else(|| {
+                    syn::Error::new(
+                        Span::call_site(),
+                        format!("field `{}` not found in struct", field),
                     )
-                    .into();
-                }
-
-                let mut __span = __result_names[0].span;
-                for __name in __result_names.iter().skip(1) {
-                    __span = __span.merge(&__name.span);
-                }
-
-                return ::orzir_core::parse_error!(
-                    __span,
-                    ::orzir_core::ParseErrorKind::InvalidResultNumber(#num_results, __result_names.len())
-                )
-                .into();
+                })?;
+                let field_printer = generate_field_printer(field_ident, field_meta, format_info)?;
+                print_stmts.extend(field_printer);
             }
-
-            for (__idx, (__name, __ty)) in __result_names.drain(..).zip(__tys.drain(..)).enumerate() {
-                let __result = ::orzir_core::Value::new_op_result(__ctx, __ty, __op, __idx, Some(__name.unwrap_value_name()));
-                __results.push(__result);
+            FormatToken::Delimiter(_) => {
+                let delimiter_printer = token.generate_printer();
+                print_stmts.extend(delimiter_printer);
             }
         }
-    );
     }
 
-    let mut construction = TokenStream::new();
-
-    for field in data_struct.fields.iter() {
-        let attrs = &field.attrs;
-
-        let is_metadata = attrs.iter().any(|attr| attr.path().is_ident("metadata"));
-
-        if is_metadata {
-            continue;
-        }
-
-        let result_meta = attrs.iter().find(|attr| attr.path().is_ident("result"));
-
-        if let Some(result_meta) = result_meta {
-            let index = result_meta.parse_args::<IndexKind>()?;
-            match index {
-                IndexKind::All => {
-                    // all results
-                    construction.extend(quote! { __results, });
+    if let FormatKind::Op = format_info.meta.kind {
+        // the trailing types
+        if let Some(0) = format_info.meta.num_results {
+            // no trailing result types.
+        } else {
+            print_stmts.extend(quote! {
+                let __result_tys = <Self as ::orzir_core::DataFlow>::result_tys(&self, __ctx);
+                write!(__state.buffer, " : ")?;
+                if __result_tys.len() > 1 {
+                    write!(__state.buffer, "(")?;
                 }
-                IndexKind::Single(idx) => {
-                    // single result
-                    construction.extend(quote! { __results[#idx], });
-                }
-            }
-            continue;
-        }
 
-        let ident = field.ident.as_ref().unwrap();
-        construction.extend(quote! { #ident, });
+                for (__idx, __ty) in __result_tys.iter().enumerate() {
+                    <::orzir_core::TyObj as ::orzir_core::Print>::print(__ty.deref(&__ctx.tys), __ctx, __state)?;
+                    if __idx + 1 < __result_tys.len() {
+                        write!(__state.buffer, ", ")?;
+                    }
+                }
+
+                if __result_tys.len() > 1 {
+                    write!(__state.buffer, ")")?;
+                }
+            });
+        }
     }
 
-    let construction = quote! {
-        let __op = #data_struct_ident::new(__ctx, __op, #construction);
+    let print_stmts = quote! {
+        #print_stmts
+        Ok(())
     };
 
-    let parse_impl = quote! {
-        impl ::orzir_core::Parse for #data_struct_ident {
-            type Item = ::orzir_core::ArenaPtr<OpObj>;
-
-            fn parse(__ctx: &mut ::orzir_core::Context, __state: &mut ::orzir_core::ParseState) -> ::orzir_core::ParseResult<Self::Item> {
-
-                let __op = __ctx.ops.reserve();
-                let __start_pos = __state.stream.curr_pos()?;
-
-                __state.enter_component_from(__op);
-
-                #parse_body
-
-                let __end_pos = __state.stream.curr_pos()?;
-                __state.exit_component();
-
-                #construction
-
-                Ok(__op)
+    let print_stmts = quote! {
+        impl ::orzir_core::Print for #struct_ident {
+            fn print(&self, __ctx: &::orzir_core::Context, __state: &mut ::orzir_core::PrintState) -> ::orzir_core::PrintResult<()> {
+                #print_stmts
             }
         }
     };
+
+    Ok(print_stmts)
+}
+
+pub fn derive_parse_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
+    let derive_info = OpDeriveInfo::from_ast(ast)?;
+    let format_info = FormatInfo::from_ast(ast)?;
+
+    let parse_impl = generate_parser(&ast.ident, &derive_info, &format_info)?;
 
     Ok(parse_impl)
 }
 
-pub fn derive_parse_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
-    let config = ast
-        .attrs
-        .iter()
-        .find(|attr| attr.path().is_ident("format"))
-        .map(|attr| attr.parse_args::<FormatConfig>())
-        .transpose()?
-        .ok_or_else(|| {
-            syn::Error::new_spanned(ast, "invalid format pattern, expected #[format(...)]")
-        })?;
-
-    let impls = match &ast.data {
-        syn::Data::Struct(data_struct) => derive_parse_struct(&ast.ident, data_struct, &config)?,
-        _ => unimplemented!("items other than struct are not supported yet."),
-    };
-
-    Ok(impls)
-}
-
 pub fn derive_print_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
-    let config = ast
-        .attrs
-        .iter()
-        .find(|attr| attr.path().is_ident("format"))
-        .map(|attr| attr.parse_args::<FormatConfig>())
-        .transpose()?
-        .ok_or_else(|| {
-            syn::Error::new_spanned(ast, "invalid format pattern, expected #[format(...)]")
-        })?;
+    let derive_info = OpDeriveInfo::from_ast(ast)?;
+    let format_info = FormatInfo::from_ast(ast)?;
 
-    let impls = match &ast.data {
-        syn::Data::Struct(data_struct) => derive_print_struct(&ast.ident, data_struct, &config)?,
-        _ => unimplemented!("items other than struct are not supported yet."),
-    };
+    let print_impl = generate_printer(&ast.ident, &derive_info, &format_info)?;
 
-    Ok(impls)
+    Ok(print_impl)
 }
 
 #[cfg(test)]
@@ -840,7 +1085,8 @@ mod tests {
     #[test]
     fn test_0() {
         let src = quote! {
-            #[format(pattern = "{lhs} , {rhs}", num_results = 1)]
+            #[mnemonic = "arith.iadd"]
+            #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
             pub struct IAddOp {
                 #[metadata]
                 metadata: OpMetadata,
@@ -867,6 +1113,7 @@ mod tests {
     #[test]
     fn test_1() {
         let src = quote! {
+            #[mnemonic = "arith.iadd"]
             #[format(pattern = "{lhs} , {rhs}", num_results = 1)]
             pub struct IAddOp {
                 #[metadata]

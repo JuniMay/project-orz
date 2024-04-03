@@ -127,8 +127,9 @@ pub enum TokenKind {
     SymbolName(Option<String>),
     /// Other tokenized string.
     ///
-    /// This represents contiguous alphanumeric or with `_`, `-`, `.`
-    /// characters. And if the string is quoted, there can be escape sequences.
+    /// This represents contiguous alphanumeric or with `_`, `.` characters. And
+    /// if the string is quoted, there can be escape sequences. This may also
+    /// represent numbers, but the parsing process is up to the parser.
     Tokenized(Option<String>),
     /// End of file.
     Eof,
@@ -584,6 +585,13 @@ impl<'a> TokenStream<'a> {
         Ok(())
     }
 
+    fn is_delimiter(c: char) -> bool {
+        matches!(
+            c,
+            ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '*'
+        )
+    }
+
     /// Get and buffer the next token.
     ///
     /// This will get the next token, buffer it and return the reference.
@@ -627,15 +635,6 @@ impl<'a> TokenStream<'a> {
                     TokenKind::SymbolName(Some(s))
                 }
             }
-            Some(c)
-                if matches!(
-                    c,
-                    ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '*'
-                ) =>
-            {
-                self.consume_char();
-                TokenKind::Char(c)
-            }
             Some('-') => {
                 self.consume_char();
                 match self.peek_char() {
@@ -645,6 +644,10 @@ impl<'a> TokenStream<'a> {
                     }
                     _ => TokenKind::Char('-'),
                 }
+            }
+            Some(c) if Self::is_delimiter(c) => {
+                self.consume_char();
+                TokenKind::Char(c)
             }
             Some(_) => TokenKind::Tokenized(Some(self.handle_identifier()?)),
             None => TokenKind::Eof,
@@ -723,7 +726,7 @@ impl<'a> TokenStream<'a> {
         };
         loop {
             match self.peek_char() {
-                Some(c) if c.is_alphanumeric() || c == '_' || c == '-' || c == '.' => {
+                Some(c) if c.is_alphanumeric() || c == '_' || c == '.' => {
                     s.push(c);
                     self.consume_char();
                 }

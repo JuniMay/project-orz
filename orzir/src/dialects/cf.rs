@@ -1,8 +1,6 @@
 use std::fmt::Write;
 
-use orzir_core::{
-    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, Successor, Value, Verify,
-};
+use orzir_core::{ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Successor, Value, Verify};
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
 
 use crate::verifiers::{control_flow::*, *};
@@ -13,7 +11,7 @@ use crate::verifiers::{control_flow::*, *};
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "cf.jump"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
-#[format(pattern = "{succ}", num_results = 0)]
+#[format(pattern = "{succ}", kind = "op", num_results = 0)]
 pub struct Jump {
     #[metadata]
     metadata: OpMetadata,
@@ -30,7 +28,11 @@ impl Verify for Jump {}
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "cf.branch"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
-#[format(pattern = "{cond} , {then_succ} , {else_succ}", num_results = 0)]
+#[format(
+    pattern = "{cond} , {then_succ} , {else_succ}",
+    kind = "op",
+    num_results = 0
+)]
 pub struct Branch {
     #[metadata]
     metadata: OpMetadata,

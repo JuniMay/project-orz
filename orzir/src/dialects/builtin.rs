@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    parse_error, token, ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseErrorKind,
+    parse_error, token, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, ParseErrorKind,
     ParseResult, ParseState, Print, PrintResult, PrintState, Region, RegionInterface, RegionKind,
     RunVerifiers, TokenKind, Ty, TyObj, VerificationResult, Verify,
 };
@@ -77,7 +77,7 @@ impl From<&str> for Symbol {
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "builtin.module"]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>, NoTerminator)]
-#[format(pattern = "{symbol} {region}", num_results = 0)]
+#[format(pattern = "{symbol} {region}", kind = "op", num_results = 0)]
 pub struct ModuleOp {
     #[metadata]
     metadata: OpMetadata,
@@ -139,94 +139,31 @@ impl Print for IntTy {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Ty)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
 #[mnemonic = "builtin.float"]
 #[verifiers(FloatLikeTy)]
+#[format(pattern = "", kind = "ty")]
 pub struct FloatTy;
 
 impl Verify for FloatTy {}
 
-impl Parse for FloatTy {
-    type Item = ArenaPtr<TyObj>;
-
-    fn parse(ctx: &mut Context, _: &mut ParseState) -> ParseResult<Self::Item> {
-        Ok(FloatTy::get(ctx))
-    }
-}
-
-impl Print for FloatTy {
-    fn print(&self, _: &Context, _: &mut PrintState) -> PrintResult<()> { Ok(()) }
-}
-
-#[derive(Debug, Hash, PartialEq, Eq, Ty)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
 #[mnemonic = "builtin.double"]
 #[verifiers(FloatLikeTy)]
+#[format(pattern = "", kind = "ty")]
 pub struct DoubleTy;
 
 impl Verify for DoubleTy {}
 
-impl Parse for DoubleTy {
-    type Item = ArenaPtr<TyObj>;
-
-    fn parse(ctx: &mut Context, _: &mut ParseState) -> ParseResult<Self::Item> {
-        Ok(DoubleTy::get(ctx))
-    }
-}
-
-impl Print for DoubleTy {
-    fn print(&self, _: &Context, _: &mut PrintState) -> PrintResult<()> { Ok(()) }
-}
-
-#[derive(Debug, Hash, PartialEq, Eq, Ty)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
 #[mnemonic = "builtin.tuple"]
+#[format(pattern = "{elems}", kind = "ty")]
 pub struct TupleTy {
+    #[repeat(sep = ",", leading = "<", trailing = ">")]
     elems: Vec<ArenaPtr<TyObj>>,
 }
 
 impl Verify for TupleTy {}
-
-impl Parse for TupleTy {
-    type Item = ArenaPtr<TyObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        state.stream.expect(token!('<'))?;
-        let mut elems = Vec::new();
-        loop {
-            let ty = TyObj::parse(ctx, state)?;
-            elems.push(ty);
-            let token = state.stream.consume()?;
-            match token.kind {
-                TokenKind::Char(',') => {}
-                TokenKind::Char('>') => break,
-                _ => {
-                    return parse_error!(
-                        token.span,
-                        ParseErrorKind::InvalidToken(
-                            vec![token!(','), token!('>')].into(),
-                            token.kind
-                        )
-                    )
-                    .into();
-                }
-            }
-        }
-        Ok(TupleTy::get(ctx, elems))
-    }
-}
-
-impl Print for TupleTy {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, "<")?;
-        for (i, ty) in self.elems.iter().enumerate() {
-            ty.deref(&ctx.tys).print(ctx, state)?;
-            if i != self.elems.len() - 1 {
-                write!(state.buffer, ", ")?;
-            }
-        }
-        write!(state.buffer, ">")?;
-        Ok(())
-    }
-}
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty)]
 #[mnemonic = "builtin.fn"]
@@ -391,23 +328,12 @@ impl Print for MemRefTy {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Ty)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
 #[mnemonic = "builtin.unit"]
+#[format(pattern = "", kind = "ty")]
 pub struct UnitTy;
 
 impl Verify for UnitTy {}
-
-impl Parse for UnitTy {
-    type Item = ArenaPtr<TyObj>;
-
-    fn parse(ctx: &mut Context, _: &mut ParseState) -> ParseResult<Self::Item> {
-        Ok(UnitTy::get(ctx))
-    }
-}
-
-impl Print for UnitTy {
-    fn print(&self, _: &Context, _: &mut PrintState) -> PrintResult<()> { Ok(()) }
-}
 
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("builtin".into());

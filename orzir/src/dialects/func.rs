@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, Region, RegionInterface, RegionKind,
+    ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Region, RegionInterface, RegionKind,
     RunVerifiers, TyObj, Value, VerificationResult, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
@@ -15,7 +15,7 @@ use crate::verifiers::{control_flow::*, *};
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.func"]
 #[verifiers(IsIsolatedFromAbove, NumRegions<1>, NumResults<0>)]
-#[format(pattern = "{symbol} : {ty} {region}", num_results = 0)]
+#[format(pattern = "{symbol} : {ty} {region}", kind = "op", num_results = 0)]
 pub struct FuncOp {
     #[metadata]
     metadata: OpMetadata,
@@ -46,13 +46,13 @@ impl Verify for FuncOp {
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.return"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
-#[format(pattern = "{operands}", num_results = 0)]
+#[format(pattern = "{operands}", kind = "op", num_results = 0)]
 pub struct ReturnOp {
     #[metadata]
     metadata: OpMetadata,
     /// The operands to return.
     #[operand(...)]
-    #[format(sep = ",")]
+    #[repeat(sep = ",")]
     operands: Vec<ArenaPtr<Value>>,
 }
 
@@ -64,7 +64,7 @@ impl Verify for ReturnOp {}
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "func.call"]
 #[verifiers(VariadicResults, VariadicOperands, NumRegions<0>)]
-#[format(pattern = "{callee} {operands}")]
+#[format(pattern = "{callee} {operands}", kind = "op")]
 pub struct CallOp {
     #[metadata]
     metadata: OpMetadata,
@@ -73,7 +73,7 @@ pub struct CallOp {
     results: Vec<ArenaPtr<Value>>,
     /// The operands of the call.
     #[operand(...)]
-    #[format(sep = ",", leading = "(", trailing = ")")]
+    #[repeat(sep = ",", leading = "(", trailing = ")")]
     operands: Vec<ArenaPtr<Value>>,
     /// The symbol of the callee.
     callee: Symbol,

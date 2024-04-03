@@ -105,3 +105,17 @@ impl Print for TyObj {
         Ok(())
     }
 }
+
+impl Parse for ArenaPtr<TyObj> {
+    type Item = ArenaPtr<TyObj>;
+
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        TyObj::parse(ctx, state)
+    }
+}
+
+impl Print for ArenaPtr<TyObj> {
+    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
+        self.deref(&ctx.tys).print(ctx, state)
+    }
+}

@@ -176,7 +176,7 @@ pub fn derive_data_flow(item: TokenStream) -> TokenStream {
 /// grammar, the trait can be implemented manually.
 ///
 /// TODO: The parsing process is yet crappy and need to be improved.
-#[proc_macro_derive(Parse, attributes(format))]
+#[proc_macro_derive(Parse, attributes(format, repeat))]
 pub fn derive_parse(item: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(item as syn::DeriveInput);
     format::derive_parse_impl(&ast)
@@ -188,7 +188,7 @@ pub fn derive_parse(item: TokenStream) -> TokenStream {
 ///
 /// This support very simple grammar and only for operations, for more complex
 /// grammar, the trait can be implemented manually.
-#[proc_macro_derive(Print, attributes(format))]
+#[proc_macro_derive(Print, attributes(format, repeat))]
 pub fn derive_print(item: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(item as syn::DeriveInput);
     format::derive_print_impl(&ast)

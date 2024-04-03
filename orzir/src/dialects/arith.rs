@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use num_bigint::BigInt;
 use orzir_core::{
-    parse_error, token, ArenaPtr, Context, Dialect, Op, OpMetadata, OpObj, Parse, ParseErrorKind,
+    parse_error, token, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, ParseErrorKind,
     ParseResult, ParseState, Print, PrintResult, PrintState, TokenKind, Value, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
@@ -16,7 +16,7 @@ use crate::verifiers::*;
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "arith.iconst"]
 #[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
-#[format(pattern = "{value}", num_results = 1)]
+#[format(pattern = "{value}", kind = "op", num_results = 1)]
 pub struct IConstOp {
     #[metadata]
     metadata: OpMetadata,
@@ -93,7 +93,7 @@ impl Print for IntLiteral {
     NumResults<1>, NumOperands<2>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys
 )]
-#[format(pattern = "{lhs} , {rhs}", num_results = 1)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct IAddOp {
     #[metadata]
     metadata: OpMetadata,

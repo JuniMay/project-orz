@@ -48,7 +48,7 @@ impl syn::parse::Parse for RegionMeta {
     }
 }
 
-#[derive(Debug, Clone, Hash)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum FieldIdent {
     Ident(String),
     Index(usize),
@@ -79,7 +79,8 @@ pub struct OpDeriveInfo {
 
 pub fn is_type_vec(ty: &syn::Type) -> Option<syn::Type> {
     if let syn::Type::Path(ref path) = ty {
-        if path.path.is_ident("Vec") {
+        let segment = path.path.segments.iter().next().unwrap();
+        if segment.ident == "Vec" {
             if let syn::PathArguments::AngleBracketed(ref args) =
                 path.path.segments.last().unwrap().arguments
             {
@@ -483,5 +484,14 @@ mod tests {
         let ast = syn::parse_file(&output.to_string()).unwrap();
         let ast = prettyplease::unparse(&ast);
         println!("{}", ast);
+    }
+
+    #[test]
+    fn test_is_vec() {
+        let src = quote! { Vec<ArenaPtr<TyObj>> };
+        let ty = syn::parse2::<syn::Type>(src).unwrap();
+        let ty = super::is_type_vec(&ty).unwrap();
+
+        println!("{}", quote! { #ty });
     }
 }
