@@ -219,72 +219,13 @@ impl Print for FunctionTy {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Ty, Verify)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Verify, Parse, Print)]
 #[mnemonic = "builtin.memref"]
+#[format(pattern = "< {elem} , {shape} >", kind = "ty")]
 pub struct MemRefTy {
+    #[repeat(sep = "*", leading = "[", trailing = "]")]
     shape: Vec<usize>,
     elem: ArenaPtr<TyObj>,
-}
-
-impl Parse for MemRefTy {
-    type Item = ArenaPtr<TyObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        state.stream.expect(delimiter!('<'))?;
-        let mut shape = Vec::new();
-        let mut elem = None;
-        loop {
-            let token = state.stream.peek()?;
-            match &token.kind {
-                TokenKind::Tokenized(s) if s == "x" => {
-                    state.stream.consume()?;
-                }
-                TokenKind::Tokenized(s) => {
-                    let dim = s.parse::<usize>().ok();
-                    if let Some(dim) = dim {
-                        state.stream.consume()?;
-                        shape.push(dim);
-                    } else {
-                        elem = Some(TyObj::parse(ctx, state)?);
-                    }
-                }
-                TokenKind::Char('>') => {
-                    state.stream.consume()?;
-                    break;
-                }
-                _ => {
-                    return parse_error!(
-                        token.span,
-                        ParseErrorKind::InvalidToken(
-                            vec![
-                                token_wildcard!("..."),
-                                delimiter!('>'),
-                                TokenKind::Tokenized("x".into()),
-                            ]
-                            .into(),
-                            token.kind.clone()
-                        )
-                    )
-                    .into();
-                }
-            }
-        }
-
-        Ok(MemRefTy::get(ctx, shape, elem.unwrap()))
-    }
-}
-
-impl Print for MemRefTy {
-    fn print(&self, ctx: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, "<")?;
-        for dim in self.shape.iter() {
-            write!(state.buffer, "{}", dim)?;
-            write!(state.buffer, " x ")?;
-        }
-        self.elem.deref(&ctx.tys).print(ctx, state)?;
-        write!(state.buffer, ">")?;
-        Ok(())
-    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
@@ -407,7 +348,10 @@ mod tests {
 
     #[test]
     fn test_memref_parse() {
-        test_ty_parse_print("memref<1 x 2 x 3 x int<32>>", "memref<1 x 2 x 3 x int<32>>");
+        test_ty_parse_print(
+            "memref<int<32>, [1 * 2 * 3]>",
+            "memref<int<32>, [1 * 2 * 3]>",
+        );
     }
 
     #[test]
