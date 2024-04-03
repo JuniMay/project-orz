@@ -9,7 +9,7 @@ use super::{
     ty::{TyObj, Typed},
 };
 use crate::{
-    core::parse::ParseErrorKind, parse_error, support::storage::ArenaPtr, token, Parse,
+    core::parse::ParseErrorKind, parse_error, support::storage::ArenaPtr, token_wildcard, Parse,
     ParseResult, Print, PrintResult, PrintState, Region, RunVerifiers, VerificationResult, Verify,
 };
 
@@ -173,7 +173,7 @@ impl Parse for Value {
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let name_token = state.stream.consume()?;
         let self_ptr = if let TokenKind::ValueName(name) = &name_token.kind {
-            let name = name.clone().unwrap();
+            let name = name.clone();
             // try to get the value by name, or reserve a new one.
             let self_ptr = ctx
                 .value_names
@@ -201,7 +201,7 @@ impl Parse for Value {
         } else {
             return parse_error!(
                 name_token.span,
-                ParseErrorKind::InvalidToken(vec![token!("%...")].into(), name_token.kind)
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("%...")].into(), name_token.kind)
             )
             .into();
         };

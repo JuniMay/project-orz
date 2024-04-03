@@ -6,9 +6,9 @@ use syn::spanned::Spanned;
 
 use crate::op::{FieldIdent, IndexKind, OpDeriveInfo, OpFieldMeta, RegionMeta};
 
-/// A format token is embraced by `{}` or just a tokenizer-compatible
-/// character/str.
-/// [`TokenStream`](orzir_core::TokenStream).
+/// A format token is embraced by `{}` or just a tokenizer-compatible delimiter.
+///
+/// Other tokenized strings are not supported yet.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum FormatToken {
     Field(String),
@@ -37,16 +37,23 @@ impl FormatToken {
 
     /// if this is an ident or an arrow, return a rust string literal, otherwise
     /// return a rust char literal.
-    fn to_string_or_char(&self) -> TokenStream {
+    fn to_token(&self) -> TokenStream {
         match self {
             Self::Delimiter(delimiter) => {
-                let delimiter = delimiter.as_str();
-                quote! { #delimiter }
+                if delimiter.len() == 1 {
+                    let ch = delimiter.chars().next().unwrap();
+                    quote! { ::orzir_core::TokenKind::Char(#ch) }
+                } else if delimiter == "->" {
+                    quote! { ::orzir_core::TokenKind::Arrow }
+                } else {
+                    unreachable!("invalid delimiter {}", delimiter);
+                }
             }
-            _ => unreachable!("should not convert field to string"),
+            _ => unreachable!("should not convert field to token"),
         }
     }
 
+    /// Generate the print statements for a delimiter.
     #[allow(clippy::let_and_return)]
     fn generate_printer(&self) -> TokenStream {
         match self {
@@ -86,6 +93,7 @@ impl FormatToken {
     }
 }
 
+/// The format pattern.
 struct FormatPattern {
     tokens: Vec<FormatToken>,
 }
@@ -100,15 +108,22 @@ impl FormatPattern {
     }
 }
 
+/// The format kind.
+///
+/// TODO: This can be determined be examine the `derive` attribute.
 enum FormatKind {
     Op,
     Ty,
     Other,
 }
 
+/// The format meta for the struct.
 struct FormatMeta {
+    /// The format pattern.
     pattern: FormatPattern,
+    /// The format kind.
     kind: FormatKind,
+    /// The number of results, if this is an operation.
     num_results: Option<usize>,
 }
 
@@ -158,9 +173,13 @@ impl syn::parse::Parse for FormatMeta {
     }
 }
 
+/// The repeat meta for the field.
 struct RepeatMeta {
+    /// The separator.
     sep: Option<FormatToken>,
+    /// The leading delimiter.
     leading: Option<FormatToken>,
+    /// The trailing delimiter.
     trailing: Option<FormatToken>,
 }
 
@@ -209,6 +228,7 @@ impl syn::parse::Parse for RepeatMeta {
     }
 }
 
+/// The format information for the struct.
 struct FormatInfo {
     meta: FormatMeta,
     repeats: HashMap<FieldIdent, RepeatMeta>,
@@ -254,16 +274,19 @@ impl FormatInfo {
     }
 }
 
+/// Generate the parser for a repeat pattern.
 fn generate_repeat_parser(
     field_ident: &FieldIdent,
     op_field_meta: &OpFieldMeta,
     repeat_meta: &RepeatMeta,
 ) -> syn::Result<TokenStream> {
+    // field ident will be assigned with the parsed value.
     let field_ident = match field_ident {
         FieldIdent::Ident(field_ident) => syn::Ident::new(field_ident, Span::call_site()),
         FieldIdent::Index(idx) => syn::Ident::new(&format!("arg_{}", idx), Span::call_site()),
     };
 
+    // generate the basic parse stmt.
     let parse_stmts = match op_field_meta {
         OpFieldMeta::Metadata => unreachable!("should not parse metadata field"),
         OpFieldMeta::Region(RegionMeta { index, kind }) => {
@@ -343,11 +366,11 @@ fn generate_repeat_parser(
     };
 
     let parse_stmts = if let Some(sep) = &repeat_meta.sep {
-        let sep_token = sep.to_string_or_char();
+        let sep_token = sep.to_token();
         quote! {
             #parse_stmts
 
-            if let ::orzir_core::token!(#sep_token) = __state.stream.peek()?.kind {
+            if let #sep_token = __state.stream.peek()?.kind {
                 __state.stream.consume()?;
             } else {
                 break;
@@ -358,17 +381,17 @@ fn generate_repeat_parser(
     };
 
     let output = if let Some(trailing) = &repeat_meta.trailing {
-        let trailing_token = trailing.to_string_or_char();
+        let trailing_token = trailing.to_token();
         quote! {
             let mut #field_ident = Vec::new();
             let mut __idx = 0;
             loop {
-                if let ::orzir_core::token!(#trailing_token) = __state.stream.peek()?.kind {
+                if let #trailing_token = __state.stream.peek()?.kind {
                     break;
                 }
                 #parse_stmts
             }
-            __state.stream.expect(::orzir_core::token!(#trailing_token))?;
+            __state.stream.expect(#trailing_token)?;
         }
     } else {
         quote! {
@@ -381,9 +404,9 @@ fn generate_repeat_parser(
     };
 
     let output = if let Some(leading) = &repeat_meta.leading {
-        let leading_token = leading.to_string_or_char();
+        let leading_token = leading.to_token();
         quote! {
-            __state.stream.expect(::orzir_core::token!(#leading_token))?;
+            __state.stream.expect(#leading_token)?;
             #output
         }
     } else {
@@ -393,6 +416,7 @@ fn generate_repeat_parser(
     Ok(output)
 }
 
+/// Generat a printer for repeat pattern.
 fn generate_repeat_printer(
     field_ident: &FieldIdent,
     op_field_meta: &OpFieldMeta,
@@ -624,17 +648,29 @@ fn generate_field_printer(
                 let print_stmts = match op_field_meta {
                     OpFieldMeta::Region(RegionMeta { .. }) => {
                         quote! {
-                            <::orzir_core::Region as ::orzir_core::Print>::print(#field.deref(&__ctx.regions), __ctx, __state)?;
+                            <::orzir_core::Region as ::orzir_core::Print>::print(
+                                #field.deref(&__ctx.regions),
+                                __ctx,
+                                __state
+                            )?;
                         }
                     }
                     OpFieldMeta::Result(_) | OpFieldMeta::Operand(_) => {
                         quote! {
-                            <::orzir_core::Value as ::orzir_core::Print>::print(#field.deref(&__ctx.values), __ctx, __state)?;
+                            <::orzir_core::Value as ::orzir_core::Print>::print(
+                                #field.deref(&__ctx.values),
+                                __ctx,
+                                __state
+                            )?;
                         }
                     }
                     OpFieldMeta::Successor(_) => {
                         quote! {
-                            <::orzir_core::Successor as ::orzir_core::Print>::print(&#field, __ctx, __state)?;
+                            <::orzir_core::Successor as ::orzir_core::Print>::print(
+                                &#field,
+                                __ctx,
+                                __state
+                            )?;
                         }
                     }
                     _ => unreachable!(),
@@ -704,9 +740,9 @@ fn generate_parser(
                 parse_stmts.extend(field_parser);
             }
             FormatToken::Delimiter(_) => {
-                let delimiter_token = token.to_string_or_char();
+                let delimiter_token = token.to_token();
                 parse_stmts.extend(quote! {
-                    __state.stream.expect(::orzir_core::token!(#delimiter_token))?;
+                    __state.stream.expect(#delimiter_token)?;
                 });
             }
         }
@@ -735,21 +771,21 @@ fn generate_parser(
         } else {
             epilogue.extend(quote! {
                 let mut __tys = Vec::new();
-                __state.stream.expect(::orzir_core::token!(':'))?;
+                __state.stream.expect(::orzir_core::TokenKind::Char(':'))?;
                 let __trailing_start_pos = __state.stream.curr_pos()?;
 
-                if let ::orzir_core::token!('(') = __state.stream.peek()?.kind {
+                if let ::orzir_core::TokenKind::Char('(') = __state.stream.peek()?.kind {
                     __state.stream.consume()?;
                     loop {
                         let __ty = <::orzir_core::TyObj as ::orzir_core::Parse>::parse(__ctx, __state)?;
                         __tys.push(__ty);
-                        if let ::orzir_core::token!(',') = __state.stream.peek()?.kind {
+                        if let ::orzir_core::TokenKind::Char(',') = __state.stream.peek()?.kind {
                             __state.stream.consume()?;
                         } else {
                             break;
                         }
                     }
-                    __state.stream.expect(::orzir_core::token!(')'))?;
+                    __state.stream.expect(::orzir_core::TokenKind::Char(')'))?;
                 } else {
                     let __ty = <::orzir_core::TyObj as ::orzir_core::Parse>::parse(__ctx, __state)?;
                     __tys.push(__ty);
@@ -762,7 +798,10 @@ fn generate_parser(
                     if __tys.len() != #num {
                         return ::orzir_core::parse_error!(
                             ::orzir_core::Span::new(__trailing_start_pos, __trailing_end_pos),
-                            ::orzir_core::ParseErrorKind::InvalidTrailingTypeNumber(#num, __tys.len())
+                            ::orzir_core::ParseErrorKind::InvalidTrailingTypeNumber(
+                                #num,
+                                __tys.len()
+                            )
                         )
                         .into();
                     }
@@ -774,7 +813,10 @@ fn generate_parser(
                         }
                         return ::orzir_core::parse_error!(
                             __span,
-                            ::orzir_core::ParseErrorKind::InvalidResultNumber(#num, __result_names.len())
+                            ::orzir_core::ParseErrorKind::InvalidResultNumber(
+                                #num,
+                                __result_names.len()
+                            )
                         )
                         .into();
                     }
@@ -788,7 +830,10 @@ fn generate_parser(
                         }
                         return ::orzir_core::parse_error!(
                             __span,
-                            ::orzir_core::ParseErrorKind::InvalidResultNumber(__tys.len(), __result_names.len())
+                            ::orzir_core::ParseErrorKind::InvalidResultNumber(
+                                __tys.len(),
+                                __result_names.len()
+                            )
                         )
                         .into();
                     }
@@ -799,7 +844,13 @@ fn generate_parser(
                 quote! {
                     let mut __results = Vec::new();
                     for (__idx, (__name, __ty)) in __result_names.drain(..).zip(__tys.drain(..)).enumerate() {
-                        let __result = ::orzir_core::Value::new_op_result(__ctx, __ty, __op, __idx, Some(__name.unwrap_value_name()));
+                        let __result = ::orzir_core::Value::new_op_result(
+                            __ctx,
+                            __ty,
+                            __op,
+                            __idx,
+                            Some(__name.unwrap_value_name())
+                        );
                         __results.push(__result);
                     }
                 }
@@ -892,7 +943,10 @@ fn generate_parser(
             impl ::orzir_core::Parse for #struct_ident {
                 type Item = ::orzir_core::ArenaPtr<::orzir_core::OpObj>;
 
-                fn parse(__ctx: &mut ::orzir_core::Context, __state: &mut ::orzir_core::ParseState) -> ::orzir_core::ParseResult<Self::Item> {
+                fn parse(
+                    __ctx: &mut ::orzir_core::Context,
+                    __state: &mut ::orzir_core::ParseState
+                ) -> ::orzir_core::ParseResult<Self::Item> {
                     #parse_stmts
                 }
             }
@@ -927,7 +981,10 @@ fn generate_parser(
             impl ::orzir_core::Parse for #struct_ident {
                 type Item = ::orzir_core::ArenaPtr<::orzir_core::TyObj>;
 
-                fn parse(__ctx: &mut ::orzir_core::Context, __state: &mut ::orzir_core::ParseState) -> ::orzir_core::ParseResult<Self::Item> {
+                fn parse(
+                    __ctx: &mut ::orzir_core::Context,
+                    __state: &mut ::orzir_core::ParseState
+                ) -> ::orzir_core::ParseResult<Self::Item> {
                     #parse_stmts
                 }
             }
@@ -972,7 +1029,10 @@ fn generate_parser(
             impl ::orzir_core::Parse for #struct_ident {
                 type Item = Self;
 
-                fn parse(__ctx: &mut ::orzir_core::Context, __state: &mut ::orzir_core::ParseState) -> ::orzir_core::ParseResult<Self::Item> {
+                fn parse(
+                    __ctx: &mut ::orzir_core::Context,
+                    __state: &mut ::orzir_core::ParseState
+                ) -> ::orzir_core::ParseResult<Self::Item> {
                     #parse_stmts
                 }
             }
@@ -1031,7 +1091,11 @@ fn generate_printer(
                 }
 
                 for (__idx, __ty) in __result_tys.iter().enumerate() {
-                    <::orzir_core::TyObj as ::orzir_core::Print>::print(__ty.deref(&__ctx.tys), __ctx, __state)?;
+                    <::orzir_core::TyObj as ::orzir_core::Print>::print(
+                        __ty.deref(&__ctx.tys),
+                        __ctx,
+                        __state
+                    )?;
                     if __idx + 1 < __result_tys.len() {
                         write!(__state.buffer, ", ")?;
                     }
@@ -1051,7 +1115,11 @@ fn generate_printer(
 
     let print_stmts = quote! {
         impl ::orzir_core::Print for #struct_ident {
-            fn print(&self, __ctx: &::orzir_core::Context, __state: &mut ::orzir_core::PrintState) -> ::orzir_core::PrintResult<()> {
+            fn print(
+                &self,
+                __ctx: &::orzir_core::Context,
+                __state: &mut ::orzir_core::PrintState
+            ) -> ::orzir_core::PrintResult<()> {
                 #print_stmts
             }
         }

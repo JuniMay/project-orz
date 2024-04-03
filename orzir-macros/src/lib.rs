@@ -172,10 +172,8 @@ pub fn derive_data_flow(item: TokenStream) -> TokenStream {
 
 /// Derive the `Parse` trait for the given operation.
 ///
-/// This support very simple grammar and only for operations, for more complex
-/// grammar, the trait can be implemented manually.
-///
-/// TODO: The parsing process is yet crappy and need to be improved.
+/// This support very simple grammar, for more complex grammar, the trait can be
+/// implemented manually.
 #[proc_macro_derive(Parse, attributes(format, repeat))]
 pub fn derive_parse(item: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(item as syn::DeriveInput);
@@ -186,12 +184,24 @@ pub fn derive_parse(item: TokenStream) -> TokenStream {
 
 /// Derive the `Print` trait for the given operation.
 ///
-/// This support very simple grammar and only for operations, for more complex
-/// grammar, the trait can be implemented manually.
+/// This support very simple grammar, for more complex grammar, the trait can be
+/// implemented manually.
 #[proc_macro_derive(Print, attributes(format, repeat))]
 pub fn derive_print(item: TokenStream) -> TokenStream {
     let ast = syn::parse_macro_input!(item as syn::DeriveInput);
     format::derive_print_impl(&ast)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
+}
+
+#[proc_macro_derive(Verify)]
+pub fn derive_verify(item: TokenStream) -> TokenStream {
+    let ast = syn::parse_macro_input!(item as syn::DeriveInput);
+    let ident = ast.ident;
+
+    let output = quote::quote! {
+        impl ::orzir_core::Verify for #ident {}
+    };
+
+    output.into()
 }

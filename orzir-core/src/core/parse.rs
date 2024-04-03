@@ -5,14 +5,18 @@
 //! use a simple tokenizer and only support a closed-set of tokens.
 
 use std::{
-    cmp, fmt,
+    cmp,
+    fmt::{self, Write},
     io::{Cursor, Read},
 };
 
 use thiserror::Error;
 
 use super::context::Context;
-use crate::{parse_error, support::error::ParseResult, ArenaPtr, Block, OpObj, Region, RegionKind};
+use crate::{
+    parse_error, support::error::ParseResult, ArenaPtr, Block, OpObj, Print, PrintResult,
+    PrintState, Region, RegionKind,
+};
 
 /// The position in the source code.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -99,10 +103,6 @@ impl Span {
 }
 
 /// A token kind.
-///
-/// For identifiers, if the inner string is None, the token is a wildcard, which
-/// can match any identifier, and should not be produced by the tokenizer and
-/// can just be unwrapped in the parsers.
 #[derive(Clone, PartialEq, Eq)]
 pub enum TokenKind {
     /// A character
@@ -116,104 +116,42 @@ pub enum TokenKind {
     /// `->`
     Arrow,
     /// A block label starting with `^`.
-    BlockLabel(Option<String>),
+    BlockLabel(String),
     /// A block name starting with `%`.
-    ValueName(Option<String>),
+    ValueName(String),
     /// A type alias starting with `!`.
     ///
     /// This is the same with MLIR, but not used yet.
-    TyAlias(Option<String>),
+    TyAlias(String),
     /// A symbol name starting with `@`.
-    SymbolName(Option<String>),
+    SymbolName(String),
     /// Other tokenized string.
     ///
     /// This represents contiguous alphanumeric or with `_`, `.` characters. And
     /// if the string is quoted, there can be escape sequences. This may also
     /// represent numbers, but the parsing process is up to the parser.
-    Tokenized(Option<String>),
+    Tokenized(String),
     /// End of file.
     Eof,
+
+    /// The wildcard for block label
+    AnyBlockLabel,
+    /// The wildcard for value name
+    AnyValueName,
+    /// The wildcard for type alias
+    AnyTyAlias,
+    /// The wildcard for symbol name
+    AnySymbolName,
+    /// The wildcard for any tokenized string.
+    AnyTokenized,
 }
 
-/// Shortcut for the token kind.
-///
-/// This does not support specifying the inner string for the identifier kinds.
+/// Shortcut to get the [TokenKind] for a delimiter.
 #[macro_export]
-macro_rules! token {
-    // char
-    ("...") => {
-        $crate::TokenKind::Tokenized(None)
-    };
-    ("^...") => {
-        $crate::TokenKind::BlockLabel(None)
-    };
-    ("%...") => {
-        $crate::TokenKind::ValueName(None)
-    };
-    ("!...") => {
-        $crate::TokenKind::TyAlias(None)
-    };
-    ("@...") => {
-        $crate::TokenKind::SymbolName(None)
-    };
+macro_rules! delimiter {
     ("->") => {
         $crate::TokenKind::Arrow
     };
-    (":") => {
-        $crate::TokenKind::Char(':')
-    };
-    ("=") => {
-        $crate::TokenKind::Char('=')
-    };
-    ("(") => {
-        $crate::TokenKind::Char('(')
-    };
-    (")") => {
-        $crate::TokenKind::Char(')')
-    };
-    ("{") => {
-        $crate::TokenKind::Char('{')
-    };
-    ("}") => {
-        $crate::TokenKind::Char('}')
-    };
-    ("[") => {
-        $crate::TokenKind::Char('[')
-    };
-    ("]") => {
-        $crate::TokenKind::Char(']')
-    };
-    ("<") => {
-        $crate::TokenKind::Char('<')
-    };
-    (">") => {
-        $crate::TokenKind::Char('>')
-    };
-    (",") => {
-        $crate::TokenKind::Char(',')
-    };
-    (";") => {
-        $crate::TokenKind::Char(';')
-    };
-    ("*") => {
-        $crate::TokenKind::Char('*')
-    };
-    ("-") => {
-        $crate::TokenKind::Char('-')
-    };
-    ("^") => {
-        $crate::TokenKind::Char('^')
-    };
-    ("%") => {
-        $crate::TokenKind::Char('%')
-    };
-    ("!") => {
-        $crate::TokenKind::Char('!')
-    };
-    ("@") => {
-        $crate::TokenKind::Char('@')
-    };
-
     (':') => {
         $crate::TokenKind::Char(':')
     };
@@ -268,9 +206,26 @@ macro_rules! token {
     ('@') => {
         $crate::TokenKind::Char('@')
     };
+}
 
-    ($s:literal) => {
-        $crate::TokenKind::Tokenized(Some($s.into()))
+/// Shortcut to get the [TokenKind] for a wildcard identifier.
+#[macro_export]
+macro_rules! token_wildcard {
+    // char
+    ("...") => {
+        $crate::TokenKind::AnyTokenized
+    };
+    ("^...") => {
+        $crate::TokenKind::AnyBlockLabel
+    };
+    ("%...") => {
+        $crate::TokenKind::AnyValueName
+    };
+    ("!...") => {
+        $crate::TokenKind::AnyTyAlias
+    };
+    ("@...") => {
+        $crate::TokenKind::AnySymbolName
     };
 }
 
@@ -278,22 +233,20 @@ impl TokenKind {
     /// Check if this token kind is compatible with the other.
     pub fn is_compatible(&self, other: &Self) -> bool {
         match (self, other) {
-            // concrete characters, no wildcard
             (TokenKind::Char(ch_0), TokenKind::Char(ch_1)) => ch_0 == ch_1,
             (TokenKind::Arrow, TokenKind::Arrow) => true,
-            // wildcard, if this is none, the other can be any.
-            (TokenKind::BlockLabel(None), TokenKind::BlockLabel(_)) => true,
-            (TokenKind::ValueName(None), TokenKind::ValueName(_)) => true,
-            (TokenKind::TyAlias(None), TokenKind::TyAlias(_)) => true,
-            (TokenKind::SymbolName(None), TokenKind::SymbolName(_)) => true,
-            (TokenKind::Tokenized(None), TokenKind::Tokenized(_)) => true,
-            (TokenKind::Eof, TokenKind::Eof) => true,
-            // if this is not none, the other should be the same.
             (TokenKind::BlockLabel(s_0), TokenKind::BlockLabel(s_1)) => s_0 == s_1,
             (TokenKind::ValueName(s_0), TokenKind::ValueName(s_1)) => s_0 == s_1,
             (TokenKind::TyAlias(s_0), TokenKind::TyAlias(s_1)) => s_0 == s_1,
             (TokenKind::SymbolName(s_0), TokenKind::SymbolName(s_1)) => s_0 == s_1,
             (TokenKind::Tokenized(s_0), TokenKind::Tokenized(s_1)) => s_0 == s_1,
+            (TokenKind::Eof, TokenKind::Eof) => true,
+            // wildcard, the rhs can be any.
+            (TokenKind::AnyBlockLabel, TokenKind::BlockLabel(_)) => true,
+            (TokenKind::AnyValueName, TokenKind::ValueName(_)) => true,
+            (TokenKind::AnyTyAlias, TokenKind::TyAlias(_)) => true,
+            (TokenKind::AnySymbolName, TokenKind::SymbolName(_)) => true,
+            (TokenKind::AnyTokenized, TokenKind::Tokenized(_)) => true,
             _ => false,
         }
     }
@@ -304,18 +257,17 @@ impl fmt::Display for TokenKind {
         match self {
             TokenKind::Char(c) => write!(f, "`{}`", c),
             TokenKind::Arrow => write!(f, "`->`"),
-            TokenKind::BlockLabel(s) => {
-                write!(f, "`^{}`", if let Some(s) = s { s } else { "..." })
-            }
-            TokenKind::ValueName(s) => {
-                write!(f, "`%{}`", if let Some(s) = s { s } else { "..." })
-            }
-            TokenKind::TyAlias(s) => write!(f, "`!{}`", if let Some(s) = s { s } else { "..." }),
-            TokenKind::SymbolName(s) => {
-                write!(f, "`@{}`", if let Some(s) = s { s } else { "`@...`" })
-            }
-            TokenKind::Tokenized(s) => write!(f, "`{}`", if let Some(s) = s { s } else { "..." }),
+            TokenKind::BlockLabel(s) => write!(f, "`^{}`", s),
+            TokenKind::ValueName(s) => write!(f, "`%{}`", s),
+            TokenKind::TyAlias(s) => write!(f, "`!{}`", s),
+            TokenKind::SymbolName(s) => write!(f, "`@{}`", s),
+            TokenKind::Tokenized(s) => write!(f, "`{}`", s),
             TokenKind::Eof => write!(f, "EOF"),
+            TokenKind::AnyBlockLabel => write!(f, "`^...`"),
+            TokenKind::AnyValueName => write!(f, "`%...`"),
+            TokenKind::AnyTyAlias => write!(f, "`!...`"),
+            TokenKind::AnySymbolName => write!(f, "`@...`"),
+            TokenKind::AnyTokenized => write!(f, "`...`"),
         }
     }
 }
@@ -338,7 +290,7 @@ impl Token {
     pub fn is_eof(&self) -> bool { matches!(self.kind, TokenKind::Eof) }
 
     pub fn unwrap_block_label(&self) -> String {
-        if let TokenKind::BlockLabel(Some(s)) = &self.kind {
+        if let TokenKind::BlockLabel(s) = &self.kind {
             s.clone()
         } else {
             panic!("not a block label");
@@ -346,7 +298,7 @@ impl Token {
     }
 
     pub fn unwrap_value_name(&self) -> String {
-        if let TokenKind::ValueName(Some(s)) = &self.kind {
+        if let TokenKind::ValueName(s) = &self.kind {
             s.clone()
         } else {
             panic!("not a value name");
@@ -354,7 +306,7 @@ impl Token {
     }
 
     pub fn unwrap_ty_alias(&self) -> String {
-        if let TokenKind::TyAlias(Some(s)) = &self.kind {
+        if let TokenKind::TyAlias(s) = &self.kind {
             s.clone()
         } else {
             panic!("not a type alias");
@@ -362,7 +314,7 @@ impl Token {
     }
 
     pub fn unwrap_symbol_name(&self) -> String {
-        if let TokenKind::SymbolName(Some(s)) = &self.kind {
+        if let TokenKind::SymbolName(s) = &self.kind {
             s.clone()
         } else {
             panic!("not a symbol name");
@@ -370,7 +322,7 @@ impl Token {
     }
 
     pub fn unwrap_tokenized(&self) -> String {
-        if let TokenKind::Tokenized(Some(s)) = &self.kind {
+        if let TokenKind::Tokenized(s) = &self.kind {
             s.clone()
         } else {
             panic!("not a tokenized string");
@@ -378,42 +330,12 @@ impl Token {
     }
 }
 
-/// A simple reader.
-///
-/// This reader accespts a slice of string and read the characters one by one.
-/// Note that UTF-8 characters are not supported yet.
-pub(self) struct SliceReader<'a> {
-    cursor: Cursor<&'a str>,
-}
-
-impl<'a> SliceReader<'a> {
-    fn new(slice: &'a str) -> Self {
-        Self {
-            cursor: Cursor::new(slice),
-        }
-    }
-
-    /// Read a character from the reader.
-    fn read_char(&mut self) -> Option<char> {
-        // only support ascii characters
-        let mut buf = [0; 1];
-        match self.cursor.read(&mut buf) {
-            Ok(0) => None,
-            Ok(_) => Some(buf[0] as char),
-            Err(_) => None,
-        }
-    }
-
-    /// Rollback the reader to the given position.
-    fn rollback(&mut self, pos: &Pos) { self.cursor.set_position(pos.offset); }
-}
-
 /// A tokenizer for the IR program.
 ///
 /// This is used for the [Parse] trait to parse the IR program.
 pub struct TokenStream<'a> {
     /// The reader to populate the characters.
-    reader: SliceReader<'a>,
+    reader: Cursor<&'a str>,
     /// The buffered character for peeking.
     buffered_char: Option<char>,
     /// The buffered token for peeking.
@@ -440,12 +362,14 @@ impl<T> From<Vec<T>> for ExpectedList<T> {
 
 impl<T: fmt::Display> fmt::Display for ExpectedList<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
         for (i, item) in self.0.iter().enumerate() {
             if i > 0 {
                 write!(f, ", ")?;
             }
             write!(f, "{}", item)?;
         }
+        write!(f, "]")?;
         Ok(())
     }
 }
@@ -477,7 +401,7 @@ pub enum ParseErrorKind {
 impl<'a> TokenStream<'a> {
     pub fn new(slice: &'a str) -> Self {
         Self {
-            reader: SliceReader::new(slice),
+            reader: Cursor::new(slice),
             buffered_char: None,
             buffered_token: None,
             curr_pos: Pos::new(),
@@ -494,7 +418,14 @@ impl<'a> TokenStream<'a> {
         if let Some(ch) = self.buffered_char {
             return Some(ch);
         }
-        let ch = self.reader.read_char();
+
+        let mut buf = [0; 1];
+        let ch = match self.reader.read(&mut buf) {
+            Ok(0) => None,
+            Ok(_) => Some(buf[0] as char),
+            Err(_) => None,
+        };
+
         self.buffered_char = ch;
         ch
     }
@@ -605,7 +536,7 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('^')
                 } else {
-                    TokenKind::BlockLabel(Some(s))
+                    TokenKind::BlockLabel(s)
                 }
             }
             Some('%') => {
@@ -614,7 +545,7 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('%')
                 } else {
-                    TokenKind::ValueName(Some(s))
+                    TokenKind::ValueName(s)
                 }
             }
             Some('!') => {
@@ -623,7 +554,7 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('!')
                 } else {
-                    TokenKind::TyAlias(Some(s))
+                    TokenKind::TyAlias(s)
                 }
             }
             Some('@') => {
@@ -632,7 +563,7 @@ impl<'a> TokenStream<'a> {
                 if s.is_empty() {
                     TokenKind::Char('@')
                 } else {
-                    TokenKind::SymbolName(Some(s))
+                    TokenKind::SymbolName(s)
                 }
             }
             Some('-') => {
@@ -649,7 +580,7 @@ impl<'a> TokenStream<'a> {
                 self.consume_char();
                 TokenKind::Char(c)
             }
-            Some(_) => TokenKind::Tokenized(Some(self.handle_identifier()?)),
+            Some(_) => TokenKind::Tokenized(self.handle_identifier()?),
             None => TokenKind::Eof,
         };
 
@@ -681,7 +612,7 @@ impl<'a> TokenStream<'a> {
     pub fn rollback(&mut self) {
         self.curr_pos = self.ckpts.pop().unwrap();
         self.peeked_pos = self.curr_pos;
-        self.reader.rollback(&self.curr_pos);
+        self.reader.set_position(self.curr_pos.offset);
         self.buffered_char = None;
         self.buffered_token = None;
     }
@@ -887,6 +818,33 @@ impl<T: Parse> Parse for Option<T> {
     }
 }
 
+impl Parse for usize {
+    type Item = usize;
+
+    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        if let TokenKind::Tokenized(s) = token.kind {
+            let value = s
+                .parse::<usize>()
+                .map_err(|e| parse_error!(token.span, e))?;
+            Ok(value)
+        } else {
+            parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
+            )
+            .into()
+        }
+    }
+}
+
+impl Print for usize {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
+        write!(state.buffer, "{}", self)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{TokenKind, TokenStream};
@@ -899,17 +857,17 @@ mod tests {
         let pos1 = stream.peek().unwrap().span.start;
         assert_eq!(
             stream.consume().unwrap().kind,
-            TokenKind::Tokenized(Some("aaaa".into()))
+            TokenKind::Tokenized("aaaa".into())
         );
         assert_eq!(
             stream.consume().unwrap().kind,
-            TokenKind::Tokenized(Some("b".into()))
+            TokenKind::Tokenized("b".into())
         );
         stream.rollback();
         let pos2 = stream.peek().unwrap().span.start;
         assert_eq!(
             stream.consume().unwrap().kind,
-            TokenKind::Tokenized(Some("aaaa".into()))
+            TokenKind::Tokenized("aaaa".into())
         );
 
         assert_eq!(pos0, pos1);

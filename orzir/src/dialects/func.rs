@@ -4,7 +4,7 @@ use orzir_core::{
     ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Region, RegionInterface, RegionKind,
     RunVerifiers, TyObj, Value, VerificationResult, Verify,
 };
-use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 
 use super::builtin::Symbol;
 use crate::verifiers::{control_flow::*, *};
@@ -43,7 +43,7 @@ impl Verify for FuncOp {
 /// A return operation.
 ///
 /// This represents a return statement in a function.
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "func.return"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, IsTerminator)]
 #[format(pattern = "{operands}", kind = "op", num_results = 0)]
@@ -56,12 +56,10 @@ pub struct ReturnOp {
     operands: Vec<ArenaPtr<Value>>,
 }
 
-impl Verify for ReturnOp {}
-
 /// A direct call operation.
 ///
 /// This represents a direct call to a function by the symbol.
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "func.call"]
 #[verifiers(VariadicResults, VariadicOperands, NumRegions<0>)]
 #[format(pattern = "{callee} {operands}", kind = "op")]
@@ -78,8 +76,6 @@ pub struct CallOp {
     /// The symbol of the callee.
     callee: Symbol,
 }
-
-impl Verify for CallOp {}
 
 /// Register the `func` dialect.
 pub fn register(ctx: &mut Context) {

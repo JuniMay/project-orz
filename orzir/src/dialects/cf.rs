@@ -1,14 +1,14 @@
 use std::fmt::Write;
 
-use orzir_core::{ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Successor, Value, Verify};
-use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
+use orzir_core::{ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Successor, Value};
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 
 use crate::verifiers::{control_flow::*, *};
 
 /// The jump operation.
 ///
 /// This represents an unconditional jump to another block with some arguments.
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "cf.jump"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 #[format(pattern = "{succ}", kind = "op", num_results = 0)]
@@ -20,12 +20,10 @@ pub struct Jump {
     succ: Successor,
 }
 
-impl Verify for Jump {}
-
 /// The branch operation.
 ///
 /// This represents a conditional branch to two different blocks.
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "cf.branch"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
 #[format(
@@ -46,8 +44,6 @@ pub struct Branch {
     #[successor(1)]
     else_succ: Successor,
 }
-
-impl Verify for Branch {}
 
 /// Register the control flow dialect.
 pub fn register(ctx: &mut Context) {

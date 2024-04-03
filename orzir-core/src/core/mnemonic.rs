@@ -1,7 +1,9 @@
 use std::{collections::HashMap, fmt::Write};
 
 use super::parse::{ParseErrorKind, ParseState, TokenKind};
-use crate::{parse_error, token, Context, Parse, ParseResult, Print, PrintResult, PrintState};
+use crate::{
+    parse_error, token_wildcard, Context, Parse, ParseResult, Print, PrintResult, PrintState,
+};
 
 /// A mnemonic segment.
 ///
@@ -79,7 +81,6 @@ impl Parse for Mnemonic {
         match token.kind {
             TokenKind::Tokenized(s) => {
                 // remove the quotes.
-                let s = s.unwrap();
                 let s = if s.starts_with('"') && s.ends_with('"') {
                     &s[1..s.len() - 1]
                 } else {
@@ -99,7 +100,7 @@ impl Parse for Mnemonic {
             }
             _ => parse_error!(
                 token.span,
-                ParseErrorKind::InvalidToken(vec![token!("...")].into(), token.kind)
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
             )
             .into(),
         }

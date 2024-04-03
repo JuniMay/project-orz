@@ -1,12 +1,11 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    parse_error, token, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, ParseErrorKind,
-    ParseResult, ParseState, Print, PrintResult, PrintState, Region, RegionInterface, RegionKind,
-    RunVerifiers, TokenKind, Ty, TyObj, VerificationResult, Verify,
+    delimiter, parse_error, token_wildcard, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
+    ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Region,
+    RegionInterface, RegionKind, RunVerifiers, TokenKind, Ty, TyObj, VerificationResult, Verify,
 };
-use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Ty};
-use thiserror::Error;
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Ty, Verify};
 
 use crate::verifiers::{control_flow::*, *};
 
@@ -23,7 +22,6 @@ impl Parse for Symbol {
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         if let TokenKind::SymbolName(name) = token.kind {
-            let name = name.unwrap();
             let op = state.curr_op();
             // register the symbol
             let region = state.curr_region();
@@ -36,7 +34,7 @@ impl Parse for Symbol {
         } else {
             parse_error!(
                 token.span,
-                ParseErrorKind::InvalidToken(vec![token!("@...")].into(), token.kind)
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("@...")].into(), token.kind)
             )
             .into()
         }
@@ -99,63 +97,27 @@ impl Verify for ModuleOp {
     }
 }
 
-#[derive(Debug, Error)]
-#[error("invalid size literal")]
-struct InvalidSizeLiteral;
-
-#[derive(Debug, Hash, PartialEq, Eq, Ty)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
 #[mnemonic = "builtin.int"]
 #[verifiers(IntegerLikeTy)]
+#[format(pattern = "< {0} >", kind = "ty")]
 pub struct IntTy(usize);
 
 impl Verify for IntTy {}
 
-impl Parse for IntTy {
-    type Item = ArenaPtr<TyObj>;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        state.stream.expect(token!('<'))?;
-        let token = state.stream.consume()?;
-        let size = if let TokenKind::Tokenized(s) = token.kind {
-            s.unwrap()
-                .parse::<usize>()
-                .map_err(|_| parse_error!(token.span, InvalidSizeLiteral))?
-        } else {
-            return parse_error!(
-                token.span,
-                ParseErrorKind::InvalidToken(vec![token!("...")].into(), token.kind)
-            )
-            .into();
-        };
-        state.stream.expect(token!('>'))?;
-        Ok(IntTy::get(ctx, size))
-    }
-}
-
-impl Print for IntTy {
-    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, "<{}>", self.0)?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.float"]
 #[verifiers(FloatLikeTy)]
 #[format(pattern = "", kind = "ty")]
 pub struct FloatTy;
 
-impl Verify for FloatTy {}
-
-#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.double"]
 #[verifiers(FloatLikeTy)]
 #[format(pattern = "", kind = "ty")]
 pub struct DoubleTy;
 
-impl Verify for DoubleTy {}
-
-#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.tuple"]
 #[format(pattern = "{elems}", kind = "ty")]
 pub struct TupleTy {
@@ -163,22 +125,18 @@ pub struct TupleTy {
     elems: Vec<ArenaPtr<TyObj>>,
 }
 
-impl Verify for TupleTy {}
-
-#[derive(Debug, Hash, PartialEq, Eq, Ty)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Verify)]
 #[mnemonic = "builtin.fn"]
 pub struct FunctionTy {
     args: Vec<ArenaPtr<TyObj>>,
     rets: Vec<ArenaPtr<TyObj>>,
 }
 
-impl Verify for FunctionTy {}
-
 impl Parse for FunctionTy {
     type Item = ArenaPtr<TyObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        state.stream.expect(token!('('))?;
+        state.stream.expect(delimiter!('('))?;
         let mut args = Vec::new();
         loop {
             if state.stream.peek()?.kind == TokenKind::Char(')') {
@@ -195,7 +153,7 @@ impl Parse for FunctionTy {
                     return parse_error!(
                         token.span,
                         ParseErrorKind::InvalidToken(
-                            vec![token!(','), token!(')')].into(),
+                            vec![delimiter!(','), delimiter!(')')].into(),
                             token.kind
                         )
                     )
@@ -204,7 +162,7 @@ impl Parse for FunctionTy {
             }
         }
 
-        state.stream.expect(token!("->"))?;
+        state.stream.expect(delimiter!("->"))?;
 
         let mut rets = Vec::new();
         if state.stream.peek()?.kind != TokenKind::Char('(') {
@@ -223,7 +181,7 @@ impl Parse for FunctionTy {
                         return parse_error!(
                             token.span,
                             ParseErrorKind::InvalidToken(
-                                vec![token!(','), token!(')')].into(),
+                                vec![delimiter!(','), delimiter!(')')].into(),
                                 token.kind
                             )
                         )
@@ -263,30 +221,28 @@ impl Print for FunctionTy {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Ty)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Verify)]
 #[mnemonic = "builtin.memref"]
 pub struct MemRefTy {
     shape: Vec<usize>,
     elem: ArenaPtr<TyObj>,
 }
 
-impl Verify for MemRefTy {}
-
 impl Parse for MemRefTy {
     type Item = ArenaPtr<TyObj>;
 
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        state.stream.expect(token!('<'))?;
+        state.stream.expect(delimiter!('<'))?;
         let mut shape = Vec::new();
         let mut elem = None;
         loop {
             let token = state.stream.peek()?;
             match &token.kind {
-                TokenKind::Tokenized(s) if s.as_ref().unwrap() == "x" => {
+                TokenKind::Tokenized(s) if s == "x" => {
                     state.stream.consume()?;
                 }
                 TokenKind::Tokenized(s) => {
-                    let dim = s.as_ref().unwrap().parse::<usize>().ok();
+                    let dim = s.parse::<usize>().ok();
                     if let Some(dim) = dim {
                         state.stream.consume()?;
                         shape.push(dim);
@@ -302,7 +258,12 @@ impl Parse for MemRefTy {
                     return parse_error!(
                         token.span,
                         ParseErrorKind::InvalidToken(
-                            vec![token!("..."), token!('>'), token!("x"),].into(),
+                            vec![
+                                token_wildcard!("..."),
+                                delimiter!('>'),
+                                TokenKind::Tokenized("x".into()),
+                            ]
+                            .into(),
                             token.kind.clone()
                         )
                     )
@@ -328,12 +289,10 @@ impl Print for MemRefTy {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.unit"]
 #[format(pattern = "", kind = "ty")]
 pub struct UnitTy;
-
-impl Verify for UnitTy {}
 
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("builtin".into());

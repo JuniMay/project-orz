@@ -12,12 +12,12 @@ use super::{
 };
 use crate::{
     core::parse::ParseErrorKind,
-    parse_error,
+    delimiter, parse_error,
     support::{
         cast::{CastMut, CastRef},
         storage::ArenaPtr,
     },
-    token, ControlFlow, DataFlow, Parse, ParseResult, Print, PrintResult, PrintState, Region,
+    ControlFlow, DataFlow, Parse, ParseResult, Print, PrintResult, PrintState, Region,
     RegionInterface, Verify,
 };
 
@@ -58,7 +58,6 @@ impl Parse for Successor {
         let token = state.stream.consume()?;
         let region = state.curr_region();
         if let TokenKind::BlockLabel(label) = &token.kind {
-            let label = label.as_ref().unwrap();
             let block = Block::reserve_with_name(ctx, label.clone(), region);
             let mut args = Vec::new();
             if state.stream.consume_if(TokenKind::Char('('))?.is_some() {
@@ -76,7 +75,7 @@ impl Parse for Successor {
                             return parse_error!(
                                 token.span,
                                 ParseErrorKind::InvalidToken(
-                                    vec![token!(')'), token!(',')].into(),
+                                    vec![delimiter!(')'), delimiter!(',')].into(),
                                     token.kind
                                 )
                             )
@@ -275,7 +274,7 @@ impl Parse for OpObj {
                             return parse_error!(
                                 token.span,
                                 ParseErrorKind::InvalidToken(
-                                    vec![token!(','), token!('=')].into(),
+                                    vec![delimiter!(','), delimiter!('=')].into(),
                                     token.kind
                                 )
                             )

@@ -8,8 +8,8 @@ use super::{
     symbol::{NameManager, SymbolTable},
 };
 use crate::{
-    core::parse::TokenKind, support::storage::ArenaPtr, token, Context, Parse, ParseResult, Print,
-    PrintResult, PrintState, RunVerifiers, VerificationResult, Verify,
+    core::parse::TokenKind, delimiter, support::storage::ArenaPtr, Context, Parse, ParseResult,
+    Print, PrintResult, PrintState, RunVerifiers, VerificationResult, Verify,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -123,7 +123,7 @@ impl Parse for Region {
     /// This require the parent operation parser to pass the builder to the
     /// region parser, and set the kind and parent operation.
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        state.stream.expect(token!('{'))?;
+        state.stream.expect(delimiter!('{'))?;
         // build the region at the beginning because the blocks may reference it.
         let (region_kind, index) = state.curr_region_info();
         let parent_op = state.curr_op();

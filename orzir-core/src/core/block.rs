@@ -3,13 +3,13 @@ use std::fmt::Write;
 use super::{layout::OpList, parse::ParseState, symbol::NameAllocDuplicatedErr, value::Value};
 use crate::{
     core::parse::{ParseErrorKind, TokenKind},
-    parse_error,
+    delimiter, parse_error,
     support::{
         error::{PrintResult, VerificationResult},
         storage::ArenaPtr,
     },
-    token, Context, OpObj, Parse, ParseResult, Print, PrintState, Region, RunVerifiers, TyObj,
-    Typed, Verify,
+    token_wildcard, Context, OpObj, Parse, ParseResult, Print, PrintState, Region, RunVerifiers,
+    TyObj, Typed, Verify,
 };
 
 /// The block in the region.
@@ -154,7 +154,6 @@ impl Parse for Block {
             TokenKind::BlockLabel(_) => {
                 let token = state.stream.consume()?;
                 if let TokenKind::BlockLabel(label) = token.kind {
-                    let label = label.unwrap();
                     Block::new(ctx, false, state.curr_region(), Some(label))
                 } else {
                     unreachable!()
@@ -179,10 +178,10 @@ impl Parse for Block {
                                 break;
                             }
                             TokenKind::ValueName(name) => {
-                                let name = name.clone().unwrap();
+                                let name = name.clone();
                                 let _arg = Value::parse(ctx, state)?;
 
-                                state.stream.expect(token!(':'))?;
+                                state.stream.expect(delimiter!(':'))?;
                                 let ty = TyObj::parse(ctx, state)?;
 
                                 let arg =
@@ -193,7 +192,7 @@ impl Parse for Block {
 
                                 if state.stream.consume_if(TokenKind::Char(','))?.is_none() {
                                     // end of the arguments.
-                                    state.stream.expect(token!(')'))?;
+                                    state.stream.expect(delimiter!(')'))?;
                                     break;
                                 }
                             }
@@ -201,7 +200,7 @@ impl Parse for Block {
                                 return parse_error!(
                                     token.span,
                                     ParseErrorKind::InvalidToken(
-                                        vec![token!(')'), token!("%...")].into(),
+                                        vec![delimiter!(')'), token_wildcard!("%...")].into(),
                                         token.kind.clone()
                                     )
                                 )
@@ -209,7 +208,7 @@ impl Parse for Block {
                             }
                         }
                     }
-                    state.stream.expect(token!(':'))?;
+                    state.stream.expect(delimiter!(':'))?;
                 }
                 TokenKind::Char(':') => {
                     // just exit.
@@ -218,7 +217,7 @@ impl Parse for Block {
                     return parse_error!(
                         token.span,
                         ParseErrorKind::InvalidToken(
-                            vec![token!('('), token!(':')].into(),
+                            vec![delimiter!('('), delimiter!(':')].into(),
                             token.kind
                         )
                     )
@@ -250,7 +249,13 @@ impl Parse for Block {
                     return parse_error!(
                         token.span,
                         ParseErrorKind::InvalidToken(
-                            vec![token!("%..."), token!('}'), token!("^..."), token!("...")].into(),
+                            vec![
+                                delimiter!('}'),
+                                token_wildcard!("%..."),
+                                token_wildcard!("^..."),
+                                token_wildcard!("...")
+                            ]
+                            .into(),
                             token.kind.clone()
                         )
                     )

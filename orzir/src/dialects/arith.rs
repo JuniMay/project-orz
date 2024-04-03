@@ -2,10 +2,10 @@ use std::fmt::Write;
 
 use num_bigint::BigInt;
 use orzir_core::{
-    parse_error, token, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, ParseErrorKind,
-    ParseResult, ParseState, Print, PrintResult, PrintState, TokenKind, Value, Verify,
+    parse_error, token_wildcard, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, ParseErrorKind,
+    ParseResult, ParseState, Print, PrintResult, PrintState, TokenKind, Value,
 };
-use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface};
+use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 
 use crate::verifiers::*;
@@ -13,7 +13,7 @@ use crate::verifiers::*;
 /// An integer constant operation.
 ///
 /// This will generate an integer constant with the given value.
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.iconst"]
 #[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
 #[format(pattern = "{value}", kind = "op", num_results = 1)]
@@ -26,8 +26,6 @@ pub struct IConstOp {
     /// The value of the integer constant.
     value: IntLiteral,
 }
-
-impl Verify for IConstOp {}
 
 /// An integer literal.
 ///
@@ -49,7 +47,6 @@ impl Parse for IntLiteral {
         let token = state.stream.consume()?;
 
         let value = if let TokenKind::Tokenized(s) = token.kind {
-            let s = s.unwrap();
             if s == "true" {
                 BigInt::from(1)
             } else if s == "false" {
@@ -70,7 +67,7 @@ impl Parse for IntLiteral {
         } else {
             return parse_error!(
                 token.span,
-                ParseErrorKind::InvalidToken(vec![token!("...")].into(), token.kind)
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
             )
             .into();
         };
@@ -87,7 +84,7 @@ impl Print for IntLiteral {
 }
 
 /// An integer addition operation.
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.iadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
@@ -107,8 +104,6 @@ pub struct IAddOp {
     #[operand(1)]
     rhs: ArenaPtr<Value>,
 }
-
-impl Verify for IAddOp {}
 
 /// Register the `arith` dialect.
 pub fn register(ctx: &mut Context) {
