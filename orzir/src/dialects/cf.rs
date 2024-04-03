@@ -27,8 +27,8 @@ pub struct Jump {
 #[mnemonic = "cf.branch"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
 #[format(
-    pattern = "{cond} , {then_succ} , {else_succ}",
     kind = "op",
+    pattern = "{cond} , {then_succ} , {else_succ}",
     num_results = 0
 )]
 pub struct Branch {

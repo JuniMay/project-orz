@@ -97,13 +97,11 @@ impl Verify for ModuleOp {
     }
 }
 
-#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print)]
+#[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.int"]
 #[verifiers(IntegerLikeTy)]
 #[format(pattern = "< {0} >", kind = "ty")]
 pub struct IntTy(usize);
-
-impl Verify for IntTy {}
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.float"]

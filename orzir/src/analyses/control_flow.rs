@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use orzir_core::{list::ListNode, ArenaPtr, Block, Context, OpObj};
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct CfgNode {
     succs: Vec<ArenaPtr<Block>>,
     preds: Vec<ArenaPtr<Block>>,
@@ -10,7 +10,7 @@ pub struct CfgNode {
 
 /// The control flow graph of a region with
 /// [`RegionKind::SsaCfg`](orzir_core::RegionKind::SsaCfg).
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Cfg {
     nodes: HashMap<ArenaPtr<Block>, CfgNode>,
 }
@@ -97,5 +97,64 @@ impl ControlFlowAnalysis {
             cfgs.insert(region_idx, cfg);
         }
         cfgs
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use orzir_core::{Context, OpObj, Parse, ParseState, TokenStream};
+
+    use super::ControlFlowAnalysis;
+    use crate::dialects::{arith, builtin, cf, func};
+
+    #[test]
+    fn test_cfg() {
+        let src = r#"
+        module {
+            func.func @foo : fn () -> int<32> {
+            ^entry:
+                %a = arith.iconst 123 : int<32>
+                %b = arith.iconst 456 : int<32>
+
+                %cond = arith.iconst true : int<32>
+
+                cf.branch %cond, ^then(%a), ^else(%b)
+
+            ^then(%x: int<32>):
+                cf.jump ^return
+
+            ^else(%y: int<32>):
+                cf.jump ^return
+
+            ^return:
+                func.return %a
+            }
+        }
+        "#;
+
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
+        let mut ctx = Context::default();
+
+        builtin::register(&mut ctx);
+        func::register(&mut ctx);
+        arith::register(&mut ctx);
+        cf::register(&mut ctx);
+
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
+
+        let func_op = op
+            .deref(&ctx.ops)
+            .as_ref()
+            .get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .lookup_symbol(&ctx, "foo")
+            .unwrap();
+
+        let cfa = ControlFlowAnalysis::new(func_op);
+        let cfg = cfa.run(&ctx);
+
+        dbg!(cfg);
     }
 }
