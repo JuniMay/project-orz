@@ -128,6 +128,21 @@ pub struct GlobalOp {
     init: GlobalInit,
 }
 
+/// Get a global slot as an SSA value.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "mem.get_global"]
+#[verifiers(NumResults<1>, NumRegions<0>, NumOperands<0>)]
+#[format(pattern = "{symbol}", kind = "op", num_results = 1)]
+pub struct GetGlobalOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The symbol of the global memory slot.
+    #[result(0)]
+    value: ArenaPtr<Value>,
+    /// The symbol of the global memory slot.
+    symbol: Symbol,
+}
+
 /// Allocate a local memory slot which will be deallocated when the function
 /// returns.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
@@ -187,6 +202,7 @@ pub fn register(ctx: &mut Context) {
     ctx.dialects.insert("mem".into(), dialect);
 
     GlobalOp::register(ctx, GlobalOp::parse);
+    GetGlobalOp::register(ctx, GetGlobalOp::parse);
     AllocaOp::register(ctx, AllocaOp::parse);
     LoadOp::register(ctx, LoadOp::parse);
     StoreOp::register(ctx, StoreOp::parse);
@@ -229,11 +245,15 @@ mod tests {
     fn test_mem_op_2() {
         let src = r#"
         module {
-            mem.global @global_slot : memref<int<32>, [2]> = bytes[ef, be, ad, de, 78, 56, 34, 12]
+            mem.global @global_slot : memref<int<32>, [2]> = bytes[
+                ef, be, ad, de, 
+                78, 56, 34, 12,
+            ]
             mem.global @global_zero : memref<int<32>, [1 * 2 * 3]> = zeroinit
             mem.global @global_undef : memref<int<32>, [114514 * 4]> = undef
 
             func.func @test_mem : fn() -> int<32> {
+                %global_slot = mem.get_global @global_slot : memref<int<32>, [2]>
                 %slot = mem.alloca int<32> : memref<int<32>, [2 * 3 * 4]>
                 cf.jump ^main
             ^main:
