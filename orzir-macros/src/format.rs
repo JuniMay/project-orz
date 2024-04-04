@@ -64,7 +64,11 @@ impl FormatToken {
                     write!(__state.buffer, "{}", #delimiter)?;
                 };
 
-                let output = if delimiter == ":" || delimiter == "->" || delimiter == "*" {
+                let output = if delimiter == ":"
+                    || delimiter == "->"
+                    || delimiter == "*"
+                    || delimiter == "="
+                {
                     quote! {
                         write!(__state.buffer, " ")?;
                         #output
@@ -78,6 +82,7 @@ impl FormatToken {
                     || delimiter == ","
                     || delimiter == ";"
                     || delimiter == "*"
+                    || delimiter == "="
                 {
                     quote! {
                         #output

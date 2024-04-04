@@ -1,9 +1,132 @@
 use std::fmt::Write;
 
-use orzir_core::{ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, TyObj, Value};
+use orzir_core::{
+    delimiter, parse_error, token_wildcard, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
+    ParseErrorKind, Print, PrintResult, PrintState, TokenKind, TyObj, Value,
+};
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 
+use super::builtin::Symbol;
 use crate::verifiers::*;
+
+pub enum GlobalInit {
+    ZeroInit,
+    Undef,
+    Bytes(Vec<u8>),
+}
+
+impl Print for GlobalInit {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
+        match self {
+            GlobalInit::ZeroInit => write!(state.buffer, "zeroinit")?,
+            GlobalInit::Undef => write!(state.buffer, "undef")?,
+            GlobalInit::Bytes(bytes) => {
+                write!(state.buffer, "bytes[")?;
+                for (i, byte) in bytes.iter().enumerate() {
+                    if i != 0 {
+                        write!(state.buffer, ", ")?;
+                    }
+                    // hex
+                    write!(state.buffer, "{:02x}", byte)?;
+                }
+                write!(state.buffer, "]")?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Parse for GlobalInit {
+    type Item = Self;
+
+    fn parse(
+        _: &mut Context,
+        state: &mut orzir_core::ParseState,
+    ) -> orzir_core::ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        match token.kind {
+            TokenKind::Tokenized(ref s) => match s.as_str() {
+                "zeroinit" => Ok(GlobalInit::ZeroInit),
+                "undef" => Ok(GlobalInit::Undef),
+                "bytes" => {
+                    let mut bytes = Vec::new();
+                    state.stream.expect(delimiter!('['))?;
+                    loop {
+                        let token = state.stream.consume()?;
+                        match token.kind {
+                            TokenKind::Tokenized(ref s) => {
+                                // parse as hex
+                                let byte = u8::from_str_radix(s, 16).map_err(|_| {
+                                    parse_error!(
+                                        token.span,
+                                        // TODO: Better error message
+                                        ParseErrorKind::InvalidToken(
+                                            vec![token_wildcard!("...")].into(),
+                                            token.kind
+                                        )
+                                    )
+                                })?;
+                                bytes.push(byte);
+                            }
+                            TokenKind::Char(']') => break,
+                            TokenKind::Char(',') => continue,
+                            _ => {
+                                return parse_error!(
+                                    token.span,
+                                    ParseErrorKind::InvalidToken(
+                                        vec![
+                                            delimiter!(']'),
+                                            delimiter!(','),
+                                            token_wildcard!("...")
+                                        ]
+                                        .into(),
+                                        token.kind
+                                    )
+                                )
+                                .into()
+                            }
+                        }
+                    }
+                    Ok(GlobalInit::Bytes(bytes))
+                }
+                _ => parse_error!(
+                    token.span,
+                    ParseErrorKind::InvalidToken(
+                        vec![
+                            TokenKind::Tokenized("zeroinit".into()),
+                            TokenKind::Tokenized("undef".into()),
+                            TokenKind::Tokenized("bytes".into())
+                        ]
+                        .into(),
+                        token.kind
+                    )
+                )
+                .into(),
+            },
+            _ => parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
+            )
+            .into(),
+        }
+    }
+}
+
+/// Allocate a global memory slot.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "mem.global"]
+#[verifiers(NumResults<0>, NumRegions<0>, NumOperands<0>)]
+#[format(pattern = "{symbol} : {ty} = {init}", kind = "op", num_results = 0)]
+pub struct GlobalOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The symbol of the global memory slot.
+    symbol: Symbol,
+    /// The type of the global memory slot.
+    ty: ArenaPtr<TyObj>,
+    /// The initial value of the global memory slot.
+    init: GlobalInit,
+}
 
 /// Allocate a local memory slot which will be deallocated when the function
 /// returns.
@@ -63,6 +186,7 @@ pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("mem".into());
     ctx.dialects.insert("mem".into(), dialect);
 
+    GlobalOp::register(ctx, GlobalOp::parse);
     AllocaOp::register(ctx, AllocaOp::parse);
     LoadOp::register(ctx, LoadOp::parse);
     StoreOp::register(ctx, StoreOp::parse);
@@ -105,6 +229,10 @@ mod tests {
     fn test_mem_op_2() {
         let src = r#"
         module {
+            mem.global @global_slot : memref<int<32>, [2]> = bytes[ef, be, ad, de, 78, 56, 34, 12]
+            mem.global @global_zero : memref<int<32>, [1 * 2 * 3]> = zeroinit
+            mem.global @global_undef : memref<int<32>, [114514 * 4]> = undef
+
             func.func @test_mem : fn() -> int<32> {
                 %slot = mem.alloca int<32> : memref<int<32>, [2 * 3 * 4]>
                 cf.jump ^main

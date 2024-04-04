@@ -82,43 +82,41 @@ fn derive_struct(
                 artifacts.getter_has_default_arm = true;
                 artifacts.setter_has_default_arm = true;
             }
-            IndexKind::Range(start, end) => {
-                match end {
-                    Some(end) => {
-                        artifacts.num_impl.extend(quote! { + #end - #start });
-                        artifacts
-                            .getter_impl
-                            .extend(quote! { #start..=#end => #field.get(index - #start).copied(), });
-                        artifacts.setter_impl.extend(quote! {
-                            #start..=#end => {
-                                if index > #end {
-                                    panic!("index out of bounds");
-                                }
+            IndexKind::Range(start, end) => match end {
+                Some(end) => {
+                    artifacts.num_impl.extend(quote! { + #end - #start });
+                    artifacts
+                        .getter_impl
+                        .extend(quote! { #start..=#end => #field.get(index - #start).copied(), });
+                    artifacts.setter_impl.extend(quote! {
+                        #start..=#end => {
+                            if index > #end {
+                                panic!("index out of bounds");
+                            }
+                            Some(std::mem::replace(&mut #field[index - #start], value))
+                        }
+                    });
+                }
+                None => {
+                    artifacts.num_impl.extend(quote! { + #field.len() });
+                    artifacts
+                        .getter_impl
+                        .extend(quote! { #start.. => #field.get(index - #start).copied(), });
+                    artifacts.setter_impl.extend(quote! {
+                        #start.. => {
+                            if index - #start > #field.len() {
+                                panic!("index out of bounds");
+                            }
+                            if index - #start == #field.len() {
+                                #field.push(value);
+                                None
+                            } else {
                                 Some(std::mem::replace(&mut #field[index - #start], value))
                             }
-                        });
-                    }
-                    None => {
-                        artifacts.num_impl.extend(quote! { + #field.len() });
-                        artifacts
-                            .getter_impl
-                            .extend(quote! { #start.. => #field.get(index - #start).copied(), });
-                        artifacts.setter_impl.extend(quote! {
-                            #start.. => {
-                                if index - #start > #field.len() {
-                                    panic!("index out of bounds");
-                                }
-                                if index - #start == #field.len() {
-                                    #field.push(value);
-                                    None
-                                } else {
-                                    Some(std::mem::replace(&mut #field[index - #start], value))
-                                }
-                            }
-                        });
-                    }
+                        }
+                    });
                 }
-            }
+            },
             IndexKind::Single(idx) => {
                 artifacts.num_impl.extend(quote! { + 1 });
                 artifacts.getter_impl.extend(quote! {
