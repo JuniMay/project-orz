@@ -197,6 +197,22 @@ pub struct StoreOp {
     indices: Vec<ArenaPtr<Value>>,
 }
 
+/// Casting memory slot types
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "mem.cast"]
+#[verifiers(NumResults<1>, NumRegions<0>, NumOperands<1>)]
+#[format(pattern = "{ptr}", kind = "op", num_results = 1)]
+pub struct CastOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The casted memory slot.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The memory slot to cast.
+    #[operand(0)]
+    ptr: ArenaPtr<Value>,
+}
+
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("mem".into());
     ctx.dialects.insert("mem".into(), dialect);
@@ -206,6 +222,7 @@ pub fn register(ctx: &mut Context) {
     AllocaOp::register(ctx, AllocaOp::parse);
     LoadOp::register(ctx, LoadOp::parse);
     StoreOp::register(ctx, StoreOp::parse);
+    CastOp::register(ctx, CastOp::parse);
 }
 
 #[cfg(test)]
@@ -254,6 +271,8 @@ mod tests {
 
             func.func @test_mem : fn() -> int<32> {
                 %global_slot = mem.get_global @global_slot : memref<int<32>, [2]>
+                %casted_slot = mem.cast %global_slot : memref<int<8>, [8]>
+
                 %slot = mem.alloca int<32> : memref<int<32>, [2 * 3 * 4]>
                 cf.jump ^main
             ^main:
