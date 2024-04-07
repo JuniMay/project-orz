@@ -105,6 +105,50 @@ pub struct IAddOp {
     rhs: ArenaPtr<Value>,
 }
 
+/// An integer subtraction operation.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.isub"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct ISubOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+/// An integer multiplication operation.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.imul"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct IMulOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
 /// Register the `arith` dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("arith".into());
