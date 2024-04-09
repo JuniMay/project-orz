@@ -37,6 +37,8 @@ impl ApUInt {
         }
     }
 
+    pub fn one(width: usize) -> Self { Self::from(1u8).into_resized(width) }
+
     #[inline(always)]
     fn last_chunk_mask(&self) -> ApUIntChunk {
         let bits = self.width % ApUIntChunk::BITS as usize;
@@ -520,6 +522,95 @@ impl std::ops::Rem for ApUInt {
         let lhs = self.into_resized(width);
         let rhs = rhs.into_resized(width);
         lhs.div_rem(rhs).1
+    }
+}
+
+impl std::ops::BitAnd for ApUInt {
+    type Output = Self;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        let width = self.width.max(rhs.width);
+        let lhs = self.into_resized(width);
+        let rhs = rhs.into_resized(width);
+        let mut result = ApUInt::new(width);
+        for ((a, b), r) in lhs
+            .chunks
+            .iter()
+            .zip(rhs.chunks.iter())
+            .zip(result.chunks.iter_mut())
+        {
+            *r = *a & *b;
+        }
+        result
+    }
+}
+
+impl std::ops::BitOr for ApUInt {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        let width = self.width.max(rhs.width);
+        let lhs = self.into_resized(width);
+        let rhs = rhs.into_resized(width);
+        let mut result = ApUInt::new(width);
+        for ((a, b), r) in lhs
+            .chunks
+            .iter()
+            .zip(rhs.chunks.iter())
+            .zip(result.chunks.iter_mut())
+        {
+            *r = *a | *b;
+        }
+        result
+    }
+}
+
+impl std::ops::BitXor for ApUInt {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        let width = self.width.max(rhs.width);
+        let lhs = self.into_resized(width);
+        let rhs = rhs.into_resized(width);
+        let mut result = ApUInt::new(width);
+        for ((a, b), r) in lhs
+            .chunks
+            .iter()
+            .zip(rhs.chunks.iter())
+            .zip(result.chunks.iter_mut())
+        {
+            *r = *a ^ *b;
+        }
+        result
+    }
+}
+
+impl std::ops::Not for ApUInt {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        let mut result = ApUInt::new(self.width);
+        for (r, a) in result.chunks.iter_mut().zip(self.chunks.iter()) {
+            *r = !*a;
+        }
+        // fix the last chunk
+        *result.chunks.last_mut().unwrap() &= result.last_chunk_mask();
+        result
+    }
+}
+
+impl std::ops::Shl<usize> for ApUInt {
+    type Output = Self;
+
+    fn shl(self, shamt: usize) -> Self::Output { self.carrying_shl(shamt).0 }
+}
+
+impl std::ops::Shr<usize> for ApUInt {
+    type Output = Self;
+
+    fn shr(self, shamt: usize) -> Self::Output {
+        let (result, _) = self.overflowing_shr(shamt);
+        result
     }
 }
 
