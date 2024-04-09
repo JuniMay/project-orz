@@ -1,5 +1,8 @@
 use core::fmt;
-use std::cmp::Ordering;
+
+use thiserror::Error;
+
+use crate::{parse_error, token_wildcard, Parse, Print};
 
 pub type ApUIntChunk = u64;
 
@@ -266,6 +269,22 @@ impl ApUInt {
         result
     }
 
+    /// Shrink the integer to a minimum width.
+    pub fn into_shrunk(self) -> Self {
+        let mut apint = self;
+        let mut width = apint.width;
+        while width > 1 && apint.chunks.last().unwrap() == &0 {
+            apint.chunks.pop();
+            width -= ApUIntChunk::BITS as usize;
+        }
+        // check last chunk's leading zeros to calculate the new width
+        let num_chunks = apint.chunks.len();
+        let last_chunk_width = ApUIntChunk::BITS - apint.chunks.last().unwrap().leading_zeros();
+        let new_width = (num_chunks - 1) * ApUIntChunk::BITS as usize + last_chunk_width as usize;
+        apint.width = new_width;
+        apint
+    }
+
     pub fn carrying_mul_chunk(self, chunk: ApUIntChunk) -> (Self, Self) {
         let old_width = self.width;
         self.widening_mul_chunk(chunk).into_truncated(old_width)
@@ -449,9 +468,250 @@ impl Ord for ApUInt {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.partial_cmp(other).unwrap() }
 }
 
+impl std::ops::Add for ApUInt {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let width = self.width.max(rhs.width);
+        let lhs = self.into_resized(width);
+        let rhs = rhs.into_resized(width);
+        lhs.carrying_add(&rhs).0
+    }
+}
+
+impl std::ops::Sub for ApUInt {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        let width = self.width.max(rhs.width);
+        let lhs = self.into_resized(width);
+        let rhs = rhs.into_resized(width);
+        lhs.borrowing_sub(&rhs).0
+    }
+}
+
+impl std::ops::Mul for ApUInt {
+    type Output = Self;
+
+    fn mul(self, rhs: Self) -> Self::Output {
+        let width = self.width.max(rhs.width);
+        let lhs = self.into_resized(width);
+        let rhs = rhs.into_resized(width);
+        lhs.carrying_mul(&rhs).0
+    }
+}
+
+impl std::ops::Div for ApUInt {
+    type Output = Self;
+
+    fn div(self, rhs: Self) -> Self::Output {
+        let width = self.width.max(rhs.width);
+        let lhs = self.into_resized(width);
+        let rhs = rhs.into_resized(width);
+        lhs.div_rem(rhs).0
+    }
+}
+
+impl std::ops::Rem for ApUInt {
+    type Output = Self;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        let width = self.width.max(rhs.width);
+        let lhs = self.into_resized(width);
+        let rhs = rhs.into_resized(width);
+        lhs.div_rem(rhs).1
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("invalid ApUInt: {0}")]
+pub struct ApUIntParseError(String);
+
+impl TryFrom<&str> for ApUInt {
+    type Error = ApUIntParseError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        let radix = if s.starts_with("0x") {
+            16
+        } else if s.starts_with("0b") {
+            2
+        } else if s.starts_with("0o") {
+            8
+        } else {
+            10
+        };
+
+        let s = s
+            .trim_start_matches("0x")
+            .trim_start_matches("0b")
+            .trim_start_matches("0o");
+
+        let mut apint = ApUInt::from(0u32).into_resized(1);
+
+        for c in s.chars() {
+            let digit = c
+                .to_digit(radix)
+                .ok_or_else(|| ApUIntParseError(s.to_string()))?;
+            apint = apint.widening_mul_chunk(radix as ApUIntChunk);
+            apint = apint + ApUInt::from(digit as ApUIntChunk);
+            apint = apint.into_shrunk();
+        }
+        Ok(apint)
+    }
+}
+
+impl Parse for ApUInt {
+    type Item = Self;
+
+    fn parse(
+        _: &mut crate::Context,
+        state: &mut crate::ParseState,
+    ) -> crate::ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        let value = match token.kind {
+            crate::TokenKind::Tokenized(s) => {
+                ApUInt::try_from(s).map_err(|e| parse_error!(token.span, e))?
+            }
+            _ => {
+                return parse_error!(
+                    token.span,
+                    crate::ParseErrorKind::InvalidToken(
+                        vec![token_wildcard!("...")].into(),
+                        token.kind
+                    )
+                )
+                .into();
+            }
+        };
+        Ok(value)
+    }
+}
+
+impl Print for ApUInt {
+    fn print(&self, _: &crate::Context, state: &mut crate::PrintState) -> crate::PrintResult<()> {
+        use std::fmt::Write;
+        write!(state.buffer, "{}", self)?;
+        Ok(())
+    }
+}
+
+impl TryFrom<String> for ApUInt {
+    type Error = ApUIntParseError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> { ApUInt::try_from(value.as_str()) }
+}
+
+impl fmt::Binary for ApUInt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0b")?;
+        for chunk in self.chunks.iter().rev() {
+            write!(f, "{:064b}", chunk)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Octal for ApUInt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0o")?;
+        for chunk in self.chunks.iter().rev() {
+            write!(f, "{:022o}", chunk)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::LowerHex for ApUInt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x")?;
+        for chunk in self.chunks.iter().rev() {
+            write!(f, "{:016x}", chunk)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::UpperHex for ApUInt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x")?;
+        for chunk in self.chunks.iter().rev() {
+            write!(f, "{:016X}", chunk)?;
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for ApUInt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut s = String::new();
+        let mut tmp = self.clone();
+
+        while !tmp.is_zero() {
+            let (quotient, remainder) = tmp.div_rem(ApUInt::from(10u32));
+            s.push_str(&remainder.chunks[0].to_string());
+            tmp = quotient;
+        }
+
+        if s.is_empty() {
+            s.push('0');
+        }
+
+        write!(f, "{}", s.chars().rev().collect::<String>())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_to_string() {
+        let a = ApUInt::from(123u32);
+        assert_eq!(a.to_string(), "123");
+    }
+
+    #[test]
+    fn test_from_str_0() {
+        let a = ApUInt::try_from("0x82345678").unwrap();
+        let expected = ApUInt::from(0x82345678u32);
+        assert_eq!(a, expected);
+    }
+
+    #[test]
+    fn test_from_str_1() {
+        let a = ApUInt::try_from("0b1010101010101010").unwrap();
+        let expected = ApUInt::from(0b1010101010101010u16);
+        assert_eq!(a, expected);
+    }
+
+    #[test]
+    fn test_from_str_2() {
+        let a = ApUInt::try_from("0o123").unwrap();
+        let expected = ApUInt::from(0o123u8).into_resized(7);
+        assert_eq!(a, expected);
+    }
+
+    #[test]
+    fn test_from_str_3() {
+        let a = ApUInt::try_from("1234567890").unwrap();
+        let expected = ApUInt::from(1234567890u32).into_resized(31);
+        assert_eq!(a, expected);
+    }
+
+    #[test]
+    fn test_from_str_4() {
+        let a =
+            ApUInt::try_from("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+        let expected = ApUInt::from(vec![
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+        ])
+        .into_resized(253);
+        assert_eq!(a, expected);
+    }
 
     #[test]
     fn test_ord_0() {

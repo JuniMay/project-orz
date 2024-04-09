@@ -17,6 +17,7 @@ pub use crate::{
         verify::{RunVerifiers, Verify},
     },
     support::{
+        apint,
         cast::{Caster, CasterStorage},
         error::{
             ParseError, ParseResult, PrintError, PrintResult, VerificationError, VerificationResult,
