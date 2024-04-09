@@ -1,4 +1,5 @@
 use core::fmt;
+use std::cmp::Ordering;
 
 pub type ApUIntChunk = u64;
 
@@ -99,8 +100,8 @@ impl ApUInt {
     /// Addition with carrying, returns the carry.
     ///
     /// The carry will occur if the sum exceeds the `width`.
-    pub fn carrying_add(self, other: Self) -> (Self, bool) {
-        if self.width != other.width {
+    pub fn carrying_add(self, rhs: &Self) -> (Self, bool) {
+        if self.width != rhs.width {
             panic!("the width of the two integers are not the same")
         }
 
@@ -108,8 +109,7 @@ impl ApUInt {
 
         let mut result = ApUInt::new(width);
 
-        let lhs = self.into_resized(width);
-        let rhs = other.into_resized(width);
+        let lhs = self;
 
         let mut carry = false;
         for ((a, b), r) in lhs
@@ -138,17 +138,15 @@ impl ApUInt {
     /// Subtraction with carrying, returns the borrow.
     ///
     /// The borrow will occur if the difference is negative.
-    pub fn borrowing_sub(self, other: Self) -> (Self, bool) {
-        if self.width != other.width {
+    pub fn borrowing_sub(self, rhs: &Self) -> (Self, bool) {
+        if self.width != rhs.width {
             panic!("the width of the two integers are not the same")
         }
 
         let width = self.width;
+        let lhs = self;
 
         let mut result = ApUInt::new(width);
-
-        let lhs = self.into_resized(width);
-        let rhs = other.into_resized(width);
 
         let mut borrow = false;
         for ((a, b), r) in lhs
@@ -248,6 +246,8 @@ impl ApUInt {
         self.widening_shl(shamt).into_truncated(old_width)
     }
 
+    pub fn is_zero(&self) -> bool { self.chunks.iter().all(|c| *c == 0) }
+
     /// Multiply the integer by a chunk and extend the width by the chunk size.
     ///
     /// The full multiplication is currently nightly in Rust, so here just use
@@ -272,15 +272,15 @@ impl ApUInt {
     }
 
     /// Multiply the integer by another integer, produce a double width integer.
-    pub fn widening_mul(self, other: Self) -> Self {
-        if self.width != other.width {
+    pub fn widening_mul(self, rhs: &Self) -> Self {
+        if self.width != rhs.width {
             panic!("the width of the two integers are not the same")
         }
 
         if self.width * 2 <= ApUIntChunk::BITS as usize {
             // the width is small enough to use the chunk multiplication
             let lhs = self.chunks[0];
-            let rhs = other.chunks[0];
+            let rhs = rhs.chunks[0];
             // as the width is smaller than half of the chunk size, the product
             // will not overflow
             let product = lhs * rhs;
@@ -288,7 +288,6 @@ impl ApUInt {
         }
 
         let mut lhs = self;
-        let rhs = other;
 
         let width = lhs.width;
 
@@ -319,9 +318,59 @@ impl ApUInt {
         result
     }
 
-    pub fn carrying_mul(self, other: Self) -> (Self, Self) {
+    pub fn carrying_mul(self, rhs: &Self) -> (Self, Self) {
         let old_width = self.width;
-        self.widening_mul(other).into_truncated(old_width)
+        self.widening_mul(rhs).into_truncated(old_width)
+    }
+
+    pub fn overflowing_shr(self, shamt: usize) -> (Self, Self) {
+        let old_width = self.width;
+        let (overflowed, result) = self.into_truncated(shamt);
+        (result.into_resized(old_width), overflowed)
+    }
+
+    /// Division with remainder.
+    pub fn div_rem(self, other: Self) -> (Self, Self) {
+        if self.width != other.width {
+            panic!("the width of the two integers are not the same")
+        }
+
+        let width = self.width;
+
+        let divisor = other;
+
+        let mut remainder = ApUInt::new(width);
+        let mut quotient = self;
+
+        for _ in 0..width {
+            let set_bit = if remainder >= divisor {
+                remainder = remainder.borrowing_sub(&divisor).0;
+                true
+            } else {
+                false
+            };
+
+            let (shifted_quotient, carry) = quotient.carrying_shl(1);
+            quotient = shifted_quotient;
+            quotient.chunks[0] |= u64::from(set_bit);
+
+            let shifted_remainder = remainder.carrying_shl(1).0;
+            remainder = shifted_remainder;
+            remainder.chunks[0] |= u64::from(!carry.is_zero());
+        }
+
+        let set_bit = if remainder >= divisor {
+            remainder = remainder.borrowing_sub(&divisor).0;
+            true
+        } else {
+            false
+        };
+
+        let (shifted_quotient, _carry) = quotient.carrying_shl(1);
+        quotient = shifted_quotient;
+        quotient.chunks[0] |= u64::from(set_bit);
+
+        (quotient, remainder)
     }
 }
 
@@ -367,7 +416,24 @@ impl From<u64> for ApUInt {
 impl PartialOrd for ApUInt {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         if self.width != other.width {
-            return None;
+            // if there are `1` in the higher bits of the integer with larger width,
+            // the integer is larger
+            if self.width > other.width {
+                // check the higher chunks of self
+                for chunk in self.chunks.iter().skip(other.chunks.len()) {
+                    if *chunk != 0 {
+                        return Some(std::cmp::Ordering::Greater);
+                    }
+                }
+            } else {
+                // check the higher chunks of other
+                for chunk in other.chunks.iter().skip(self.chunks.len()) {
+                    if *chunk != 0 {
+                        return Some(std::cmp::Ordering::Less);
+                    }
+                }
+            }
+            // if no higher bits are set, just compare as the same width
         }
         for (a, b) in self.chunks.iter().zip(other.chunks.iter()).rev() {
             match a.cmp(b) {
@@ -379,9 +445,27 @@ impl PartialOrd for ApUInt {
     }
 }
 
+impl Ord for ApUInt {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.partial_cmp(other).unwrap() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_ord_0() {
+        let a = ApUInt::from(123u32).into_resized(128);
+        let b = ApUInt::from(256u32);
+        assert!(a < b);
+    }
+
+    #[test]
+    fn test_ord_1() {
+        let a = ApUInt::from(vec![0, 0x1]);
+        let b = ApUInt::from(256u32);
+        assert!(a > b);
+    }
 
     #[test]
     fn test_resize() {
@@ -396,7 +480,7 @@ mod tests {
     fn test_carrying_add() {
         let a = ApUInt::from(0x12345678u32);
         let b = ApUInt::from(0x87654321u32);
-        let (result, carry) = a.carrying_add(b);
+        let (result, carry) = a.carrying_add(&b);
         assert_eq!(result.chunks, vec![0x99999999]);
         assert!(!carry);
     }
@@ -405,7 +489,7 @@ mod tests {
     fn test_carrying_add_carry_0() {
         let a = ApUInt::from(0x12345678u32);
         let b = ApUInt::from(0xf7654321u32);
-        let (result, carry) = a.carrying_add(b);
+        let (result, carry) = a.carrying_add(&b);
         assert_eq!(result.chunks, vec![0x09999999]);
         assert!(carry);
     }
@@ -415,7 +499,7 @@ mod tests {
         let a = ApUInt::from(vec![0x123456781234u64, 0x56784321u64]).into_resized(96);
         let b = ApUInt::from(vec![0xf76543214321u64, 0xf3211234u64]).into_resized(96);
 
-        let (result, carry) = a.carrying_add(b);
+        let (result, carry) = a.carrying_add(&b);
 
         assert_eq!(result.chunks, vec![0x1099999995555u64, 0x49995555u64]);
         assert!(carry);
@@ -426,7 +510,7 @@ mod tests {
         let a = ApUInt::from(vec![0xffffffff88888888u64, 0xffffffffu64]).into_resized(96);
         let b = ApUInt::from(vec![0xffffffff88888888u64, 0xffffffffu64]).into_resized(96);
 
-        let (result, carry) = a.carrying_add(b);
+        let (result, carry) = a.carrying_add(&b);
 
         assert_eq!(result.chunks, vec![0xffffffff11111110u64, 0xffffffffu64]);
         assert!(carry);
@@ -517,7 +601,7 @@ mod tests {
     fn test_borrowing_sub_borrow_0() {
         let a = ApUInt::from(0x12345678u32);
         let b = ApUInt::from(0x87654321u32);
-        let (result, borrow) = a.borrowing_sub(b);
+        let (result, borrow) = a.borrowing_sub(&b);
         assert_eq!(result.chunks, vec![0x8acf1357u64]);
         assert!(borrow);
     }
@@ -526,7 +610,7 @@ mod tests {
     fn test_borrowing_sub_0() {
         let a = ApUInt::from(0x12345678u32);
         let b = ApUInt::from(0x87654321u32);
-        let (result, borrow) = b.borrowing_sub(a);
+        let (result, borrow) = b.borrowing_sub(&a);
         assert_eq!(result.chunks, vec![0x7530eca9u64]);
         assert!(!borrow);
     }
@@ -535,7 +619,7 @@ mod tests {
     fn test_borrowing_sub_2() {
         let a = ApUInt::from(0x12345678u32);
         let b = ApUInt::from(0x12345678u32);
-        let (result, borrow) = a.borrowing_sub(b);
+        let (result, borrow) = a.borrowing_sub(&b);
         assert_eq!(result.chunks, vec![0]);
         assert!(!borrow);
     }
@@ -545,7 +629,7 @@ mod tests {
         let a = ApUInt::from(vec![0x1122334455667788u64, 0x9900aabbccddeeffu64]);
         let b = ApUInt::from(vec![0x2233445566778899u64, 0x00aabbccddeeff22u64]);
 
-        let (result, borrow) = a.borrowing_sub(b);
+        let (result, borrow) = a.borrowing_sub(&b);
 
         assert_eq!(
             result.chunks,
@@ -559,7 +643,7 @@ mod tests {
         let a = ApUInt::from(vec![0x1122334455667788u64, 0x9900aabbccddeeffu64]);
         let b = ApUInt::from(vec![0x2233445566778899u64, 0x00aabbccddeeff22u64]);
 
-        let (result, borrow) = b.borrowing_sub(a);
+        let (result, borrow) = b.borrowing_sub(&a);
 
         assert!(borrow);
         assert_eq!(
@@ -667,7 +751,7 @@ mod tests {
             0xffffffffffffffffu64,
         ]);
 
-        let result = a.widening_mul(b);
+        let result = a.widening_mul(&b);
 
         assert_eq!(
             result.chunks,
@@ -698,7 +782,7 @@ mod tests {
             0xfedcba9876543210u64,
         ]);
 
-        let result = a.widening_mul(b);
+        let result = a.widening_mul(&b);
 
         assert_eq!(
             result.chunks,
@@ -720,7 +804,7 @@ mod tests {
         let a = ApUInt::from(114514u32);
         let b = ApUInt::from(1919810u32);
 
-        let result = a.widening_mul(b);
+        let result = a.widening_mul(&b);
 
         assert_eq!(result.width, 64);
         assert_eq!(result.chunks, [0x332fca5924u64])
@@ -730,7 +814,7 @@ mod tests {
     fn test_carrying_mul() {
         let a = ApUInt::from(0x12345678u32);
         let b = ApUInt::from(0x87654321u32);
-        let (lhs, rhs) = a.carrying_mul(b);
+        let (lhs, rhs) = a.carrying_mul(&b);
         assert_eq!(lhs.chunks, vec![0x70b88d78u64]);
         assert_eq!(rhs.chunks, vec![0x9a0cd05u64]);
     }
@@ -749,7 +833,7 @@ mod tests {
             0xfedcba9876543210u64,
         ]);
 
-        let (result, carry) = a.carrying_mul(b);
+        let (result, carry) = a.carrying_mul(&b);
 
         assert_eq!(
             result.chunks,
@@ -767,6 +851,83 @@ mod tests {
                 0x47acc913f0513b74u64,
                 0x121fa00acd77d742u64,
             ]
+        );
+    }
+
+    #[test]
+    fn test_overflowing_shr_0() {
+        let a = ApUInt::from(vec![
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+        ]);
+
+        let (result, overflowed) = a.overflowing_shr(64);
+
+        assert_eq!(result.width, 192);
+        assert_eq!(
+            result.chunks,
+            vec![0x1234567890abcdefu64, 0x1234567890abcdefu64, 0]
+        );
+        assert_eq!(overflowed.width, 64);
+        assert_eq!(overflowed.chunks, vec![0x1234567890abcdefu64]);
+    }
+
+    #[test]
+    fn test_overflowing_shr_1() {
+        let a = ApUInt::from(0x123u16).into_resized(12);
+
+        let (result, overflowed) = a.overflowing_shr(4);
+
+        assert_eq!(result.width, 12);
+        assert_eq!(result.chunks, vec![0x012]);
+        assert_eq!(overflowed.width, 4);
+        assert_eq!(overflowed.chunks, vec![0x3]);
+    }
+
+    #[test]
+    fn test_overflowing_shr_2() {
+        let a = ApUInt::from(vec![0x1234567890abcdefu64, 0xfedcba9876543210u64]);
+
+        let (result, overflowed) = a.overflowing_shr(68);
+
+        assert_eq!(result.width, 128);
+        assert_eq!(result.chunks, vec![0x0fedcba987654321u64, 0]);
+        assert_eq!(overflowed.width, 68);
+        assert_eq!(overflowed.chunks, vec![0x1234567890abcdefu64, 0]);
+    }
+
+    #[test]
+    fn test_div_rem_0() {
+        let a = ApUInt::from(5u32);
+        let b = ApUInt::from(2u32);
+
+        let (quotient, remainder) = a.div_rem(b);
+
+        assert_eq!(quotient.width, 32);
+        assert_eq!(quotient.chunks, vec![0x2]);
+        assert_eq!(remainder.width, 32);
+        assert_eq!(remainder.chunks, vec![0x1]);
+    }
+
+    #[test]
+    fn test_div_rem_1() {
+        let a = ApUInt::from(vec![
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+        ]);
+
+        let b = ApUInt::from(vec![0xfedcba9876543210u64, 0xfedcba9876543210u64, 0]);
+        // 0x124924923f07fffe, 0xea383d1d6c286420fc6c9395fcd4320f
+        let (quotient, remainder) = a.div_rem(b);
+
+        assert_eq!(quotient.width, 192);
+        assert_eq!(quotient.chunks, vec![0x124924923f07fffeu64, 0, 0]);
+        assert_eq!(remainder.width, 192);
+        assert_eq!(
+            remainder.chunks,
+            vec![0xfc6c9395fcd4320fu64, 0xea383d1d6c286420u64, 0]
         );
     }
 }
