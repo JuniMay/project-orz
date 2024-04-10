@@ -1,5 +1,3 @@
-pub mod arith;
-pub mod builtin;
-pub mod cf;
-pub mod func;
-pub mod mem;
+pub mod arm;
+pub mod riscv;
+pub mod std;

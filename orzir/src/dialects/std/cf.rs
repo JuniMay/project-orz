@@ -60,7 +60,7 @@ mod tests {
         Context, OpObj, Parse, ParseState, Print, PrintState, RegionInterface, TokenStream,
     };
 
-    use crate::dialects::{
+    use crate::dialects::std::{
         arith,
         builtin::{self, ModuleOp},
         cf, func,

@@ -94,7 +94,7 @@ mod tests {
         TokenStream,
     };
 
-    use crate::dialects::{
+    use crate::dialects::std::{
         arith,
         builtin::{self, ModuleOp},
         cf,

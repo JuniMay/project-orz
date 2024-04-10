@@ -1,5 +1,5 @@
 use orzir::{
-    dialects::{
+    dialects::std::{
         arith,
         builtin::{self, FloatTy, FunctionTy, IntTy, ModuleOp},
         cf,

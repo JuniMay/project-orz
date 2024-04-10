@@ -105,7 +105,7 @@ mod tests {
     use orzir_core::{Context, OpObj, Parse, ParseState, TokenStream};
 
     use super::ControlFlowAnalysis;
-    use crate::dialects::{arith, builtin, cf, func};
+    use crate::dialects::std::{arith, builtin, cf, func};
 
     #[test]
     fn test_cfg() {

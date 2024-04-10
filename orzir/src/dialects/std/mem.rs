@@ -229,7 +229,7 @@ pub fn register(ctx: &mut Context) {
 mod tests {
     use orzir_core::{Context, OpObj, Parse, ParseState, Print, PrintState, TokenStream};
 
-    use crate::dialects::{arith, builtin, cf, func, mem};
+    use crate::dialects::std::{arith, builtin, cf, func, mem};
 
     fn test_parse_print(src: &str, expected: &str) {
         let stream = TokenStream::new(src);

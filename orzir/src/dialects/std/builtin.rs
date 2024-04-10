@@ -259,7 +259,9 @@ pub fn register(ctx: &mut Context) {
 mod tests {
     use orzir_core::{Context, OpObj, Parse, ParseState, Print, PrintState, TokenStream, TyObj};
 
-    use crate::dialects::builtin::{self, DoubleTy, FloatTy, FunctionTy, IntTy, MemRefTy, TupleTy};
+    use crate::dialects::std::builtin::{
+        self, DoubleTy, FloatTy, FunctionTy, IntTy, MemRefTy, TupleTy,
+    };
 
     #[test]
     fn test_tys_cmp() {
