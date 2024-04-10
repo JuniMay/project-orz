@@ -73,15 +73,15 @@ mod tests {
             func.func @foo : fn() -> (int<32>, float) {
             ^entry(%x : float, %y: int<32>):
                 // nothing here
-                %0 = arith.iconst true : int<32>
-                %1 = arith.iconst false : int<32>
-                %2 = arith.iadd %0, %1 : int<32>
+                %0 = arith.iconst true : int<1>
+                %1 = arith.iconst false : int<1>
+                %2 = arith.iadd %0, %1 : int<1>
 
-                %aaaa = arith.iconst -0x123 : int<32>
+                %aaaa = arith.iconst -0x123i32 : int<32>
 
-                %b = arith.iconst 0b101 : int<32>
-                %c = arith.iconst 0o123 : int<32>
-                %d = arith.iconst 123 : int<32>
+                %b = arith.iconst 0b101i32 : int<32>
+                %c = arith.iconst 0o123i32 : int<32>
+                %d = arith.iconst 123i32 : int<32>
 
                 cf.jump ^entry(%x, %y)
             }
@@ -117,8 +117,8 @@ mod tests {
         module {
             func.func @foo : fn () -> int<32> {
             ^entry:
-                %a = arith.iconst 123 : int<32>
-                %b = arith.iconst 456 : int<32>
+                %a = arith.iconst 123i32 : int<32>
+                %b = arith.iconst 456i32 : int<32>
 
                 %cond = arith.iconst true : int<32>
 

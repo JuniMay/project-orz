@@ -2,7 +2,7 @@ use core::fmt;
 
 use thiserror::Error;
 
-use crate::{parse_error, token_wildcard, Parse, Print};
+use crate::{delimiter, parse_error, token_wildcard, Parse, Print};
 
 /// A chunk in the [ApInt].
 pub type ApIntChunk = u64;
@@ -565,11 +565,27 @@ impl From<u8> for ApInt {
     }
 }
 
+impl From<i8> for ApInt {
+    fn from(value: i8) -> Self {
+        let abs = value.unsigned_abs();
+        let apint = ApInt::from(abs);
+        -apint
+    }
+}
+
 impl From<u16> for ApInt {
     fn from(value: u16) -> Self {
         let mut apint = ApInt::new(16);
         apint.chunks[0] = value as ApIntChunk;
         apint
+    }
+}
+
+impl From<i16> for ApInt {
+    fn from(value: i16) -> Self {
+        let abs = value.unsigned_abs();
+        let apint = ApInt::from(abs);
+        -apint
     }
 }
 
@@ -581,11 +597,27 @@ impl From<u32> for ApInt {
     }
 }
 
+impl From<i32> for ApInt {
+    fn from(value: i32) -> Self {
+        let abs = value.unsigned_abs();
+        let apint = ApInt::from(abs);
+        -apint
+    }
+}
+
 impl From<u64> for ApInt {
     fn from(value: u64) -> Self {
         let mut apint = ApInt::new(64);
         apint.chunks[0] = value as ApIntChunk;
         apint
+    }
+}
+
+impl From<i64> for ApInt {
+    fn from(value: i64) -> Self {
+        let abs = value.unsigned_abs();
+        let apint = ApInt::from(abs);
+        -apint
     }
 }
 
@@ -754,6 +786,12 @@ impl TryFrom<&str> for ApInt {
     type Error = ApIntParseError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
+        if s == "true" {
+            return Ok(ApInt::from(1u8).into_resized(1));
+        } else if s == "false" {
+            return Ok(ApInt::from(0u8).into_resized(1));
+        }
+
         let radix = if s.starts_with("0x") {
             16
         } else if s.starts_with("0b") {
@@ -769,6 +807,17 @@ impl TryFrom<&str> for ApInt {
             .trim_start_matches("0b")
             .trim_start_matches("0o");
 
+        let (s, bits) = if let Some(idx) = s.find('i') {
+            let (s, bits) = s.split_at(idx);
+            let width = bits
+                .trim_start_matches('i')
+                .parse::<usize>()
+                .map_err(|_| ApIntParseError(s.to_string()))?;
+            (s, Some(width))
+        } else {
+            (s, None)
+        };
+
         let mut apint = ApInt::from(0u32).into_resized(1);
 
         for c in s.chars() {
@@ -779,6 +828,11 @@ impl TryFrom<&str> for ApInt {
             apint = apint + ApInt::from(digit as ApIntChunk);
             apint = apint.into_shrunk();
         }
+
+        if let Some(bits) = bits {
+            apint = apint.into_resized(bits);
+        }
+
         Ok(apint)
     }
 }
@@ -790,6 +844,7 @@ impl Parse for ApInt {
         _: &mut crate::Context,
         state: &mut crate::ParseState,
     ) -> crate::ParseResult<Self::Item> {
+        let neg = matches!(state.stream.consume_if(delimiter!('-'))?, Some(_));
         let token = state.stream.consume()?;
         let value = match token.kind {
             crate::TokenKind::Tokenized(s) => {
@@ -806,14 +861,14 @@ impl Parse for ApInt {
                 .into();
             }
         };
-        Ok(value)
+        Ok(if neg { -value } else { value })
     }
 }
 
 impl Print for ApInt {
     fn print(&self, _: &crate::Context, state: &mut crate::PrintState) -> crate::PrintResult<()> {
         use std::fmt::Write;
-        write!(state.buffer, "{}", self)?;
+        write!(state.buffer, "{:x}", self)?;
         Ok(())
     }
 }
@@ -827,19 +882,22 @@ impl TryFrom<String> for ApInt {
 impl fmt::Binary for ApInt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0b")?;
-        for chunk in self.chunks.iter().rev() {
+        let last_chunk_width = self.width % ApIntChunk::BITS as usize;
+        let last_chunk_width = if last_chunk_width == 0 {
+            ApIntChunk::BITS as usize
+        } else {
+            last_chunk_width
+        };
+        write!(
+            f,
+            "{:0width$b}",
+            self.chunks.last().unwrap(),
+            width = last_chunk_width
+        )?;
+        for chunk in self.chunks.iter().rev().skip(1) {
             write!(f, "{:064b}", chunk)?;
         }
-        Ok(())
-    }
-}
-
-impl fmt::Octal for ApInt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0o")?;
-        for chunk in self.chunks.iter().rev() {
-            write!(f, "{:022o}", chunk)?;
-        }
+        write!(f, "i{}", self.width)?;
         Ok(())
     }
 }
@@ -847,9 +905,24 @@ impl fmt::Octal for ApInt {
 impl fmt::LowerHex for ApInt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0x")?;
-        for chunk in self.chunks.iter().rev() {
+        let last_chunk_width = self.width % ApIntChunk::BITS as usize;
+        let last_chunk_width = if last_chunk_width == 0 {
+            ApIntChunk::BITS as usize / 4
+        } else {
+            (last_chunk_width + 3) / 4
+        };
+        if last_chunk_width != 0 {
+            write!(
+                f,
+                "{:0width$x}",
+                self.chunks.last().unwrap(),
+                width = last_chunk_width
+            )?;
+        }
+        for chunk in self.chunks.iter().rev().skip(1) {
             write!(f, "{:016x}", chunk)?;
         }
+        write!(f, "i{}", self.width)?;
         Ok(())
     }
 }
@@ -857,9 +930,22 @@ impl fmt::LowerHex for ApInt {
 impl fmt::UpperHex for ApInt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0x")?;
-        for chunk in self.chunks.iter().rev() {
+        let last_chunk_width = self.width % ApIntChunk::BITS as usize;
+        let last_chunk_width = if last_chunk_width == 0 {
+            ApIntChunk::BITS as usize / 4
+        } else {
+            (last_chunk_width + 3) / 4
+        };
+        write!(
+            f,
+            "{:0width$X}",
+            self.chunks.last().unwrap(),
+            width = last_chunk_width
+        )?;
+        for chunk in self.chunks.iter().rev().skip(1) {
             write!(f, "{:016X}", chunk)?;
         }
+        write!(f, "i{}", self.width)?;
         Ok(())
     }
 }
@@ -886,6 +972,24 @@ impl fmt::Display for ApInt {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_fmt_binary() {
+        let a = ApInt::from(0x123u32).into_resized(9);
+        assert_eq!(format!("{:b}", a), "0b100100011i9");
+    }
+
+    #[test]
+    fn test_fmt_lower_hex() {
+        let a = ApInt::from(vec![0xffffffffffffffff, 0x1]).into_resized(65);
+        assert_eq!(format!("{:x}", a), "0x1ffffffffffffffffi65");
+    }
+
+    #[test]
+    fn test_fmt_upper_hex() {
+        let a = ApInt::from(vec![0xffffffffffffffff, 0x1]).into_resized(65);
+        assert_eq!(format!("{:X}", a), "0x1FFFFFFFFFFFFFFFFi65");
+    }
 
     #[test]
     fn test_to_string() {
@@ -916,9 +1020,37 @@ mod tests {
 
     #[test]
     fn test_from_str_3() {
-        let a = ApInt::try_from("1234567890").unwrap();
-        let expected = ApInt::from(1234567890u32).into_resized(31);
+        let a = ApInt::try_from("1234567890i34").unwrap();
+        let expected = ApInt::from(1234567890u32).into_resized(34);
         assert_eq!(a, expected);
+    }
+
+    #[test]
+    fn test_from_signed_0() {
+        let a = ApInt::from(-1i8);
+        assert_eq!(a.width, 8);
+        assert_eq!(a.chunks, vec![0xffu64,]);
+    }
+
+    #[test]
+    fn test_from_signed_1() {
+        let a = ApInt::from(-5i16);
+        assert_eq!(a.width, 16);
+        assert_eq!(a.chunks, vec![0xfffbu64,]);
+    }
+
+    #[test]
+    fn test_from_signed_2() {
+        let a = ApInt::from(-5i32);
+        assert_eq!(a.width, 32);
+        assert_eq!(a.chunks, vec![0xffff_fffbu64,]);
+    }
+
+    #[test]
+    fn test_from_signed_3() {
+        let a = ApInt::from(-16i64);
+        assert_eq!(a.width, 64);
+        assert_eq!(a.chunks, vec![0xffff_ffff_ffff_fff0u64,]);
     }
 
     #[test]

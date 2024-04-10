@@ -276,9 +276,9 @@ mod tests {
                 %slot = mem.alloca int<32> : memref<int<32>, [2 * 3 * 4]>
                 cf.jump ^main
             ^main:
-                %a = arith.iconst 1 : index
-                %b = arith.iconst 2 : index
-                %c = arith.iconst 3 : index
+                %a = arith.iconst 1i64 : index
+                %b = arith.iconst 2i64 : index
+                %c = arith.iconst 3i64 : index
                 
                 %val = mem.load %slot[%a, %b, %c] : int<32>
 
