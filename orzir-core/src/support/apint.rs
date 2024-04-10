@@ -1,3 +1,19 @@
+//! Arbitrary precision integer.
+//!
+//! This module provides an arbitrary precision integer with signedless
+//! semantics, and can be used in the arithmetic operations.
+//!
+//! The [ApInt] is a runtime fixed-width integer, i.e., unless explicitly
+//! resized (or do operation on two integers with different width), the width of
+//! the integer will not change after the arithmetic operations.
+//!
+//! The [ApInt] type is signedless and can be regarded as an arbitrary width
+//! integer register. It is up to the operation to interpret the integer as
+//! signed or unsigned.
+//!
+//! Note that the implementation is not very efficient currently, some
+//! optimizations may be needed in the future.
+
 use core::fmt;
 
 use thiserror::Error;
