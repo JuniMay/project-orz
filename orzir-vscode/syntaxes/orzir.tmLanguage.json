@@ -72,6 +72,9 @@
 				},
 				{
 					"include": "#dec-integer"
+				},
+				{
+					"include": "#true-false"
 				}
 			]
 		},
@@ -90,6 +93,18 @@
 		"bin-integer": {
 			"name": "constant.numeric.orzir",
 			"match": "(0b[01]+(i[0-9]+)?)"
+		},
+		"true-false": {
+			"patterns": [
+				{
+					"name": "constant.language.true.orzir",
+					"match": "(true)"
+				},
+				{
+					"name": "constant.language.false.orzir",
+					"match": "(false)"
+				}
+			]
 		},
 		"mnemonic": {
 			"patterns": [

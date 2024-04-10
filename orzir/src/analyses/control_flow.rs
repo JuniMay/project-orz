@@ -113,8 +113,8 @@ mod tests {
         module {
             func.func @foo : fn () -> int<32> {
             ^entry:
-                %a = arith.iconst 123 : int<32>
-                %b = arith.iconst 456 : int<32>
+                %a = arith.iconst 123i32 : int<32>
+                %b = arith.iconst 456i32 : int<32>
 
                 %cond = arith.iconst true : int<32>
 

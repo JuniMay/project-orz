@@ -1,0 +1,20 @@
+module {
+    func.func @foo : fn () -> int<32> {
+    ^entry:
+        %a = arith.iconst 123i32 : int<32>
+        %b = arith.iconst 456i32 : int<32>
+
+        %cond = arith.iconst true : int<32>
+
+        cf.branch %cond, ^then(%a), ^else(%b)
+
+    ^then(%x: int<32>):
+        cf.jump ^return
+
+    ^else(%y: int<32>):
+        cf.jump ^return
+
+    ^return:
+        func.return %a
+    }
+}
