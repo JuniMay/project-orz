@@ -66,6 +66,8 @@ impl ApInt {
     /// Create a `1` with given width.
     pub fn one(width: usize) -> Self { Self::from(1u8).into_resized(width) }
 
+    pub fn width(&self) -> usize { self.width }
+
     /// Get the mask of the last chunk.
     fn last_chunk_mask(&self) -> ApIntChunk {
         let bits = self.width % ApIntChunk::BITS as usize;

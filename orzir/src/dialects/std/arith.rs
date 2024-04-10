@@ -1,14 +1,19 @@
 use std::fmt::Write;
 
-use orzir_core::{apint::ApInt, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Value};
+use orzir_core::{
+    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
+    RunVerifiers, Typed, Value, Verify,
+};
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
+use thiserror::Error;
 
+use super::builtin::IntTy;
 use crate::verifiers::*;
 
 /// An integer constant operation.
 ///
 /// This will generate an integer constant with the given value.
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "arith.iconst"]
 #[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
 #[format(pattern = "{value}", kind = "op", num_results = 1)]
@@ -20,6 +25,45 @@ pub struct IConstOp {
     result: ArenaPtr<Value>,
     /// The value of the integer constant.
     value: ApInt,
+}
+
+#[derive(Debug, Error)]
+#[error("expected an integer with width {0}, but got {1}")]
+pub struct IncompatibleWidthErr(pub usize, pub usize);
+
+impl Verify for IConstOp {
+    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
+        self.run_verifiers(ctx)?;
+        self.result.deref(&ctx.values).verify(ctx)?;
+
+        // verify if the width of the integer and the type is consistent
+        let is_int = self
+            .result
+            .deref(&ctx.values)
+            .ty(ctx)
+            .deref(&ctx.tys)
+            .is_a::<IntTy>();
+
+        if !is_int {
+            // TODO: support index width.
+            return Ok(());
+        }
+
+        let ty = self
+            .result
+            .deref(&ctx.values)
+            .ty(ctx)
+            .deref(&ctx.tys)
+            .as_a::<IntTy>()
+            .unwrap();
+
+        if ty.width() != self.value.width() {
+            return verification_error!(IncompatibleWidthErr(ty.width(), self.value.width()))
+                .into();
+        }
+
+        Ok(())
+    }
 }
 
 /// An integer addition operation.
@@ -117,6 +161,7 @@ mod tests {
         arith::register(&mut ctx);
         let item = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("");
+        item.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
         item.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         assert_eq!(state.buffer, expected);
     }
@@ -135,9 +180,9 @@ mod tests {
             func.func @foo : fn () -> (int<32>, float) {
             ^entry:
                 // nothing here
-                %0 = arith.iconst true : int<32>
-                %1 = arith.iconst false : int<32>
-                %2 = arith.iadd %0, %1 : int<32>
+                %0 = arith.iconst true : int<1>
+                %1 = arith.iconst false : int<1>
+                %2 = arith.iadd %0, %1 : int<1>
 
                 %aaaa = arith.iconst -0x123i32 : int<32>
 
@@ -158,6 +203,7 @@ mod tests {
 
         let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
 

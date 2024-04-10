@@ -129,6 +129,7 @@ mod tests {
 
         let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
 
@@ -174,6 +175,7 @@ mod tests {
 
         let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
 

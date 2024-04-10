@@ -116,7 +116,7 @@ mod tests {
                 %a = arith.iconst 123i32 : int<32>
                 %b = arith.iconst 456i32 : int<32>
 
-                %cond = arith.iconst true : int<32>
+                %cond = arith.iconst true : int<1>
 
                 cf.branch %cond, ^then(%a), ^else(%b)
 
@@ -142,6 +142,8 @@ mod tests {
         cf::register(&mut ctx);
 
         let op = OpObj::parse(&mut ctx, &mut state).unwrap();
+
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
 
         let func_op = op
             .deref(&ctx.ops)

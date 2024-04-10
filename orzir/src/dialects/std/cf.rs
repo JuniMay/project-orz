@@ -25,7 +25,7 @@ pub struct Jump {
 /// This represents a conditional branch to two different blocks.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "cf.branch"]
-#[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
+#[verifiers(NumResults<0>, NumOperands<1>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
 #[format(
     kind = "op",
     pattern = "{cond} , {then_succ} , {else_succ}",
@@ -99,6 +99,7 @@ mod tests {
 
         let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
         op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
         println!("{}", state.buffer);
 
