@@ -1,0 +1,126 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "OrzIR",
+	"patterns": [
+		{
+			"include": "#mnemonic"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#symbol-name"
+		},
+		{
+			"include": "#block-label"
+		},
+		{
+			"include": "#value-name"
+		},
+		{
+			"include": "#init-value"
+		},
+		{
+			"include": "#number"
+		}
+	],
+	"repository": {
+		"symbol-name": {
+			"name": "constant.other.symbol.orzir",
+			"match": "(@[a-zA-Z0-9_]+)"
+		},
+		"block-label": {
+			"name": "string.other.orzir",
+			"match": "(\\^[a-zA-Z0-9_]+)"
+		},
+		"value-name": {
+			"name": "variable.parameter.orzir",
+			"match": "(\\%[a-zA-Z0-9_]+)"
+		},
+		"init-value": {
+			"patterns": [
+				{
+					"include": "#init-value-bytes"
+				},
+				{
+					"name": "constant.numeric.orzir",
+					"match": "(zeroinit|undef)"
+				}
+			]	
+		},
+		"init-value-bytes": {
+			"name": "constant.numeric.orzir",
+			"begin": "bytes\\[",
+			"end": "\\]",
+			"patterns": [
+				{
+					"name": "constant.numeric.orzir",
+					"match": "([0-9a-zA-Z]+)"
+				}
+			]
+		},
+		"number": {
+			"patterns": [
+				{
+					"include": "#hex-integer"
+				},
+				{
+					"include": "#oct-integer"
+				},
+				{
+					"include": "#bin-integer"
+				},
+				{
+					"include": "#dec-integer"
+				}
+			]
+		},
+		"hex-integer": {
+			"name": "constant.numeric.orzir",
+			"match": "(0x[0-9a-fA-F]+(i[0-9]+)?)"
+		},
+		"oct-integer": {
+			"name": "constant.numeric.orzir",
+			"match": "(0o[0-7]+(i[0-9]+)?)"
+		},
+		"dec-integer": {
+			"name": "constant.numeric.orzir",
+			"match": "([0-9]+(i[0-9]+)?)"
+		},
+		"bin-integer": {
+			"name": "constant.numeric.orzir",
+			"match": "(0b[01]+(i[0-9]+)?)"
+		},
+		"mnemonic": {
+			"patterns": [
+				{
+					"include": "#builtin-mnemonic"
+				},
+				{
+					"name": "keyword.operator.orzir",
+					"match": "([a-z_]+\\.[a-z_]+)"
+				}
+			]
+		},
+		"builtin-mnemonic": {
+			"patterns": [
+				{
+					"name": "keyword.orzir",
+					"match": "(module|fn|int|float|memref|index)"
+				}
+			]
+		},
+		"strings": {
+			"name": "string.quoted.double.orzir",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.orzir",
+					"match": "\\\\."
+				}
+			]
+		}
+	},
+	"scopeName": "source.orzir"
+}

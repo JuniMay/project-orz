@@ -1,0 +1,26 @@
+module {
+    mem.global @global_slot : memref<int<32>, [2]> = bytes[
+        ef, be, ad, de, 
+        78, 56, 34, 12,
+    ]
+    mem.global @global_zero : memref<int<32>, [1 * 2 * 3]> = zeroinit
+    mem.global @global_undef : memref<int<32>, [114514 * 4]> = undef
+
+    func.func @test_mem : fn() -> int<32> {
+        %global_slot = mem.get_global @global_slot : memref<int<32>, [2]>
+        %casted_slot = mem.cast %global_slot : memref<int<8>, [8]>
+
+        %slot = mem.alloca int<32> : memref<int<32>, [2 * 3 * 4]>
+        cf.jump ^main
+    ^main:
+        %a = arith.iconst 1i64 : index
+        %b = arith.iconst 2i64 : index
+        %c = arith.iconst 3i64 : index
+        
+        %val = mem.load %slot[%a, %b, %c] : int<32>
+
+        mem.store %val, %slot[%a, %b, %c]
+
+        func.return %val
+    }
+}
