@@ -47,8 +47,8 @@ impl fmt::Debug for ApInt {
 }
 
 impl ApInt {
-    /// Create a new zero integer with given width.
-    pub fn new(width: usize) -> Self {
+    /// Create a `0` with given width.
+    pub fn zero(width: usize) -> Self {
         // ceil division to get the number of chunks
         let num_chunks = (width + ApIntChunk::BITS as usize - 1) / ApIntChunk::BITS as usize;
         Self {
@@ -56,9 +56,6 @@ impl ApInt {
             chunks: vec![0; num_chunks],
         }
     }
-
-    /// Create a `0` with given width.
-    pub fn zero(width: usize) -> Self { Self::new(width) }
 
     /// Check if the integer is zero.
     pub fn is_zero(&self) -> bool { self.chunks.iter().all(|c| *c == 0) }
@@ -70,6 +67,20 @@ impl ApInt {
         apint
     }
 
+    /// Check if the integer is one.
+    pub fn is_one(&self) -> bool {
+        if self.chunks[0] != 1 {
+            return false;
+        }
+        for chunk in self.chunks.iter().skip(1) {
+            if *chunk != 0 {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Get the width of the integer.
     pub fn width(&self) -> usize { self.width }
 
     /// Get the mask of the last chunk.
@@ -89,169 +100,153 @@ impl ApInt {
         *self.chunks.last_mut().unwrap() &= self.last_chunk_mask();
     }
 
-    /// Sign extend the integer to the new width.
-    pub fn signext(mut self, width: usize) -> Self {
-        if width <= self.width {
-            return self;
+    pub fn inplace_bitor(&mut self, other: &Self) {
+        if self.width != other.width {
+            panic!("the width of the two integers are not the same")
         }
 
-        let sign = self.highest_bit();
-
-        if sign {
-            let ones = ApInt::all_ones(width - self.width).widening_shl(self.width);
-            self = self.zeroext(width) | ones;
-        } else {
-            self = self.zeroext(width);
+        for (a, b) in self.chunks.iter_mut().zip(other.chunks.iter()) {
+            *a |= *b;
         }
-
-        self
     }
 
-    /// Zero extend the integer to the new width.
-    pub fn zeroext(mut self, width: usize) -> Self {
-        if width <= self.width {
-            return self;
+    pub fn inplace_bitand(&mut self, other: &Self) {
+        if self.width != other.width {
+            panic!("the width of the two integers are not the same")
         }
 
+        for (a, b) in self.chunks.iter_mut().zip(other.chunks.iter()) {
+            *a &= *b;
+        }
+    }
+
+    pub fn inplace_bitxor(&mut self, other: &Self) {
+        if self.width != other.width {
+            panic!("the width of the two integers are not the same")
+        }
+
+        for (a, b) in self.chunks.iter_mut().zip(other.chunks.iter()) {
+            *a ^= *b;
+        }
+    }
+
+    pub fn inplace_bitnot(&mut self) {
+        for chunk in self.chunks.iter_mut() {
+            *chunk = !*chunk;
+        }
+        self.truncate_last_chunk();
+    }
+
+    pub fn zeroext(&mut self, width: usize) {
+        if width <= self.width {
+            return;
+        }
         let num_chunks = (width + ApIntChunk::BITS as usize - 1) / ApIntChunk::BITS as usize;
         self.chunks.resize(num_chunks, 0);
         self.width = width;
         self.truncate_last_chunk();
+    }
+
+    pub fn signext(&mut self, width: usize) {
+        if width <= self.width {
+            return;
+        }
+        let old_width = self.width;
+        let sign = self.highest_bit();
+        self.zeroext(width);
+        if sign {
+            let mut ones = ApInt::all_ones(width - old_width);
+            ones.inplace_widening_shl(old_width);
+            self.inplace_bitor(&ones);
+        }
+    }
+
+    pub fn into_signext(mut self, width: usize) -> Self {
+        self.signext(width);
         self
     }
 
-    /// Truncate the integer into two parts, the first part has the given width
-    ///
-    /// This need to shift all the chunks to the left for the higher part and
-    /// patch the lowest bits.
-    ///
-    /// This can be used to implement the shift right operation.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the truncation width is not smaller than the integer width.
-    pub fn into_truncated(self, width: usize) -> (Self, Self) {
+    pub fn into_zeroext(mut self, width: usize) -> Self {
+        self.zeroext(width);
+        self
+    }
+
+    pub fn truncate(&mut self, width: usize) -> Self {
         if width >= self.width {
             panic!("truncation width is not smaller than the integer width");
         }
 
-        let mut orig = self;
-        let mut low_part = ApInt::new(width);
-        let mut high_part = ApInt::new(orig.width - width);
+        let mut high = ApInt::zero(self.width - width);
+        self.width = width;
 
-        low_part.chunks = orig.chunks.drain(0..low_part.chunks.len()).collect();
-
-        for (i, chunk) in orig.chunks.drain(..).enumerate() {
-            high_part.chunks[i] = chunk;
+        let num_chunks = (width + ApIntChunk::BITS as usize - 1) / ApIntChunk::BITS as usize;
+        for (i, chunk) in self.chunks.drain(num_chunks..).enumerate() {
+            high.chunks[i] = chunk;
         }
 
-        // the number of bits of the last chunk of low_part
+        // the number of bits of the last chunk of low
         let num_low_bits = (width % ApIntChunk::BITS as usize) as u32;
         // if the number of bits is not a multiple of the chunk size
         if num_low_bits != 0 {
-            // shift left by the number of bits to be patched to the lowest bits
-            high_part.shl_by_bit(ApIntChunk::BITS - num_low_bits);
-            // get the patch bits (the highest remaining bits of the last chunk of low_part)
-            let patch_bits = low_part.chunks.last().unwrap() >> num_low_bits;
-            // patch the lowest bits of the last chunk of low_part
-            high_part.chunks[0] |= patch_bits;
-            // clear the highest bits of the last chunk of low_part
-            *low_part.chunks.last_mut().unwrap() &= low_part.last_chunk_mask();
+            // shift left by the number of bits to be patched to the lowest chunk
+            high.shl_by_bit(ApIntChunk::BITS - num_low_bits);
+            // get the patch bits (the highest remaining bits of the last chunk of low)
+            let patch_bits = self.chunks.last().unwrap() >> num_low_bits;
+            // patch the lowest bits of the last chunk of low
+            high.chunks[0] |= patch_bits;
+            // clear the highest bits of the last chunk of low
+            self.truncate_last_chunk();
         }
 
-        (low_part, high_part)
+        high
     }
 
-    /// Addition with carrying, returns the carry.
-    ///
-    /// The carry will occur if the sum exceeds the `width`.
-    ///
-    /// This operation is signless and under the complement representation.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the width of the two integers are not the same.
-    pub fn carrying_add(&self, rhs: &Self) -> (Self, bool) {
+    pub fn into_truncated(mut self, width: usize) -> (Self, Self) {
+        let high = self.truncate(width);
+        (self, high)
+    }
+
+    pub fn inplace_add(&mut self, rhs: &Self) -> bool {
         if self.width != rhs.width {
             panic!("the width of the two integers are not the same")
         }
 
-        let width = self.width;
-
-        let mut result = ApInt::new(width);
-
         let mut carry = false;
-        for ((a, b), r) in self
-            .chunks
-            .iter()
-            .zip(rhs.chunks.iter())
-            .zip(result.chunks.iter_mut())
-        {
+
+        for (a, b) in self.chunks.iter_mut().zip(rhs.chunks.iter()) {
             let (sum, carry_0) = a.overflowing_add(*b);
             let (sum, carry_1) = sum.overflowing_add(u64::from(carry));
-            *r = sum;
+            *a = sum;
             carry = carry_0 || carry_1;
         }
 
-        // check the last chunk mask
-        let last_chunk_mask = result.last_chunk_mask();
-        let last_chunk_unmasked = *result.chunks.last().unwrap();
-        let last_chunk = result.chunks.last_mut().unwrap();
+        let last_chunk = *self.chunks.last().unwrap();
+        self.truncate_last_chunk();
+        carry |= *self.chunks.last().unwrap() != last_chunk;
 
-        *last_chunk &= last_chunk_mask;
-        carry |= last_chunk_unmasked != *last_chunk;
-
-        (result, carry)
+        carry
     }
 
-    /// Subtraction with carrying, returns the borrow.
-    ///
-    /// The borrow will occur if the difference is negative.
-    ///
-    /// This operation is signless and under the complement representation.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the width of the two integers are not the same.
-    pub fn borrowing_sub(&self, rhs: &Self) -> (Self, bool) {
+    pub fn inplace_sub(&mut self, rhs: &Self) -> bool {
         if self.width != rhs.width {
             panic!("the width of the two integers are not the same")
         }
 
-        let width = self.width;
-
-        let mut result = ApInt::new(width);
-
         let mut borrow = false;
-        for ((a, b), r) in self
-            .chunks
-            .iter()
-            .zip(rhs.chunks.iter())
-            .zip(result.chunks.iter_mut())
-        {
+        for (a, b) in self.chunks.iter_mut().zip(rhs.chunks.iter()) {
             let (diff, borrow_0) = a.overflowing_sub(*b);
             let (diff, borrow_1) = diff.overflowing_sub(u64::from(borrow));
-            *r = diff;
-            borrow = borrow_0 || borrow_1
+            *a = diff;
+            borrow = borrow_0 || borrow_1;
         }
 
-        // check the last chunk mask
-        let last_chunk_mask = result.last_chunk_mask();
-        let last_chunk_unmasked = *result.chunks.last().unwrap();
-        let last_chunk = result.chunks.last_mut().unwrap();
+        let last_chunk = *self.chunks.last().unwrap();
+        self.truncate_last_chunk();
+        borrow |= *self.chunks.last().unwrap() != last_chunk;
 
-        *last_chunk &= last_chunk_mask;
-        borrow |= last_chunk_unmasked != *last_chunk;
-
-        (result, borrow)
+        borrow
     }
 
-    /// Shift the integer to the left by `shamt` chunks.
-    ///
-    /// This will not modify each chunk, buf only shift. The overflowed part
-    /// will be discarded.
-    ///
-    /// This operation is signless.
     fn shl_by_chunk(&mut self, chunk_shamt: usize) {
         if chunk_shamt == 0 {
             return;
@@ -272,12 +267,6 @@ impl ApInt {
         }
     }
 
-    /// Shift the integer to the left by `shamt` bits and discard the
-    /// overflowed.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `shamt` is larger than the width of a chunk.
     fn shl_by_bit(&mut self, shamt: u32) {
         if shamt >= ApIntChunk::BITS {
             panic!("shamt is larger than the width of a chunk");
@@ -301,33 +290,18 @@ impl ApInt {
         self.truncate_last_chunk();
     }
 
-    /// Shift left and extend the width by `shamt` bits.
-    ///
-    /// This operation is signless.
-    pub fn widening_shl(&self, shamt: usize) -> Self {
-        let new_width = self.width + shamt;
-        let mut result = self.clone().zeroext(new_width);
-
-        let chunk_shamt = shamt / ApIntChunk::BITS as usize;
-        let bit_shamt = shamt % ApIntChunk::BITS as usize;
-
-        result.shl_by_chunk(chunk_shamt);
-        result.shl_by_bit(bit_shamt as u32);
-
-        result
+    pub fn inplace_widening_shl(&mut self, shamt: usize) {
+        self.zeroext(self.width + shamt);
+        self.shl_by_chunk(shamt / ApIntChunk::BITS as usize);
+        self.shl_by_bit((shamt % ApIntChunk::BITS as usize) as u32);
     }
 
-    /// Shift left and truncate the width.
-    ///
-    /// This operation is signless.
-    pub fn carrying_shl(&self, shamt: usize) -> (Self, Self) {
+    pub fn inplace_carrying_shl(&mut self, shamt: usize) -> Self {
         let old_width = self.width;
-        self.widening_shl(shamt).into_truncated(old_width)
+        self.inplace_widening_shl(shamt);
+        self.truncate(old_width)
     }
 
-    /// Get the highest bit of the integer.
-    ///
-    /// This can be used to check the sign of the integer.
     pub fn highest_bit(&self) -> bool {
         let last_chunk_bits = (self.width % ApIntChunk::BITS as usize) as u32;
         let last_chunk_bits = if last_chunk_bits == 0 {
@@ -343,9 +317,8 @@ impl ApInt {
         }
     }
 
-    /// Get an all `1` mask
     pub fn all_ones(width: usize) -> Self {
-        let mut apint = ApInt::new(width);
+        let mut apint = ApInt::zero(width);
         for chunk in apint.chunks.iter_mut() {
             *chunk = ApIntChunk::MAX;
         }
@@ -353,225 +326,194 @@ impl ApInt {
         apint
     }
 
-    /// Get the absolute value as a complement representation and the sign.
-    pub fn abs(&self) -> (Self, bool) {
-        let width = self.width;
+    pub fn inplace_neg(&mut self) {
+        self.inplace_bitnot();
+        self.inplace_add(&ApInt::one(self.width));
+    }
+
+    pub fn inplace_abs(&mut self) -> bool {
         if self.highest_bit() {
-            (!self.clone() + ApInt::one(width), true)
+            self.inplace_neg();
+            true
         } else {
-            (self.clone(), false)
+            false
         }
     }
 
-    /// Multiply the integer by a chunk and extend the width by the chunk size.
-    ///
-    /// The full multiplication is currently nightly in Rust, so here just use
-    /// the u128.
-    ///
-    /// This operation treat the integer as unsigned.
-    pub fn widening_umul_chunk(&self, chunk: ApIntChunk) -> Self {
-        let mut result = ApInt::new(self.width + ApIntChunk::BITS as usize);
+    pub fn into_abs(&self) -> (Self, bool) {
+        let mut apint = self.clone();
+        let sign = apint.inplace_abs();
+        (apint, sign)
+    }
+
+    pub fn inplace_widening_umul_chunk(&mut self, chunk: ApIntChunk) {
         let mut carry = 0u128;
 
-        for (a, r) in self.chunks.iter().zip(result.chunks.iter_mut()) {
+        for a in self.chunks.iter_mut() {
             let product = u128::from(*a) * u128::from(chunk) + carry;
-            *r = product as ApIntChunk;
+            *a = product as ApIntChunk;
             carry = product >> ApIntChunk::BITS;
         }
-        *result.chunks.last_mut().unwrap() = carry as ApIntChunk;
-        result
+        self.zeroext(self.width + ApIntChunk::BITS as usize);
+        *self.chunks.last_mut().unwrap() = carry as ApIntChunk;
+    }
+
+    pub fn shrink_to_fit(&mut self) {
+        let mut width = self.width;
+        while width > 1 && self.chunks.last().unwrap() == &0 {
+            self.chunks.pop();
+            width -= ApIntChunk::BITS as usize;
+        }
+        let num_chunks = self.chunks.len();
+        let last_chunk_width = ApIntChunk::BITS - self.chunks.last().unwrap().leading_zeros();
+        let new_width = (num_chunks - 1) * ApIntChunk::BITS as usize + last_chunk_width as usize;
+        self.width = new_width;
     }
 
     /// Shrink the integer to a minimum width.
     pub fn into_shrunk(self) -> Self {
         let mut apint = self;
-        let mut width = apint.width;
-        while width > 1 && apint.chunks.last().unwrap() == &0 {
-            apint.chunks.pop();
-            width -= ApIntChunk::BITS as usize;
-        }
-        // check last chunk's leading zeros to calculate the new width
-        let num_chunks = apint.chunks.len();
-        let last_chunk_width = ApIntChunk::BITS - apint.chunks.last().unwrap().leading_zeros();
-        let new_width = (num_chunks - 1) * ApIntChunk::BITS as usize + last_chunk_width as usize;
-        apint.width = new_width;
+        apint.shrink_to_fit();
         apint
     }
 
-    /// Multiply the integer by a chunk and truncate the width.
-    ///
-    /// This operation treat the integer as unsigned.
-    pub fn carrying_umul_chunk(&self, chunk: ApIntChunk) -> (Self, Self) {
+    pub fn inplace_carrying_umul_chunk(&mut self, chunk: ApIntChunk) -> Self {
         let old_width = self.width;
-        self.widening_umul_chunk(chunk).into_truncated(old_width)
+        self.inplace_widening_umul_chunk(chunk);
+        self.truncate(old_width)
     }
 
-    /// Multiply the integer by another integer, produce a double width integer.
-    pub fn widening_umul(&self, rhs: &Self) -> Self {
+    pub fn inplace_widening_umul(&mut self, rhs: &Self) {
         if self.width != rhs.width {
             panic!("the width of the two integers are not the same")
         }
 
         if self.width * 2 <= ApIntChunk::BITS as usize {
-            // the width is small enough to use the chunk multiplication
-            let lhs = self.chunks[0];
-            let rhs = rhs.chunks[0];
-            // as the width is smaller than half of the chunk size, the product
-            // will not overflow
-            let product = lhs * rhs;
-            return ApInt::from(product).zeroext(self.width * 2);
+            let product = self.chunks[0] * rhs.chunks[0];
+            self.zeroext(self.width * 2);
+            self.chunks[0] = product;
+            return;
         }
 
-        let width = self.width;
-
-        let mut result = ApInt::new(width * 2);
-
+        let num_chunks =
+            (self.width * 2 + ApIntChunk::BITS as usize - 1) / ApIntChunk::BITS as usize;
         // the temporary result of the multiplication
-        let mut tmp_result: Vec<u128> = vec![0; result.chunks.len()];
+        let mut tmp_result: Vec<u128> = vec![0; num_chunks];
 
-        for (i, chunk) in self.chunks.iter().enumerate() {
-            let widened = rhs.widening_umul_chunk(*chunk);
-            for (j, r) in widened.chunks.iter().enumerate() {
-                tmp_result[i + j] += u128::from(*r);
+        for (i, chunk) in self.chunks.drain(..).enumerate() {
+            let mut widened = rhs.clone();
+            widened.inplace_widening_umul_chunk(chunk);
+            for (j, r) in widened.chunks.drain(..).enumerate() {
+                tmp_result[i + j] += u128::from(r);
             }
         }
 
-        // propagate the carry
         let mut carry = 0u128;
-        for (_i, r) in tmp_result.iter_mut().enumerate() {
+        for r in tmp_result.iter_mut() {
             let sum = *r + carry;
             *r = sum;
             carry = sum >> ApIntChunk::BITS;
         }
 
-        for (i, r) in tmp_result.iter().enumerate() {
-            result.chunks[i] = *r as ApIntChunk;
+        for r in tmp_result.iter() {
+            self.chunks.push(*r as ApIntChunk);
         }
 
-        result
+        self.width *= 2;
     }
 
-    pub fn widening_smul(&self, rhs: &Self) -> Self {
-        let (lhs, lhs_sign) = self.abs();
-        let (rhs, rhs_sign) = rhs.abs();
+    pub fn inplace_widening_smul(&mut self, rhs: &Self) {
+        let lhs_sign = self.inplace_abs();
+        let (rhs, rhs_sign) = rhs.clone().into_abs();
 
-        let product = lhs.widening_umul(&rhs);
-        let width = product.width;
+        self.inplace_widening_umul(&rhs);
 
         if lhs_sign ^ rhs_sign {
-            !product + ApInt::one(width)
-        } else {
-            product
+            self.inplace_neg();
         }
     }
 
-    /// Multiply the integer by another integer and truncate the width.
-    ///
-    /// This operation treat the integer as unsigned.
-    pub fn carrying_umul(&self, rhs: &Self) -> (Self, Self) {
+    pub fn inplace_carrying_umul(&mut self, rhs: &Self) -> Self {
         let old_width = self.width;
-        self.widening_umul(rhs).into_truncated(old_width)
+        self.inplace_widening_umul(rhs);
+        self.truncate(old_width)
     }
 
-    /// Multiply the integer by another integer and truncate the width.
-    ///
-    /// This operation treat the integer as signed.
-    pub fn carrying_smul(&self, rhs: &Self) -> (Self, Self) {
+    pub fn inplace_carrying_smul(&mut self, rhs: &Self) -> Self {
         let old_width = self.width;
-        self.widening_smul(rhs).into_truncated(old_width)
+        self.inplace_widening_smul(rhs);
+        self.truncate(old_width)
     }
 
-    /// Shift the integer to the right by `shamt` bits logically.
-    ///
-    /// The overflowed part will be returned.
-    pub fn overflowing_lshr(&self, shamt: usize) -> (Self, Self) {
+    pub fn inplace_lshr(&mut self, shamt: usize) -> Self {
         let old_width = self.width;
-        let (overflowed, result) = self.clone().into_truncated(shamt);
-        (result.zeroext(old_width), overflowed)
+        let mut truncated = self.truncate(shamt);
+        truncated.zeroext(old_width);
+        std::mem::swap(self, &mut truncated);
+        truncated
     }
 
-    /// Shift the integer to the right by `shamt` bits arithmetically.
-    ///
-    /// The sign bit will be extended to the higher bits.
-    pub fn overflowing_ashr(&self, shamt: usize) -> (Self, Self) {
+    pub fn inplace_ashr(&mut self, shamt: usize) -> Self {
         let old_width = self.width;
-        let (overflowed, result) = self.clone().into_truncated(shamt);
-        let result = result.signext(old_width);
-        debug_assert!(result.width == old_width);
-        (result, overflowed)
+        let mut truncated = self.truncate(shamt);
+        truncated.signext(old_width);
+        std::mem::swap(self, &mut truncated);
+        truncated
     }
 
-    /// Division with remainder.
-    ///
-    /// This operation treat the integers as unsigned.
-    pub fn unsigned_div_rem(&self, other: &Self) -> (Self, Self) {
-        if self.width != other.width {
+    pub fn unsigned_div_rem(&self, divisor: &Self) -> (Self, Self) {
+        if self.width != divisor.width {
             panic!("the width of the two integers are not the same")
         }
 
         let width = self.width;
 
-        let divisor = other.clone();
-
-        let mut remainder = ApInt::new(width);
+        let mut remainder = ApInt::zero(width);
         let mut quotient = self.clone();
 
         for _ in 0..width {
-            let set_bit = if remainder >= divisor {
-                remainder = remainder.borrowing_sub(&divisor).0;
+            let set_bit = if &remainder >= divisor {
+                remainder.inplace_sub(divisor);
                 true
             } else {
                 false
             };
 
-            let (shifted_quotient, carry) = quotient.carrying_shl(1);
-            quotient = shifted_quotient;
+            let carry = quotient.inplace_carrying_shl(1);
             quotient.chunks[0] |= u64::from(set_bit);
 
-            let shifted_remainder = remainder.carrying_shl(1).0;
-            remainder = shifted_remainder;
+            remainder.inplace_carrying_shl(1);
             remainder.chunks[0] |= u64::from(!carry.is_zero());
         }
 
-        let set_bit = if remainder >= divisor {
-            remainder = remainder.borrowing_sub(&divisor).0;
+        let set_bit = if &remainder >= divisor {
+            remainder.inplace_sub(divisor);
             true
         } else {
             false
         };
 
-        let (shifted_quotient, _carry) = quotient.carrying_shl(1);
-        quotient = shifted_quotient;
+        let _carry = quotient.inplace_carrying_shl(1);
         quotient.chunks[0] |= u64::from(set_bit);
 
         (quotient, remainder)
     }
 
-    /// Division with remainder.
-    ///
-    /// This operation treat the integers as signed.
     pub fn signed_div_rem(&self, other: &Self) -> (Self, Self) {
-        let (lhs, lhs_sign) = self.abs();
-        let (rhs, rhs_sign) = other.abs();
+        let (lhs, lhs_sign) = self.clone().into_abs();
+        let (rhs, rhs_sign) = other.clone().into_abs();
 
-        let (quotient, remainder) = lhs.unsigned_div_rem(&rhs);
+        let (mut quotient, mut remainder) = lhs.unsigned_div_rem(&rhs);
 
         let remainder_sign = lhs_sign;
         let quotient_sign = lhs_sign ^ rhs_sign;
-        let remainder_width = remainder.width;
-        let quotient_width = quotient.width;
 
-        let remainder = if remainder_sign {
-            !remainder + ApInt::one(remainder_width)
-        } else {
-            remainder
-        };
-
-        let quotient = if quotient_sign {
-            !quotient + ApInt::one(quotient_width)
-        } else {
-            quotient
-        };
+        if remainder_sign {
+            remainder.inplace_neg();
+        }
+        if quotient_sign {
+            quotient.inplace_neg();
+        }
 
         (quotient, remainder)
     }
@@ -586,7 +528,7 @@ impl From<Vec<ApIntChunk>> for ApInt {
 
 impl From<u8> for ApInt {
     fn from(value: u8) -> Self {
-        let mut apint = ApInt::new(8);
+        let mut apint = ApInt::zero(8);
         apint.chunks[0] = value as ApIntChunk;
         apint
     }
@@ -594,15 +536,19 @@ impl From<u8> for ApInt {
 
 impl From<i8> for ApInt {
     fn from(value: i8) -> Self {
-        let abs = value.unsigned_abs();
-        let apint = ApInt::from(abs);
-        -apint
+        let sign = value < 0;
+        let mut apint = ApInt::zero(8);
+        apint.chunks[0] = value.unsigned_abs() as ApIntChunk;
+        if sign {
+            apint.inplace_neg();
+        }
+        apint
     }
 }
 
 impl From<u16> for ApInt {
     fn from(value: u16) -> Self {
-        let mut apint = ApInt::new(16);
+        let mut apint = ApInt::zero(16);
         apint.chunks[0] = value as ApIntChunk;
         apint
     }
@@ -610,15 +556,19 @@ impl From<u16> for ApInt {
 
 impl From<i16> for ApInt {
     fn from(value: i16) -> Self {
-        let abs = value.unsigned_abs();
-        let apint = ApInt::from(abs);
-        -apint
+        let sign = value < 0;
+        let mut apint = ApInt::zero(16);
+        apint.chunks[0] = value.unsigned_abs() as ApIntChunk;
+        if sign {
+            apint.inplace_neg();
+        }
+        apint
     }
 }
 
 impl From<u32> for ApInt {
     fn from(value: u32) -> Self {
-        let mut apint = ApInt::new(32);
+        let mut apint = ApInt::zero(32);
         apint.chunks[0] = value as ApIntChunk;
         apint
     }
@@ -626,15 +576,19 @@ impl From<u32> for ApInt {
 
 impl From<i32> for ApInt {
     fn from(value: i32) -> Self {
-        let abs = value.unsigned_abs();
-        let apint = ApInt::from(abs);
-        -apint
+        let sign = value < 0;
+        let mut apint = ApInt::zero(32);
+        apint.chunks[0] = value.unsigned_abs() as ApIntChunk;
+        if sign {
+            apint.inplace_neg();
+        }
+        apint
     }
 }
 
 impl From<u64> for ApInt {
     fn from(value: u64) -> Self {
-        let mut apint = ApInt::new(64);
+        let mut apint = ApInt::zero(64);
         apint.chunks[0] = value as ApIntChunk;
         apint
     }
@@ -642,9 +596,13 @@ impl From<u64> for ApInt {
 
 impl From<i64> for ApInt {
     fn from(value: i64) -> Self {
-        let abs = value.unsigned_abs();
-        let apint = ApInt::from(abs);
-        -apint
+        let sign = value < 0;
+        let mut apint = ApInt::zero(64);
+        apint.chunks[0] = value.unsigned_abs() as ApIntChunk;
+        if sign {
+            apint.inplace_neg();
+        }
+        apint
     }
 }
 
@@ -684,118 +642,6 @@ impl PartialOrd for ApInt {
 impl Ord for ApInt {
     /// Compare two integers as unsigned integers.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.partial_cmp(other).unwrap() }
-}
-
-impl std::ops::Add for ApInt {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output { self.carrying_add(&rhs).0 }
-}
-
-impl std::ops::Sub for ApInt {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output { self.borrowing_sub(&rhs).0 }
-}
-
-impl std::ops::BitAnd for ApInt {
-    type Output = Self;
-
-    fn bitand(self, rhs: Self) -> Self::Output {
-        if self.width != rhs.width {
-            panic!("the width of the two integers are not the same")
-        }
-
-        let mut result = ApInt::new(self.width);
-        for ((a, b), r) in self
-            .chunks
-            .iter()
-            .zip(rhs.chunks.iter())
-            .zip(result.chunks.iter_mut())
-        {
-            *r = *a & *b;
-        }
-        result
-    }
-}
-
-impl std::ops::BitOr for ApInt {
-    type Output = Self;
-
-    fn bitor(self, rhs: Self) -> Self::Output {
-        if self.width != rhs.width {
-            panic!("the width of the two integers are not the same")
-        }
-
-        let mut result = ApInt::new(self.width);
-        for ((a, b), r) in self
-            .chunks
-            .iter()
-            .zip(rhs.chunks.iter())
-            .zip(result.chunks.iter_mut())
-        {
-            *r = *a | *b;
-        }
-        result
-    }
-}
-
-impl std::ops::BitXor for ApInt {
-    type Output = Self;
-
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        if self.width != rhs.width {
-            panic!("the width of the two integers are not the same")
-        }
-
-        let mut result = ApInt::new(self.width);
-        for ((a, b), r) in self
-            .chunks
-            .iter()
-            .zip(rhs.chunks.iter())
-            .zip(result.chunks.iter_mut())
-        {
-            *r = *a ^ *b;
-        }
-        result
-    }
-}
-
-impl std::ops::Not for ApInt {
-    type Output = Self;
-
-    fn not(self) -> Self::Output {
-        let mut result = ApInt::new(self.width);
-        for (r, a) in result.chunks.iter_mut().zip(self.chunks.iter()) {
-            *r = !*a;
-        }
-        result.truncate_last_chunk();
-        result
-    }
-}
-
-impl std::ops::Neg for ApInt {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        let width = self.width;
-        !self + ApInt::one(width)
-    }
-}
-
-impl std::ops::Shl<usize> for ApInt {
-    type Output = Self;
-
-    fn shl(self, shamt: usize) -> Self::Output { self.carrying_shl(shamt).0 }
-}
-
-impl std::ops::Shr<usize> for ApInt {
-    type Output = Self;
-
-    fn shr(self, shamt: usize) -> Self::Output {
-        let (result, _) = self.overflowing_lshr(shamt);
-        result
-    }
 }
 
 #[derive(Debug, Error)]
@@ -849,13 +695,14 @@ impl TryFrom<&str> for ApInt {
             let digit = c
                 .to_digit(radix)
                 .ok_or_else(|| ApIntParseError::InvalidLiteral(s.to_string()))?;
-            apint = apint.widening_umul_chunk(radix as ApIntChunk);
+            apint.inplace_widening_umul_chunk(radix as ApIntChunk);
             let digit = ApInt::from(digit);
 
             if apint.width > digit.width {
-                apint = digit.zeroext(apint.width) + apint;
+                apint.inplace_add(&digit.into_zeroext(apint.width));
             } else {
-                apint = apint.zeroext(digit.width) + digit;
+                apint.zeroext(digit.width);
+                apint.inplace_add(&digit);
             }
 
             apint = apint.into_shrunk();
@@ -865,7 +712,7 @@ impl TryFrom<&str> for ApInt {
             if bits < apint.width {
                 return Err(ApIntParseError::OutOfRange(bits, apint.width));
             } else {
-                apint = apint.zeroext(bits);
+                apint = apint.into_zeroext(bits);
             }
         }
 
@@ -882,7 +729,7 @@ impl Parse for ApInt {
     ) -> crate::ParseResult<Self::Item> {
         let neg = matches!(state.stream.consume_if(delimiter!('-'))?, Some(_));
         let token = state.stream.consume()?;
-        let value = match token.kind {
+        let mut value = match token.kind {
             crate::TokenKind::Tokenized(s) => {
                 ApInt::try_from(s).map_err(|e| parse_error!(token.span, e))?
             }
@@ -897,7 +744,12 @@ impl Parse for ApInt {
                 .into();
             }
         };
-        Ok(if neg { -value } else { value })
+
+        if neg {
+            value.inplace_neg();
+        }
+
+        Ok(value)
     }
 }
 
@@ -1010,6 +862,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_inplace_neg_0() {
+        let mut a = ApInt::from(123u32);
+        a.inplace_neg();
+        assert_eq!(a.width, 32);
+        assert_eq!(a.chunks, vec![0xffffff85u64]);
+    }
+
+    #[test]
+    fn test_inplace_neg_1() {
+        let mut a = ApInt::from(123u32).into_zeroext(128);
+        a.inplace_neg();
+        assert_eq!(a.width, 128);
+        assert_eq!(a.chunks, vec![0xffffffffffffff85u64, 0xffffffffffffffff]);
+    }
+
+    #[test]
     fn test_fmt_binary() {
         let a = ApInt::from(0x123u32).into_truncated(9).0;
         assert_eq!(format!("{:b}", a), "0b100100011i9");
@@ -1061,7 +929,7 @@ mod tests {
     #[test]
     fn test_from_str_3() {
         let a = ApInt::try_from("1234567890i34").unwrap();
-        let expected = ApInt::from(1234567890u32).zeroext(34);
+        let expected = ApInt::from(1234567890u32).into_zeroext(34);
         assert_eq!(a, expected);
     }
 
@@ -1119,7 +987,7 @@ mod tests {
 
     #[test]
     fn test_ord_0() {
-        let a = ApInt::from(123u32).zeroext(128);
+        let a = ApInt::from(123u32).into_zeroext(128);
         let b = ApInt::from(256u32);
         assert!(a < b);
     }
@@ -1134,55 +1002,55 @@ mod tests {
     #[test]
     fn test_signext_0() {
         let a = ApInt::from(0x12345678u32).into_truncated(29).0;
-        let a = a.signext(64);
+        let a = a.into_signext(64);
         assert_eq!(a.chunks, vec![0xfffffffff2345678u64]);
     }
 
     #[test]
-    fn test_carrying_add() {
-        let a = ApInt::from(0x12345678u32);
+    fn test_inplace_add() {
+        let mut a = ApInt::from(0x12345678u32);
         let b = ApInt::from(0x87654321u32);
-        let (result, carry) = a.carrying_add(&b);
-        assert_eq!(result.chunks, vec![0x99999999]);
+        let carry = a.inplace_add(&b);
+        assert_eq!(a.chunks, vec![0x99999999]);
         assert!(!carry);
     }
 
     #[test]
-    fn test_carrying_add_carry_0() {
-        let a = ApInt::from(0x12345678u32);
+    fn test_inplace_add_carry_0() {
+        let mut a = ApInt::from(0x12345678u32);
         let b = ApInt::from(0xf7654321u32);
-        let (result, carry) = a.carrying_add(&b);
-        assert_eq!(result.chunks, vec![0x09999999]);
+        let carry = a.inplace_add(&b);
+        assert_eq!(a.chunks, vec![0x09999999]);
         assert!(carry);
     }
 
     #[test]
-    fn test_carrying_add_carry_1() {
-        let a = ApInt::from(vec![0x123456781234u64, 0x56784321u64])
+    fn test_inplace_add_carry_1() {
+        let mut a = ApInt::from(vec![0x123456781234u64, 0x56784321u64])
             .into_truncated(96)
             .0;
         let b = ApInt::from(vec![0xf76543214321u64, 0xf3211234u64])
             .into_truncated(96)
             .0;
 
-        let (result, carry) = a.carrying_add(&b);
+        let carry = a.inplace_add(&b);
 
-        assert_eq!(result.chunks, vec![0x1099999995555u64, 0x49995555u64]);
+        assert_eq!(a.chunks, vec![0x1099999995555u64, 0x49995555u64]);
         assert!(carry);
     }
 
     #[test]
-    fn test_carrying_add_carry_2() {
-        let a = ApInt::from(vec![0xffffffff88888888u64, 0xffffffffu64])
+    fn test_inplace_add_carry_2() {
+        let mut a = ApInt::from(vec![0xffffffff88888888u64, 0xffffffffu64])
             .into_truncated(96)
             .0;
         let b = ApInt::from(vec![0xffffffff88888888u64, 0xffffffffu64])
             .into_truncated(96)
             .0;
 
-        let (result, carry) = a.carrying_add(&b);
+        let carry = a.inplace_add(&b);
 
-        assert_eq!(result.chunks, vec![0xffffffff11111110u64, 0xffffffffu64]);
+        assert_eq!(a.chunks, vec![0xffffffff11111110u64, 0xffffffffu64]);
         assert!(carry);
     }
 
@@ -1268,128 +1136,122 @@ mod tests {
     }
 
     #[test]
-    fn test_borrowing_sub_borrow_0() {
-        let a = ApInt::from(0x12345678u32);
+    fn test_inplace_sub_borrow_0() {
+        let mut a = ApInt::from(0x12345678u32);
         let b = ApInt::from(0x87654321u32);
-        let (result, borrow) = a.borrowing_sub(&b);
-        assert_eq!(result.chunks, vec![0x8acf1357u64]);
+        let borrow = a.inplace_sub(&b);
+        assert_eq!(a.chunks, vec![0x8acf1357u64]);
         assert!(borrow);
     }
 
     #[test]
-    fn test_borrowing_sub_0() {
+    fn test_inplace_sub_0() {
         let a = ApInt::from(0x12345678u32);
-        let b = ApInt::from(0x87654321u32);
-        let (result, borrow) = b.borrowing_sub(&a);
-        assert_eq!(result.chunks, vec![0x7530eca9u64]);
+        let mut b = ApInt::from(0x87654321u32);
+        let borrow = b.inplace_sub(&a);
+        assert_eq!(b.chunks, vec![0x7530eca9u64]);
         assert!(!borrow);
     }
 
     #[test]
-    fn test_borrowing_sub_2() {
-        let a = ApInt::from(0x12345678u32);
+    fn test_inplace_sub_2() {
+        let mut a = ApInt::from(0x12345678u32);
         let b = ApInt::from(0x12345678u32);
-        let (result, borrow) = a.borrowing_sub(&b);
-        assert_eq!(result.chunks, vec![0]);
+        let borrow = a.inplace_sub(&b);
+        assert_eq!(a.chunks, vec![0]);
         assert!(!borrow);
     }
 
     #[test]
-    fn test_borrowing_sub_1() {
-        let a = ApInt::from(vec![0x1122334455667788u64, 0x9900aabbccddeeffu64]);
+    fn test_inplace_sub_1() {
+        let mut a = ApInt::from(vec![0x1122334455667788u64, 0x9900aabbccddeeffu64]);
         let b = ApInt::from(vec![0x2233445566778899u64, 0x00aabbccddeeff22u64]);
 
-        let (result, borrow) = a.borrowing_sub(&b);
+        let borrow = a.inplace_sub(&b);
 
-        assert_eq!(
-            result.chunks,
-            vec![0xeeeeeeeeeeeeeeefu64, 0x9855eeeeeeeeefdcu64]
-        );
+        assert_eq!(a.chunks, vec![0xeeeeeeeeeeeeeeefu64, 0x9855eeeeeeeeefdcu64]);
         assert!(!borrow);
     }
 
     #[test]
-    fn test_borrowing_sub_borrow_1() {
+    fn test_inplace_sub_borrow_1() {
         let a = ApInt::from(vec![0x1122334455667788u64, 0x9900aabbccddeeffu64]);
-        let b = ApInt::from(vec![0x2233445566778899u64, 0x00aabbccddeeff22u64]);
+        let mut b = ApInt::from(vec![0x2233445566778899u64, 0x00aabbccddeeff22u64]);
 
-        let (result, borrow) = b.borrowing_sub(&a);
+        let borrow = b.inplace_sub(&a);
 
         assert!(borrow);
-        assert_eq!(
-            result.chunks,
-            vec![0x1111111111111111u64, 0x67aa111111111023u64]
-        );
+        assert_eq!(b.chunks, vec![0x1111111111111111u64, 0x67aa111111111023u64]);
     }
 
     #[test]
     fn test_widening_umul_chunk_0() {
-        let a = ApInt::from(vec![0x1234567890abcdefu64, 0x1234u64])
+        let mut a = ApInt::from(vec![0x1234567890abcdefu64, 0x1234u64])
             .into_truncated(80)
             .0;
         let b = 0x1234u64;
-        let result = a.widening_umul_chunk(b);
-        assert_eq!(result.width, 144);
-        assert_eq!(result.chunks, vec![0x60b60aa97760a28cu64, 0x14b5bdbu64, 0]);
+        a.inplace_widening_umul_chunk(b);
+        assert_eq!(a.width, 144);
+        assert_eq!(a.chunks, vec![0x60b60aa97760a28cu64, 0x14b5bdbu64, 0]);
     }
 
     #[test]
     fn test_widening_umul_chunk_1() {
-        let a = ApInt::from(123u32);
+        let mut a = ApInt::from(123u32);
         let b = 1234u64;
 
-        let result = a.widening_umul_chunk(b);
+        a.inplace_widening_umul_chunk(b);
 
-        assert_eq!(result.width, 96);
-        assert_eq!(result.chunks, vec![0x250e6, 0]);
+        assert_eq!(a.width, 96);
+        assert_eq!(a.chunks, vec![0x250e6, 0]);
     }
 
     #[test]
     fn test_carrying_umul_chunk_0() {
-        let a = ApInt::from(123u32).into_truncated(8).0;
+        let mut a = ApInt::from(123u32).into_truncated(8).0;
         let b = 1234u64;
 
-        let (result, carry) = a.carrying_umul_chunk(b);
+        let carry = a.inplace_carrying_umul_chunk(b);
 
-        assert_eq!(result.chunks, vec![0xe6]);
-        assert_eq!(result.width, 8);
+        assert_eq!(a.chunks, vec![0xe6]);
+        assert_eq!(a.width, 8);
         assert_eq!(carry.chunks, vec![0x250]);
         assert_eq!(carry.width, 64);
     }
 
     #[test]
     fn test_carrying_umul_chunk_1() {
-        let a = ApInt::from(vec![0x1234567890abcdefu64, 0x1234u64])
+        let mut a = ApInt::from(vec![0x1234567890abcdefu64, 0x1234u64])
             .into_truncated(80)
             .0;
         let b = 0x1234u64;
 
-        let (result, carry) = a.carrying_umul_chunk(b);
+        let carry = a.inplace_carrying_umul_chunk(b);
 
-        assert_eq!(result.chunks, vec![0x60b60aa97760a28cu64, 0x5bdbu64]);
-        assert_eq!(result.width, 80);
+        assert_eq!(a.chunks, vec![0x60b60aa97760a28cu64, 0x5bdbu64]);
+        assert_eq!(a.width, 80);
         assert_eq!(carry.chunks, vec![0x14b]);
         assert_eq!(carry.width, 64);
     }
 
     #[test]
     fn test_carrying_shl_0() {
-        let a = ApInt::from(0x12345678u32);
-        let (result, carry) = a.carrying_shl(4);
-        assert_eq!(result.chunks, vec![0x23456780u64]);
-        assert_eq!(result.width, 32);
+        let mut a = ApInt::from(0x12345678u32);
+        let carry = a.inplace_carrying_shl(4);
+        assert_eq!(a.chunks, vec![0x23456780u64]);
+        assert_eq!(a.width, 32);
         assert_eq!(carry.chunks, vec![1]);
         assert_eq!(carry.width, 4);
     }
 
     #[test]
     fn test_carrying_shl_1() {
-        let a = ApInt::from(vec![0x1234567890abcdefu64, 0x0000567890abcdefu64])
+        let mut a = ApInt::from(vec![0x1234567890abcdefu64, 0x0000567890abcdefu64])
             .into_truncated(112)
             .0;
-        let (result, carry) = a.carrying_shl(72);
-        assert_eq!(result.chunks, vec![0, 0x00007890abcdef00u64]);
-        assert_eq!(result.width, 112);
+        let carry = a.inplace_carrying_shl(72);
+        assert_eq!(a.chunks, vec![0, 0x00007890abcdef00u64]);
+        assert_eq!(a.width, 112);
         // 0x56_7890_abcd_ef12_3456
         assert_eq!(carry.chunks, vec![0x7890abcdef123456u64, 0x56u64]);
         assert_eq!(carry.width, 72);
@@ -1397,28 +1259,28 @@ mod tests {
 
     #[test]
     fn test_widening_shl_0() {
-        let a = ApInt::from(0x12345678u32);
-        let result = a.widening_shl(4);
-        assert_eq!(result.chunks, vec![0x123456780u64]);
-        assert_eq!(result.width, 36);
+        let mut a = ApInt::from(0x12345678u32);
+        a.inplace_widening_shl(4);
+        assert_eq!(a.chunks, vec![0x123456780u64]);
+        assert_eq!(a.width, 36);
     }
 
     #[test]
     fn test_widening_shl_1() {
-        let a = ApInt::from(vec![0x1234567890abcdefu64, 0x0000567890abcdefu64])
+        let mut a = ApInt::from(vec![0x1234567890abcdefu64, 0x0000567890abcdefu64])
             .into_truncated(112)
             .0;
-        let result = a.widening_shl(72);
+        a.inplace_widening_shl(72);
         assert_eq!(
-            result.chunks,
+            a.chunks,
             vec![0, 0x34567890abcdef00u64, 0x00567890abcdef12u64]
         );
-        assert_eq!(result.width, 184);
+        assert_eq!(a.width, 184);
     }
 
     #[test]
     fn test_widening_umul_0() {
-        let a = ApInt::from(vec![
+        let mut a = ApInt::from(vec![
             0xffffffffffffffffu64,
             0xffffffffffffffffu64,
             0xffffffffffffffffu64,
@@ -1429,10 +1291,10 @@ mod tests {
             0xffffffffffffffffu64,
         ]);
 
-        let result = a.widening_umul(&b);
+        a.inplace_widening_umul(&b);
 
         assert_eq!(
-            result.chunks,
+            a.chunks,
             vec![
                 0x0000000000000001,
                 0,
@@ -1443,12 +1305,12 @@ mod tests {
             ]
         );
 
-        assert_eq!(result.width, 384);
+        assert_eq!(a.width, 384);
     }
 
     #[test]
     fn test_widening_umul_1() {
-        let a = ApInt::from(vec![
+        let mut a = ApInt::from(vec![
             0x1234567890abcdefu64,
             0x1234567890abcdefu64,
             0x1234567890abcdefu64,
@@ -1460,10 +1322,10 @@ mod tests {
             0xfedcba9876543210u64,
         ]);
 
-        let result = a.widening_umul(&b);
+        a.inplace_widening_umul(&b);
 
         assert_eq!(
-            result.chunks,
+            a.chunks,
             vec![
                 0x236d88fe55618cf0u64,
                 0x58fab207783af122u64,
@@ -1474,32 +1336,32 @@ mod tests {
             ]
         );
 
-        assert_eq!(result.width, 384);
+        assert_eq!(a.width, 384);
     }
 
     #[test]
     fn test_widening_umul_2() {
-        let a = ApInt::from(114514u32);
+        let mut a = ApInt::from(114514u32);
         let b = ApInt::from(1919810u32);
 
-        let result = a.widening_umul(&b);
+        a.inplace_widening_umul(&b);
 
-        assert_eq!(result.width, 64);
-        assert_eq!(result.chunks, [0x332fca5924u64])
+        assert_eq!(a.width, 64);
+        assert_eq!(a.chunks, [0x332fca5924u64])
     }
 
     #[test]
-    fn test_carrying_umul() {
-        let a = ApInt::from(0x12345678u32);
+    fn test_carrying_umul_0() {
+        let mut a = ApInt::from(0x12345678u32);
         let b = ApInt::from(0x87654321u32);
-        let (lhs, rhs) = a.carrying_umul(&b);
-        assert_eq!(lhs.chunks, vec![0x70b88d78u64]);
-        assert_eq!(rhs.chunks, vec![0x9a0cd05u64]);
+        let carry = a.inplace_carrying_umul(&b);
+        assert_eq!(a.chunks, vec![0x70b88d78u64]);
+        assert_eq!(carry.chunks, vec![0x9a0cd05u64]);
     }
 
     #[test]
     fn test_carrying_umul_1() {
-        let a = ApInt::from(vec![
+        let mut a = ApInt::from(vec![
             0x1234567890abcdefu64,
             0x1234567890abcdefu64,
             0x1234567890abcdefu64,
@@ -1511,10 +1373,10 @@ mod tests {
             0xfedcba9876543210u64,
         ]);
 
-        let (result, carry) = a.carrying_umul(&b);
+        let carry = a.inplace_carrying_umul(&b);
 
         assert_eq!(
-            result.chunks,
+            a.chunks,
             vec![
                 0x236d88fe55618cf0u64,
                 0x58fab207783af122u64,
@@ -1533,18 +1395,18 @@ mod tests {
     }
 
     #[test]
-    fn test_overflowing_lshr_0() {
-        let a = ApInt::from(vec![
+    fn test_inplace_lshr_0() {
+        let mut a = ApInt::from(vec![
             0x1234567890abcdefu64,
             0x1234567890abcdefu64,
             0x1234567890abcdefu64,
         ]);
 
-        let (result, overflowed) = a.overflowing_lshr(64);
+        let overflowed = a.inplace_lshr(64);
 
-        assert_eq!(result.width, 192);
+        assert_eq!(a.width, 192);
         assert_eq!(
-            result.chunks,
+            a.chunks,
             vec![0x1234567890abcdefu64, 0x1234567890abcdefu64, 0]
         );
         assert_eq!(overflowed.width, 64);
@@ -1552,25 +1414,25 @@ mod tests {
     }
 
     #[test]
-    fn test_overflowing_lshr_1() {
-        let a = ApInt::from(0x123u16).into_truncated(12).0;
+    fn test_inplace_lshr_1() {
+        let mut a = ApInt::from(0x123u16).into_truncated(12).0;
 
-        let (result, overflowed) = a.overflowing_lshr(4);
+        let overflowed = a.inplace_lshr(4);
 
-        assert_eq!(result.width, 12);
-        assert_eq!(result.chunks, vec![0x012]);
+        assert_eq!(a.width, 12);
+        assert_eq!(a.chunks, vec![0x012]);
         assert_eq!(overflowed.width, 4);
         assert_eq!(overflowed.chunks, vec![0x3]);
     }
 
     #[test]
-    fn test_overflowing_lshr_2() {
-        let a = ApInt::from(vec![0x1234567890abcdefu64, 0xfedcba9876543210u64]);
+    fn test_inplace_lshr_2() {
+        let mut a = ApInt::from(vec![0x1234567890abcdefu64, 0xfedcba9876543210u64]);
 
-        let (result, overflowed) = a.overflowing_lshr(68);
+        let overflowed = a.inplace_lshr(68);
 
-        assert_eq!(result.width, 128);
-        assert_eq!(result.chunks, vec![0x0fedcba987654321u64, 0]);
+        assert_eq!(a.width, 128);
+        assert_eq!(a.chunks, vec![0x0fedcba987654321u64, 0]);
         assert_eq!(overflowed.width, 68);
         assert_eq!(overflowed.chunks, vec![0x1234567890abcdefu64, 0]);
     }
@@ -1610,7 +1472,7 @@ mod tests {
     }
 
     fn test_abs(a: ApInt, b: ApInt) {
-        let (result, _) = a.abs();
+        let (result, _) = a.into_abs();
         assert_eq!(result, b);
     }
 
@@ -1635,24 +1497,24 @@ mod tests {
 
     #[test]
     fn test_widenging_smul_0() {
-        let a = ApInt::from(vec![0xfffffffffffffff0u64, 0xffffffffffffffffu64]);
+        let mut a = ApInt::from(vec![0xfffffffffffffff0u64, 0xffffffffffffffffu64]);
         let b = ApInt::from(vec![0xffffffffffffffffu64, 0xffffffffffffffffu64]);
 
-        let result = a.widening_smul(&b);
+        a.inplace_widening_smul(&b);
 
-        assert_eq!(result.width, 256);
-        assert_eq!(result.chunks, vec![0x10, 0, 0, 0]);
+        assert_eq!(a.width, 256);
+        assert_eq!(a.chunks, vec![0x10, 0, 0, 0]);
     }
 
     #[test]
     fn test_carrying_smul_0() {
-        let a = ApInt::from(0x114514u32);
+        let mut a = ApInt::from(0x114514u32);
         let b = ApInt::from(0xffffffffu32);
 
-        let (result, carry) = a.carrying_smul(&b);
+        let carry = a.inplace_carrying_smul(&b);
 
-        assert_eq!(result.width, 32);
-        assert_eq!(result.chunks, vec![0xffeebaecu64]);
+        assert_eq!(a.width, 32);
+        assert_eq!(a.chunks, vec![0xffeebaecu64]);
 
         assert_eq!(carry.width, 32);
         assert_eq!(carry.chunks, vec![0xffffffffu64]);
@@ -1685,27 +1547,24 @@ mod tests {
     }
 
     #[test]
-    fn test_overflowing_ashr_0() {
-        let a = ApInt::from(vec![0x1234567890abcdefu64, 0xfedcba9876543210u64]);
+    fn test_inplace_ashr_0() {
+        let mut a = ApInt::from(vec![0x1234567890abcdefu64, 0xfedcba9876543210u64]);
 
-        let (result, overflowed) = a.overflowing_ashr(68);
+        let overflowed = a.inplace_ashr(68);
 
-        assert_eq!(result.width, 128);
-        assert_eq!(
-            result.chunks,
-            vec![0xffedcba987654321u64, 0xffffffffffffffffu64]
-        );
+        assert_eq!(a.width, 128);
+        assert_eq!(a.chunks, vec![0xffedcba987654321u64, 0xffffffffffffffffu64]);
         assert_eq!(overflowed.width, 68);
         assert_eq!(overflowed.chunks, vec![0x1234567890abcdefu64, 0]);
     }
 
     #[test]
-    fn test_oveflowing_ashr_1() {
-        let a = ApInt::from(0x100u32).into_truncated(9).0;
-        let (result, overflowed) = a.overflowing_ashr(8);
+    fn test_inplace_ashr_1() {
+        let mut a = ApInt::from(0x100u32).into_truncated(9).0;
+        let overflowed = a.inplace_ashr(8);
 
-        assert_eq!(result.width, 9);
-        assert_eq!(result.chunks, vec![0x1ffu64]);
+        assert_eq!(a.width, 9);
+        assert_eq!(a.chunks, vec![0x1ffu64]);
         assert_eq!(overflowed.width, 8);
         assert_eq!(overflowed.chunks, vec![0]);
     }

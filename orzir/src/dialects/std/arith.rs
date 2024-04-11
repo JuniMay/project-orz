@@ -35,33 +35,14 @@ impl Verify for IConstOp {
     fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
         self.run_verifiers(ctx)?;
         self.result.deref(&ctx.values).verify(ctx)?;
-
-        // verify if the width of the integer and the type is consistent
-        let is_int = self
-            .result
-            .deref(&ctx.values)
-            .ty(ctx)
-            .deref(&ctx.tys)
-            .is_a::<IntTy>();
-
-        if !is_int {
-            // TODO: support index width.
-            return Ok(());
+        let result_ty = self.result.deref(&ctx.values).ty(ctx).deref(&ctx.tys);
+        if let Some(ty) = result_ty.as_a::<IntTy>() {
+            // for `index` type, the width can be arbitrary in verification time
+            if ty.width() != self.value.width() {
+                return verification_error!(IncompatibleWidthErr(ty.width(), self.value.width()))
+                    .into();
+            }
         }
-
-        let ty = self
-            .result
-            .deref(&ctx.values)
-            .ty(ctx)
-            .deref(&ctx.tys)
-            .as_a::<IntTy>()
-            .unwrap();
-
-        if ty.width() != self.value.width() {
-            return verification_error!(IncompatibleWidthErr(ty.width(), self.value.width()))
-                .into();
-        }
-
         Ok(())
     }
 }
