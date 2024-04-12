@@ -98,7 +98,7 @@ mod tests {
         arith,
         builtin::{self, ModuleOp},
         cf,
-        func::{self},
+        func, register_std_dialects,
     };
 
     #[test]
@@ -123,9 +123,7 @@ mod tests {
         let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
 
-        builtin::register(&mut ctx);
-        func::register(&mut ctx);
-        arith::register(&mut ctx);
+        register_std_dialects(&mut ctx);
 
         let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");

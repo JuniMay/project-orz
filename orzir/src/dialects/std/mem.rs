@@ -229,18 +229,14 @@ pub fn register(ctx: &mut Context) {
 mod tests {
     use orzir_core::{Context, OpObj, Parse, ParseState, Print, PrintState, TokenStream};
 
-    use crate::dialects::std::{arith, builtin, cf, func, mem};
+    use crate::dialects::std::{arith, builtin, cf, func, mem, register_std_dialects};
 
     fn test_parse_print(src: &str, expected: &str) {
         let stream = TokenStream::new(src);
         let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
 
-        builtin::register(&mut ctx);
-        func::register(&mut ctx);
-        arith::register(&mut ctx);
-        mem::register(&mut ctx);
-        cf::register(&mut ctx);
+        register_std_dialects(&mut ctx);
 
         let item = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("");

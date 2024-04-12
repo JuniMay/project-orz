@@ -128,18 +128,13 @@ mod tests {
         Context, OpObj, Parse, ParseState, Print, PrintState, RegionInterface, TokenStream,
     };
 
-    use crate::dialects::std::{
-        arith,
-        builtin::{self, ModuleOp},
-        func,
-    };
+    use crate::dialects::std::{builtin::ModuleOp, register_std_dialects};
 
     fn test_parse_print(src: &str, expected: &str) {
         let stream = TokenStream::new(src);
         let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
-        builtin::register(&mut ctx);
-        arith::register(&mut ctx);
+        register_std_dialects(&mut ctx);
         let item = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("");
         item.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
@@ -178,9 +173,7 @@ mod tests {
         let mut state = ParseState::new(stream);
         let mut ctx = Context::default();
 
-        builtin::register(&mut ctx);
-        func::register(&mut ctx);
-        arith::register(&mut ctx);
+        register_std_dialects(&mut ctx);
 
         let op = OpObj::parse(&mut ctx, &mut state).unwrap();
         let mut state = PrintState::new("    ");
