@@ -361,14 +361,13 @@ impl ApInt {
     }
 
     /// Consumes the integer and return the absolute value and the sign.
-    pub fn into_abs(&self) -> (Self, bool) {
-        let mut apint = self.clone();
-        let sign = apint.inplace_abs();
-        (apint, sign)
+    pub fn into_abs(mut self) -> (Self, bool) {
+        let sign = self.inplace_abs();
+        (self, sign)
     }
 
     /// Inplace widening unsigned multiplication by a chunk.
-    /// 
+    ///
     /// This operation widen the integer by one chunk width.
     pub fn inplace_widening_umul_chunk(&mut self, chunk: ApIntChunk) {
         let mut carry = 0u128;
