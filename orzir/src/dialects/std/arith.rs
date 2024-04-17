@@ -69,6 +69,28 @@ pub struct IAddOp {
     rhs: ArenaPtr<Value>,
 }
 
+/// A float addition operation.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.fadd"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct FAddOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
 /// An integer subtraction operation.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.isub"]
@@ -78,6 +100,28 @@ pub struct IAddOp {
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct ISubOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+/// A float subtraction operation.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.fsub"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct FSubOp {
     #[metadata]
     metadata: OpMetadata,
     /// The result of the operation.
@@ -113,6 +157,53 @@ pub struct IMulOp {
     rhs: ArenaPtr<Value>,
 }
 
+/// A float multiplication operation.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.fmul"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct FMulOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+/// A float division operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.fdiv"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct FDivOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+
+
+
 /// Register the `arith` dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("arith".into());
@@ -120,6 +211,13 @@ pub fn register(ctx: &mut Context) {
 
     IConstOp::register(ctx, IConstOp::parse);
     IAddOp::register(ctx, IAddOp::parse);
+    FAddOp::register(ctx, FAddOp::parse);
+    ISubOp::register(ctx, ISubOp::parse);
+    FSubOp::register(ctx, FSubOp::parse);
+    IMulOp::register(ctx, IMulOp::parse);
+    FMulOp::register(ctx, FMulOp::parse);
+    FDivOp::register(ctx, FDivOp::parse);
+    
 }
 
 #[cfg(test)]
