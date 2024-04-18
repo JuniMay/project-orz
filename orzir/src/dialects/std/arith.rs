@@ -286,18 +286,18 @@ pub struct IXorOp {
     NumResults<1>, NumOperands<1>, NumRegions<0>,
     SameResultTys, SameOperandTys
 )]
-#[format(pattern = "{from}", kind = "op", num_results = 1)]
+#[format(pattern = "{operand}", kind = "op", num_results = 1)]
 pub struct BitcastOp {
     #[metadata]
     metadata: OpMetadata,
     /// From value
     #[operand(0)]
-    from: ArenaPtr<Value>,
+    operand: ArenaPtr<Value>,
     /// To value
     ///
     /// The destination type is determined by the type of the result.
     #[result(0)]
-    to: ArenaPtr<Value>,
+    result: ArenaPtr<Value>,
 }
 
 /// The icmp predicate for comparison operations.
@@ -408,7 +408,6 @@ pub struct ICmpOp {
     pred: ICmpPredicate,
 }
 
-
 /// The fcmp predicate for comparison operations.
 pub enum FCmpPredicate {
     Oeq,
@@ -504,7 +503,7 @@ impl Print for FCmpPredicate {
     }
 }
 
-/// A float comparison operation
+/// A floating-point comparison operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.fcmp"]
 #[verifiers(
@@ -528,43 +527,42 @@ pub struct FCmpOp {
     pred: FCmpPredicate,
 }
 
-
-/// A fp2si operation
+/// A floating-point to signed integer operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.fptosi"]
 #[verifiers(
     NumResults<1>, NumOperands<1>, NumRegions<0>,
     SameResultTys, SameOperandTys, FloatLikeOperands, IntegerLikeResults
 )]
-#[format(pattern = "{in_value}", kind = "op", num_results = 1)]
+#[format(pattern = "{operand}", kind = "op", num_results = 1)]
 pub struct FPToSIOp {
     #[metadata]
     metadata: OpMetadata,
     /// The input value.
     #[operand(0)]
-    in_value: ArenaPtr<Value>,
+    operand: ArenaPtr<Value>,
     /// The result of the operation.
     #[result(0)]
-    out_value: ArenaPtr<Value>,
+    result: ArenaPtr<Value>,
 }
 
-/// A si2fp operation
+/// A signed integer to floating-point operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.sitofp"]
 #[verifiers(
     NumResults<1>, NumOperands<1>, NumRegions<0>,
     SameResultTys, SameOperandTys, IntegerLikeOperands, FloatLikeResults
 )]
-#[format(pattern = "{in_value}", kind = "op", num_results = 1)]
+#[format(pattern = "{operand}", kind = "op", num_results = 1)]
 pub struct SIToFPOp {
     #[metadata]
     metadata: OpMetadata,
     /// The input value.
     #[operand(0)]
-    in_value: ArenaPtr<Value>,
+    operand: ArenaPtr<Value>,
     /// The result of the operation.
     #[result(0)]
-    out_value: ArenaPtr<Value>,
+    result: ArenaPtr<Value>,
 }
 
 /// Floating-point negation
@@ -604,7 +602,6 @@ pub fn register(ctx: &mut Context) {
     IXorOp::register(ctx, IXorOp::parse);
     ICmpOp::register(ctx, ICmpOp::parse);
     FCmpOp::register(ctx, FCmpOp::parse);
-
     FNegOp::register(ctx, FNegOp::parse);
 }
 
