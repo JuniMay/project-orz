@@ -225,14 +225,6 @@ pub trait IntegerLikeTy: Ty {
     fn verify(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
 }
 
-/// Verifier `IsTerminator` for `Ty`.
-///
-/// This verifier indicates that the type is bool-like.
-pub trait BoolLikeTy: Ty {
-    fn verify(&self, _ctx: &Context) -> VerificationResult<()> { todo!() }
-}
-
-
 #[derive(Debug, Error)]
 #[error("operand is not float-like")]
 struct NotFloatLikeError;
@@ -299,24 +291,6 @@ pub trait IntegerLikeResults: Op {
         for ty in self.result_tys(ctx) {
             if !ty.deref(&ctx.tys).impls::<dyn IntegerLikeTy>(ctx) {
                 return verification_error!(NotIntegerLikeResultError).into();
-            }
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Error)]
-#[error("result is not bool-like")]
-struct NotBoolLikeResultError;
-
-/// Verifier `IsTerminator` for `Op`.
-///
-/// This verifier indicates that the operation has float-like results.
-pub trait BoolLikeResults: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
-        for ty in self.result_tys(ctx) {
-            if !ty.deref(&ctx.tys).impls::<dyn BoolLikeTy>(ctx) {
-                return verification_error!(NotBoolLikeResultError).into();
             }
         }
         Ok(())

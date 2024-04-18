@@ -1,7 +1,10 @@
+use core::fmt;
 use std::fmt::Write;
 
 use orzir_core::{
-    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, RunVerifiers, Ty, Typed, Value, Verify
+    apint::ApInt, parse_error, token_wildcard, verification_error, ArenaPtr, Context, Dialect, Op,
+    OpMetadata, Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintState, RunVerifiers,
+    TokenKind, Typed, Value, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
@@ -51,7 +54,8 @@ impl Verify for IConstOp {
 #[mnemonic = "arith.iadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands, IntegerLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct IAddOp {
@@ -73,7 +77,8 @@ pub struct IAddOp {
 #[mnemonic = "arith.fadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, FloatLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    FloatLikeOperands, FloatLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FAddOp {
@@ -95,7 +100,8 @@ pub struct FAddOp {
 #[mnemonic = "arith.isub"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands, IntegerLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct ISubOp {
@@ -117,7 +123,8 @@ pub struct ISubOp {
 #[mnemonic = "arith.fsub"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, FloatLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    FloatLikeOperands, FloatLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FSubOp {
@@ -139,7 +146,8 @@ pub struct FSubOp {
 #[mnemonic = "arith.imul"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands, IntegerLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct IMulOp {
@@ -161,7 +169,8 @@ pub struct IMulOp {
 #[mnemonic = "arith.fmul"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, FloatLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    FloatLikeOperands, FloatLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FMulOp {
@@ -183,7 +192,8 @@ pub struct FMulOp {
 #[mnemonic = "arith.fdiv"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, FloatLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    FloatLikeOperands, FloatLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FDivOp {
@@ -205,7 +215,8 @@ pub struct FDivOp {
 #[mnemonic = "arith.iand"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands, IntegerLikeResults
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct IAndOp {
@@ -227,7 +238,8 @@ pub struct IAndOp {
 #[mnemonic = "arith.ior"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands, IntegerLikeResults
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct IOrOp {
@@ -249,7 +261,8 @@ pub struct IOrOp {
 #[mnemonic = "arith.ixor"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands, IntegerLikeResults
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct IXorOp {
@@ -266,45 +279,133 @@ pub struct IXorOp {
     rhs: ArenaPtr<Value>,
 }
 
-// /// Bitcast between values of equal bit width
-// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-// #[mnemonic = "arith.bitcast"]
-// #[verifiers(
-//     NumResults<1>, NumOperands<1>, NumRegions<0>,
-//     SameResultTys, SameOperandTys
-// )]
-// #[format(pattern = "{in} : {type(in)} to {type(out)}", kind = "op", num_results = 1)]
-// pub struct BitcastOp {
-//     #[metadata]
-//     metadata: OpMetadata,
-//     /// The input value.
-//     #[operand(0)]
-//     in_value: ArenaPtr<Value>,
-//     /// The output value.
-//     #[result(0)]
-//     out_value: ArenaPtr<Value>,
-// }
-
-
-/// Defines the comparison predicates for floating-point comparison operations.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComparisonPredicate {
-    Equal,
-    NotEqual,
-    LessThan,
-    GreaterThan,
+/// Bitcast operation.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.bitcast"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys
+)]
+#[format(pattern = "{from}", kind = "op", num_results = 1)]
+pub struct BitcastOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// From value
+    #[operand(0)]
+    from: ArenaPtr<Value>,
+    /// To value
+    ///
+    /// The destination type is determined by the type of the result.
+    #[result(0)]
+    to: ArenaPtr<Value>,
 }
 
-impl ComparisonPredicate {
-    /// Returns a string representation of the comparison predicate.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ComparisonPredicate::Equal => "oeq",
-            ComparisonPredicate::NotEqual => "one",
-            ComparisonPredicate::LessThan => "olt",
-            ComparisonPredicate::GreaterThan => "ogt",
+/// The cmp predicate for comparison operations.
+pub enum ICmpPredicate {
+    Equal,
+    NotEqual,
+    SignedLess,
+    SignedLessEqual,
+    SignedGreater,
+    SignedGreaterEqual,
+    UnsignedLess,
+    UnsignedLessEqual,
+    UnsignedGreater,
+    UnsignedGreaterEqual,
+}
+
+impl fmt::Display for ICmpPredicate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            ICmpPredicate::Equal => "eq",
+            ICmpPredicate::NotEqual => "ne",
+            ICmpPredicate::SignedLess => "slt",
+            ICmpPredicate::SignedLessEqual => "sle",
+            ICmpPredicate::SignedGreater => "sgt",
+            ICmpPredicate::SignedGreaterEqual => "sge",
+            ICmpPredicate::UnsignedLess => "ult",
+            ICmpPredicate::UnsignedLessEqual => "ule",
+            ICmpPredicate::UnsignedGreater => "ugt",
+            ICmpPredicate::UnsignedGreaterEqual => "uge",
+        };
+
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("invalid icmp predicate: {0}")]
+pub struct InvalidICmpPredicate(String);
+
+impl TryFrom<&str> for ICmpPredicate {
+    type Error = InvalidICmpPredicate;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "eq" => Ok(ICmpPredicate::Equal),
+            "ne" => Ok(ICmpPredicate::NotEqual),
+            "slt" => Ok(ICmpPredicate::SignedLess),
+            "sle" => Ok(ICmpPredicate::SignedLessEqual),
+            "sgt" => Ok(ICmpPredicate::SignedGreater),
+            "sge" => Ok(ICmpPredicate::SignedGreaterEqual),
+            "ult" => Ok(ICmpPredicate::UnsignedLess),
+            "ule" => Ok(ICmpPredicate::UnsignedLessEqual),
+            "ugt" => Ok(ICmpPredicate::UnsignedGreater),
+            "uge" => Ok(ICmpPredicate::UnsignedGreaterEqual),
+            _ => Err(InvalidICmpPredicate(value.to_string())),
         }
     }
+}
+
+impl Parse for ICmpPredicate {
+    type Item = Self;
+
+    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        if let TokenKind::Tokenized(s) = token.kind {
+            let pred =
+                ICmpPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
+            Ok(pred)
+        } else {
+            parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
+            )
+            .into()
+        }
+    }
+}
+
+impl Print for ICmpPredicate {
+    fn print(&self, _: &Context, state: &mut PrintState) -> orzir_core::PrintResult<()> {
+        write!(state.buffer, "{}", self)?;
+        Ok(())
+    }
+}
+
+/// An integer comparison operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.icmp"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, IntegerLikeOperands,
+    IntegerLikeResults
+)]
+#[format(pattern = "{pred} , {lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct ICmpOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+    /// The predicate for the comparison.
+    pred: ICmpPredicate,
 }
 
 // /// A float comparison operation
@@ -401,7 +502,7 @@ impl ComparisonPredicate {
 //     out_value: ArenaPtr<Value>,
 // }
 
-/// Floating point negation
+/// Floating-point negation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.fneg"]
 #[verifiers(
@@ -420,8 +521,6 @@ pub struct FNegOp {
     operand: ArenaPtr<Value>,
 }
 
-
-
 /// Register the `arith` dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("arith".into());
@@ -438,7 +537,6 @@ pub fn register(ctx: &mut Context) {
     IAndOp::register(ctx, IAndOp::parse);
     IOrOp::register(ctx, IOrOp::parse);
     IXorOp::register(ctx, IXorOp::parse);
-    // todo register
     FNegOp::register(ctx, FNegOp::parse);
 }
 
