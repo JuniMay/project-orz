@@ -300,7 +300,7 @@ pub struct BitcastOp {
     to: ArenaPtr<Value>,
 }
 
-/// The cmp predicate for comparison operations.
+/// The icmp predicate for comparison operations.
 pub enum ICmpPredicate {
     Equal,
     NotEqual,
@@ -408,99 +408,164 @@ pub struct ICmpOp {
     pred: ICmpPredicate,
 }
 
-// /// A float comparison operation
-// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-// #[mnemonic = "arith.fcmp"]
-// #[verifiers(
-//     NumResults<1>, NumOperands<2>, NumRegions<0>,
-//     SameResultTys, SameOperandTys, FloatLikeOperands, BoolLikeResults
-// )]
-// #[format(pattern = "{predicate} , {lhs} , {rhs}", kind = "op", num_results = 1)]
-// pub struct FCmpOp {
-//     #[metadata]
-//     metadata: OpMetadata,
-//     /// The result of the operation.
-//     #[result(0)]
-//     result: ArenaPtr<Value>,
-//     /// The left-hand side operand.
-//     #[operand(0)]
-//     lhs: ArenaPtr<Value>,
-//     /// The right-hand side operand.
-//     #[operand(1)]
-//     rhs: ArenaPtr<Value>,
-//     /// The predicate for the comparison.
-//     predicate: ComparisonPredicate,
-// }
 
-// /// A integer comparison operation
-// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-// #[mnemonic = "arith.icmp"]
-// #[verifiers(
-//     NumResults<1>, NumOperands<2>, NumRegions<0>,
-//     SameResultTys, SameOperandTys, IntegerLikeOperands, BoolLikeResults
-// )]
-// #[format(pattern = "{predicate} , {lhs} , {rhs}", kind = "op", num_results = 1)]
-// pub struct ICmpOp {
-//     #[metadata]
-//     metadata: OpMetadata,
-//     /// The result of the operation.
-//     #[result(0)]
-//     result: ArenaPtr<Value>,
-//     /// The left-hand side operand.
-//     #[operand(0)]
-//     lhs: ArenaPtr<Value>,
-//     /// The right-hand side operand.
-//     #[operand(1)]
-//     rhs: ArenaPtr<Value>,
-//     /// The predicate for the comparison.
-//     predicate: ComparisonPredicate,
-// }
+/// The fcmp predicate for comparison operations.
+pub enum FCmpPredicate {
+    Oeq,
+    Ogt,
+    Oge,
+    Olt,
+    Ole,
+    One,
+    Ord,
+    Ueq,
+    Ugt,
+    Uge,
+    Ult,
+    Ule,
+    Une,
+    Uno,
+}
 
-// /// A fp2si operation
-// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-// #[mnemonic = "arith.fptosi"]
-// #[verifiers(
-//     NumResults<1>, NumOperands<1>, NumRegions<0>,
-//     SameResultTys, SameOperandTys, FloatLikeOperands, IntegerLikeResults
-// )]
-// #[format(pattern = "{in_value} : {in_type} to {out_type}", kind = "op", num_results = 1)]
-// pub struct FPToSIOp {
-//     #[metadata]
-//     metadata: OpMetadata,
-//     /// The input value.
-//     #[operand(0)]
-//     in_value: ArenaPtr<Value>,
-//     /// The input type.
-//     in_type: Box<dyn Ty>,
-//     /// The output type.
-//     out_type: Box<dyn Ty>,
-//     /// The result of the operation.
-//     #[result(0)]
-//     out_value: ArenaPtr<Value>,
-// }
+impl fmt::Display for FCmpPredicate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            FCmpPredicate::Oeq => "oeq",
+            FCmpPredicate::Ogt => "ogt",
+            FCmpPredicate::Oge => "oge",
+            FCmpPredicate::Olt => "olt",
+            FCmpPredicate::Ole => "ole",
+            FCmpPredicate::One => "one",
+            FCmpPredicate::Ord => "ord",
+            FCmpPredicate::Ueq => "ueq",
+            FCmpPredicate::Ugt => "ugt",
+            FCmpPredicate::Uge => "uge",
+            FCmpPredicate::Ult => "ult",
+            FCmpPredicate::Ule => "ule",
+            FCmpPredicate::Une => "une",
+            FCmpPredicate::Uno => "uno",
+        };
 
-// /// A si2fp operation
-// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-// #[mnemonic = "arith.sitofp"]
-// #[verifiers(
-//     NumResults<1>, NumOperands<1>, NumRegions<0>,
-//     SameResultTys, SameOperandTys, IntegerLikeOperands, FloatLikeResults
-// )]
-// #[format(pattern = "{in_value} : {in_type} to {out_type}", kind = "op", num_results = 1)]
-// pub struct SIToFPOp {
-//     #[metadata]
-//     metadata: OpMetadata,
-//     /// The input value.
-//     #[operand(0)]
-//     in_value: ArenaPtr<Value>,
-//     /// The input type.
-//     in_type: Box<dyn Ty>,
-//     /// The output type.
-//     out_type: Box<dyn Ty>,
-//     /// The result of the operation.
-//     #[result(0)]
-//     out_value: ArenaPtr<Value>,
-// }
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("invalid fcmp predicate: {0}")]
+pub struct InvalidFCmpPredicate(String);
+
+impl TryFrom<&str> for FCmpPredicate {
+    type Error = InvalidFCmpPredicate;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "oeq" => Ok(FCmpPredicate::Oeq),
+            "ogt" => Ok(FCmpPredicate::Ogt),
+            "oge" => Ok(FCmpPredicate::Oge),
+            "olt" => Ok(FCmpPredicate::Olt),
+            "ole" => Ok(FCmpPredicate::Ole),
+            "one" => Ok(FCmpPredicate::One),
+            "ord" => Ok(FCmpPredicate::Ord),
+            "ueq" => Ok(FCmpPredicate::Ueq),
+            "ugt" => Ok(FCmpPredicate::Ugt),
+            "uge" => Ok(FCmpPredicate::Uge),
+            "ult" => Ok(FCmpPredicate::Ult),
+            "ule" => Ok(FCmpPredicate::Ule),
+            "une" => Ok(FCmpPredicate::Une),
+            "uno" => Ok(FCmpPredicate::Uno),
+            _ => Err(InvalidFCmpPredicate(value.to_string())),
+        }
+    }
+}
+
+impl Parse for FCmpPredicate {
+    type Item = Self;
+
+    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        if let TokenKind::Tokenized(s) = token.kind {
+            let pred =
+                FCmpPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
+            Ok(pred)
+        } else {
+            parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
+            )
+            .into()
+        }
+    }
+}
+
+impl Print for FCmpPredicate {
+    fn print(&self, _: &Context, state: &mut PrintState) -> orzir_core::PrintResult<()> {
+        write!(state.buffer, "{}", self)?;
+        Ok(())
+    }
+}
+
+/// A float comparison operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.fcmp"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, FloatLikeOperands, IntegerLikeResults
+)]
+#[format(pattern = "{pred} , {lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct FCmpOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+    /// The predicate for the comparison.
+    pred: FCmpPredicate,
+}
+
+
+/// A fp2si operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.fptosi"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, FloatLikeOperands, IntegerLikeResults
+)]
+#[format(pattern = "{in_value}", kind = "op", num_results = 1)]
+pub struct FPToSIOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The input value.
+    #[operand(0)]
+    in_value: ArenaPtr<Value>,
+    /// The result of the operation.
+    #[result(0)]
+    out_value: ArenaPtr<Value>,
+}
+
+/// A si2fp operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.sitofp"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, IntegerLikeOperands, FloatLikeResults
+)]
+#[format(pattern = "{in_value}", kind = "op", num_results = 1)]
+pub struct SIToFPOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The input value.
+    #[operand(0)]
+    in_value: ArenaPtr<Value>,
+    /// The result of the operation.
+    #[result(0)]
+    out_value: ArenaPtr<Value>,
+}
 
 /// Floating-point negation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
@@ -537,6 +602,9 @@ pub fn register(ctx: &mut Context) {
     IAndOp::register(ctx, IAndOp::parse);
     IOrOp::register(ctx, IOrOp::parse);
     IXorOp::register(ctx, IXorOp::parse);
+    ICmpOp::register(ctx, ICmpOp::parse);
+    FCmpOp::register(ctx, FCmpOp::parse);
+
     FNegOp::register(ctx, FNegOp::parse);
 }
 
