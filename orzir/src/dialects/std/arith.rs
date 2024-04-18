@@ -1,8 +1,7 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
-    RunVerifiers, Typed, Value, Verify,
+    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, RunVerifiers, Ty, Typed, Value, Verify
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
@@ -15,7 +14,7 @@ use crate::verifiers::*;
 /// This will generate an integer constant with the given value.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
 #[mnemonic = "arith.iconst"]
-#[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, SameResultTys)]
+#[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, IntegerLikeResults)]
 #[format(pattern = "{value}", kind = "op", num_results = 1)]
 pub struct IConstOp {
     #[metadata]
@@ -52,7 +51,7 @@ impl Verify for IConstOp {
 #[mnemonic = "arith.iadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct IAddOp {
@@ -74,7 +73,7 @@ pub struct IAddOp {
 #[mnemonic = "arith.fadd"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, FloatLikeOperands
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FAddOp {
@@ -96,7 +95,7 @@ pub struct FAddOp {
 #[mnemonic = "arith.isub"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct ISubOp {
@@ -118,7 +117,7 @@ pub struct ISubOp {
 #[mnemonic = "arith.fsub"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, FloatLikeOperands
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FSubOp {
@@ -140,7 +139,7 @@ pub struct FSubOp {
 #[mnemonic = "arith.imul"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct IMulOp {
@@ -162,7 +161,7 @@ pub struct IMulOp {
 #[mnemonic = "arith.fmul"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, FloatLikeOperands
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FMulOp {
@@ -184,7 +183,7 @@ pub struct FMulOp {
 #[mnemonic = "arith.fdiv"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, FloatLikeOperands
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FDivOp {
@@ -201,6 +200,225 @@ pub struct FDivOp {
     rhs: ArenaPtr<Value>,
 }
 
+/// A integer and operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.iand"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct IAndOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+/// A integer or operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.ior"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct IOrOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+/// A integer xor operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.ixor"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys, IntegerLikeOperands
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct IXorOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+// /// Bitcast between values of equal bit width
+// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+// #[mnemonic = "arith.bitcast"]
+// #[verifiers(
+//     NumResults<1>, NumOperands<1>, NumRegions<0>,
+//     SameResultTys, SameOperandTys
+// )]
+// #[format(pattern = "{in} : {type(in)} to {type(out)}", kind = "op", num_results = 1)]
+// pub struct BitcastOp {
+//     #[metadata]
+//     metadata: OpMetadata,
+//     /// The input value.
+//     #[operand(0)]
+//     in_value: ArenaPtr<Value>,
+//     /// The output value.
+//     #[result(0)]
+//     out_value: ArenaPtr<Value>,
+// }
+
+
+/// Defines the comparison predicates for floating-point comparison operations.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComparisonPredicate {
+    Equal,
+    NotEqual,
+    LessThan,
+    GreaterThan,
+}
+
+impl ComparisonPredicate {
+    /// Returns a string representation of the comparison predicate.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ComparisonPredicate::Equal => "oeq",
+            ComparisonPredicate::NotEqual => "one",
+            ComparisonPredicate::LessThan => "olt",
+            ComparisonPredicate::GreaterThan => "ogt",
+        }
+    }
+}
+
+// /// A float comparison operation
+// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+// #[mnemonic = "arith.fcmp"]
+// #[verifiers(
+//     NumResults<1>, NumOperands<2>, NumRegions<0>,
+//     SameResultTys, SameOperandTys, FloatLikeOperands, BoolLikeResults
+// )]
+// #[format(pattern = "{predicate} , {lhs} , {rhs}", kind = "op", num_results = 1)]
+// pub struct FCmpOp {
+//     #[metadata]
+//     metadata: OpMetadata,
+//     /// The result of the operation.
+//     #[result(0)]
+//     result: ArenaPtr<Value>,
+//     /// The left-hand side operand.
+//     #[operand(0)]
+//     lhs: ArenaPtr<Value>,
+//     /// The right-hand side operand.
+//     #[operand(1)]
+//     rhs: ArenaPtr<Value>,
+//     /// The predicate for the comparison.
+//     predicate: ComparisonPredicate,
+// }
+
+// /// A integer comparison operation
+// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+// #[mnemonic = "arith.icmp"]
+// #[verifiers(
+//     NumResults<1>, NumOperands<2>, NumRegions<0>,
+//     SameResultTys, SameOperandTys, IntegerLikeOperands, BoolLikeResults
+// )]
+// #[format(pattern = "{predicate} , {lhs} , {rhs}", kind = "op", num_results = 1)]
+// pub struct ICmpOp {
+//     #[metadata]
+//     metadata: OpMetadata,
+//     /// The result of the operation.
+//     #[result(0)]
+//     result: ArenaPtr<Value>,
+//     /// The left-hand side operand.
+//     #[operand(0)]
+//     lhs: ArenaPtr<Value>,
+//     /// The right-hand side operand.
+//     #[operand(1)]
+//     rhs: ArenaPtr<Value>,
+//     /// The predicate for the comparison.
+//     predicate: ComparisonPredicate,
+// }
+
+// /// A fp2si operation
+// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+// #[mnemonic = "arith.fptosi"]
+// #[verifiers(
+//     NumResults<1>, NumOperands<1>, NumRegions<0>,
+//     SameResultTys, SameOperandTys, FloatLikeOperands, IntegerLikeResults
+// )]
+// #[format(pattern = "{in_value} : {in_type} to {out_type}", kind = "op", num_results = 1)]
+// pub struct FPToSIOp {
+//     #[metadata]
+//     metadata: OpMetadata,
+//     /// The input value.
+//     #[operand(0)]
+//     in_value: ArenaPtr<Value>,
+//     /// The input type.
+//     in_type: Box<dyn Ty>,
+//     /// The output type.
+//     out_type: Box<dyn Ty>,
+//     /// The result of the operation.
+//     #[result(0)]
+//     out_value: ArenaPtr<Value>,
+// }
+
+// /// A si2fp operation
+// #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+// #[mnemonic = "arith.sitofp"]
+// #[verifiers(
+//     NumResults<1>, NumOperands<1>, NumRegions<0>,
+//     SameResultTys, SameOperandTys, IntegerLikeOperands, FloatLikeResults
+// )]
+// #[format(pattern = "{in_value} : {in_type} to {out_type}", kind = "op", num_results = 1)]
+// pub struct SIToFPOp {
+//     #[metadata]
+//     metadata: OpMetadata,
+//     /// The input value.
+//     #[operand(0)]
+//     in_value: ArenaPtr<Value>,
+//     /// The input type.
+//     in_type: Box<dyn Ty>,
+//     /// The output type.
+//     out_type: Box<dyn Ty>,
+//     /// The result of the operation.
+//     #[result(0)]
+//     out_value: ArenaPtr<Value>,
+// }
+
+/// Floating point negation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.fneg"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    FloatLikeOperands, FloatLikeResults
+)]
+#[format(pattern = "{operand}", kind = "op", num_results = 1)]
+pub struct FNegOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The operand to negate.
+    #[operand(0)]
+    operand: ArenaPtr<Value>,
+}
 
 
 
@@ -217,7 +435,11 @@ pub fn register(ctx: &mut Context) {
     IMulOp::register(ctx, IMulOp::parse);
     FMulOp::register(ctx, FMulOp::parse);
     FDivOp::register(ctx, FDivOp::parse);
-    
+    IAndOp::register(ctx, IAndOp::parse);
+    IOrOp::register(ctx, IOrOp::parse);
+    IXorOp::register(ctx, IXorOp::parse);
+    // todo register
+    FNegOp::register(ctx, FNegOp::parse);
 }
 
 #[cfg(test)]
