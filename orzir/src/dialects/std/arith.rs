@@ -672,4 +672,138 @@ mod tests {
             .lookup_symbol(&ctx, "foo")
             .is_some());
     }
+    #[test]
+    fn test_float_add() {
+        let src = r#"
+        module {
+            func.func @bar : fn () -> (float) {
+            ^entry:
+                %0 = arith.fconst 1.0 : float
+                %1 = arith.fconst 2.0 : float
+                %2 = arith.fadd %0, %1 : float
+            }
+        }
+        "#;
+
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
+        let mut ctx = Context::default();
+
+        register_std_dialects(&mut ctx);
+
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
+        let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
+        op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
+        println!("{}", state.buffer);
+
+        let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
+        assert!(module_op
+            .get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .lookup_symbol(&ctx, "bar")
+            .is_some());
+    }
+    
+    #[test]
+    fn test_integer_cmp() {
+        let src = r#"
+        module {
+            func.func @cmp : fn () -> (i1) {
+            ^entry:
+                %0 = arith.iconst 1 : i32
+                %1 = arith.iconst 2 : i32
+                %2 = arith.icmp "slt" %0, %1 : i32
+            }
+        }
+        "#;
+
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
+        let mut ctx = Context::default();
+
+        register_std_dialects(&mut ctx);
+
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
+        let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
+        op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
+        println!("{}", state.buffer);
+
+        let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
+        assert!(module_op
+            .get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .lookup_symbol(&ctx, "cmp")
+            .is_some());
+    }
+
+    #[test]
+    fn test_bit_and() {
+        let src = r#"
+        module {
+            func.func @and : fn () -> (i32) {
+            ^entry:
+                %0 = arith.iconst 3 : i32
+                %1 = arith.iconst 4 : i32
+                %2 = arith.iand %0, %1 : i32
+            }
+        }
+        "#;
+
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
+        let mut ctx = Context::default();
+
+        register_std_dialects(&mut ctx);
+
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
+        let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
+        op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
+        println!("{}", state.buffer);
+
+        let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
+        assert!(module_op
+            .get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .lookup_symbol(&ctx, "and")
+            .is_some());
+    }
+
+    #[test]
+    fn test_bit_not() {
+        let src = r#"
+        module {
+            func.func @not : fn () -> (i32) {
+            ^entry:
+                %0 = arith.iconst 1 : i32
+                %1 = arith.inot %0 : i32
+            }
+        }
+        "#;
+
+        let stream = TokenStream::new(src);
+        let mut state = ParseState::new(stream);
+        let mut ctx = Context::default();
+
+        register_std_dialects(&mut ctx);
+
+        let op = OpObj::parse(&mut ctx, &mut state).unwrap();
+        let mut state = PrintState::new("    ");
+        op.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
+        op.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
+        println!("{}", state.buffer);
+
+        let module_op = op.deref(&ctx.ops).as_a::<ModuleOp>().unwrap();
+        assert!(module_op
+            .get_region(0)
+            .unwrap()
+            .deref(&ctx.regions)
+            .lookup_symbol(&ctx, "not")
+            .is_some());
+    }
 }
