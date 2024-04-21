@@ -20,7 +20,7 @@ pub struct ImmOutOfRangeErr(pub usize, pub usize);
     NumResults<1>, NumOperands<1>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands,
-    OperandTyIs<IReg>, ResultTyIs<IReg>
+    OperandTysAre<IReg>, ResultTysAre<IReg>
 )]
 #[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
 pub struct AddiOp {

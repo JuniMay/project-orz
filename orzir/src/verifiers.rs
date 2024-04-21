@@ -372,7 +372,7 @@ pub trait SameOperandsAndResultsNum: Op {
 #[error("invalid operand type, expected {0}")]
 pub struct InvalidOperandTyError(String);
 
-pub trait OperandTyIs<T: Ty>: Op {
+pub trait OperandTysAre<T: Ty>: Op {
     fn verify(&self, ctx: &Context) -> VerificationResult<()> {
         for ty in self.operand_tys(ctx) {
             if !ty.deref(&ctx.tys).is_a::<T>() {
@@ -390,7 +390,7 @@ pub trait OperandTyIs<T: Ty>: Op {
 #[error("invalid result type, expected {0}")]
 pub struct InvalidResultTyError(String);
 
-pub trait ResultTyIs<T: Ty>: Op {
+pub trait ResultTysAre<T: Ty>: Op {
     fn verify(&self, ctx: &Context) -> VerificationResult<()> {
         for ty in self.result_tys(ctx) {
             if !ty.deref(&ctx.tys).is_a::<T>() {
