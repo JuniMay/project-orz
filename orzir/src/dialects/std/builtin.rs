@@ -120,11 +120,8 @@ pub struct IndexTy;
 pub struct FloatTy;
 
 impl FloatTy {
-    pub fn width(&self) -> u32 {
-        32 
-    }
+    pub fn width(&self) -> u32 { 32 }
 }
-
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.double"]

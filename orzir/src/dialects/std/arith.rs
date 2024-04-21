@@ -9,8 +9,7 @@ use orzir_core::{
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 
-use super::builtin::IntTy;
-use super::builtin::FloatTy;
+use super::builtin::{FloatTy, IntTy};
 use crate::verifiers::*;
 
 /// An integer constant operation.
@@ -806,7 +805,7 @@ mod tests {
             .lookup_symbol(&ctx, "floatitem")
             .is_some());
     }
-    
+
     // test for cmp op(icmp, fcmp)
     #[test]
     fn test_cmp() {

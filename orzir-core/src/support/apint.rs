@@ -368,7 +368,7 @@ impl ApInt {
     }
 
     /// Inplace widening unsigned multiplication by a chunk.
-    /// 
+    ///
     /// This operation widen the integer by one chunk width.
     pub fn inplace_widening_umul_chunk(&mut self, chunk: ApIntChunk) {
         let mut carry = 0u128;

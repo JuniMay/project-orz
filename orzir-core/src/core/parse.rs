@@ -851,9 +851,7 @@ impl Parse for f32 {
     fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         if let TokenKind::Tokenized(s) = token.kind {
-            let value = s
-                .parse::<f32>()
-                .map_err(|e| parse_error!(token.span, e))?;
+            let value = s.parse::<f32>().map_err(|e| parse_error!(token.span, e))?;
             Ok(value)
         } else {
             parse_error!(
