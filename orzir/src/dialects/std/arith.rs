@@ -224,6 +224,52 @@ pub struct FMulOp {
     rhs: ArenaPtr<Value>,
 }
 
+/// A unsighed int division operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.uidiv"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands, IntegerLikeResults,
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct UiDivOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+/// A sighed int division operation
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "arith.sidiv"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands, IntegerLikeResults,
+)]
+#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+pub struct SiDivOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The left-hand side operand.
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
 /// A float division operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.fdiv"]
@@ -634,6 +680,8 @@ pub fn register(ctx: &mut Context) {
     FSubOp::register(ctx, FSubOp::parse);
     IMulOp::register(ctx, IMulOp::parse);
     FMulOp::register(ctx, FMulOp::parse);
+    UiDivOp::register(ctx, UiDivOp::parse);
+    SiDivOp::register(ctx, SiDivOp::parse);
     FDivOp::register(ctx, FDivOp::parse);
     IAndOp::register(ctx, IAndOp::parse);
     IOrOp::register(ctx, IOrOp::parse);
@@ -693,7 +741,8 @@ mod tests {
                 %e = arith.iadd %b, %c : int<32>
                 %f = arith.isub %c, %d : int<32>
                 %k = arith.imul %e, %f : int<32>
-
+                %x = arith.uidiv %b, %c : int<32>
+                %y = arith.sidiv %b, %c : int<32>
             }
         }
         "#;
