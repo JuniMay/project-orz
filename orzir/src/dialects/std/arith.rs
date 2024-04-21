@@ -223,16 +223,16 @@ pub struct FMulOp {
     rhs: ArenaPtr<Value>,
 }
 
-/// A unsighed int division operation
+/// A unsigned int division operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-#[mnemonic = "arith.uidiv"]
+#[mnemonic = "arith.udiv"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
-pub struct UiDivOp {
+pub struct UDivOp {
     #[metadata]
     metadata: OpMetadata,
     /// The result of the operation.
@@ -246,16 +246,16 @@ pub struct UiDivOp {
     rhs: ArenaPtr<Value>,
 }
 
-/// A sighed int division operation
+/// A signed int division operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-#[mnemonic = "arith.sidiv"]
+#[mnemonic = "arith.sdiv"]
 #[verifiers(
     NumResults<1>, NumOperands<2>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults,
 )]
 #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
-pub struct SiDivOp {
+pub struct SDivOp {
     #[metadata]
     metadata: OpMetadata,
     /// The result of the operation.
@@ -292,7 +292,7 @@ pub struct FDivOp {
     rhs: ArenaPtr<Value>,
 }
 
-/// A integer and operation
+/// An integer and operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.iand"]
 #[verifiers(
@@ -315,7 +315,7 @@ pub struct IAndOp {
     rhs: ArenaPtr<Value>,
 }
 
-/// A integer or operation
+/// An integer or operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.ior"]
 #[verifiers(
@@ -338,7 +338,7 @@ pub struct IOrOp {
     rhs: ArenaPtr<Value>,
 }
 
-/// A integer xor operation
+/// An integer xor operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.ixor"]
 #[verifiers(
@@ -679,8 +679,8 @@ pub fn register(ctx: &mut Context) {
     FSubOp::register(ctx, FSubOp::parse);
     IMulOp::register(ctx, IMulOp::parse);
     FMulOp::register(ctx, FMulOp::parse);
-    UiDivOp::register(ctx, UiDivOp::parse);
-    SiDivOp::register(ctx, SiDivOp::parse);
+    UDivOp::register(ctx, UDivOp::parse);
+    SDivOp::register(ctx, SDivOp::parse);
     FDivOp::register(ctx, FDivOp::parse);
     IAndOp::register(ctx, IAndOp::parse);
     IOrOp::register(ctx, IOrOp::parse);
@@ -700,32 +700,12 @@ mod tests {
 
     use crate::dialects::std::{builtin::ModuleOp, register_std_dialects};
 
-    // fn test_parse_print(src: &str, expected: &str) {
-    //     let stream = TokenStream::new(src);
-    //     let mut state = ParseState::new(stream);
-    //     let mut ctx = Context::default();
-    //     register_std_dialects(&mut ctx);
-    //     let item = OpObj::parse(&mut ctx, &mut state).unwrap();
-    //     let mut state = PrintState::new("");
-    //     item.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
-    //     item.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
-    //     assert_eq!(state.buffer, expected);
-    // }
-
-    // // test for iconst
-    // #[test]
-    // fn test_iconst_op() {
-    //     let src = "%x = arith.iconst 123i32 : int<32>";
-    //     let expected = "%x = arith.iconst 0x0000007bi32 : int<32>";
-    //     test_parse_print(src, expected);
-    // }
-
-    // test for int items(iconst, iadd, isub, imul)
+    /// Test for int items(iconst, iadd, isub, imul)
     #[test]
     fn test_int_items() {
         let src = r#"
         module {
-            func.func @intitem : fn () -> (int<32>, float) {
+            func.func @intitem : fn () -> unit {
             ^entry:
                 // nothing here
                 %0 = arith.iconst true : int<1>
@@ -740,8 +720,8 @@ mod tests {
                 %e = arith.iadd %b, %c : int<32>
                 %f = arith.isub %c, %d : int<32>
                 %k = arith.imul %e, %f : int<32>
-                %x = arith.uidiv %b, %c : int<32>
-                %y = arith.sidiv %b, %c : int<32>
+                %x = arith.udiv %b, %c : int<32>
+                %y = arith.sdiv %b, %c : int<32>
             }
         }
         "#;
@@ -767,7 +747,7 @@ mod tests {
             .is_some());
     }
 
-    // test for float items(fconst, fadd, fsub, fmul, fneg, fdiv)
+    /// Test for float items(fconst, fadd, fsub, fmul, fneg, fdiv)
     #[test]
     fn test_float_items() {
         let src = r#"
@@ -806,7 +786,7 @@ mod tests {
             .is_some());
     }
 
-    // test for cmp op(icmp, fcmp)
+    /// Test for cmp op(icmp, fcmp)
     #[test]
     fn test_cmp() {
         let src = r#"
@@ -845,7 +825,7 @@ mod tests {
             .is_some());
     }
 
-    // test for bit items(iand, ior, ixor)
+    /// Test for bit items(iand, ior, ixor)
     #[test]
     fn test_bititem() {
         let src = r#"
@@ -883,7 +863,7 @@ mod tests {
             .is_some());
     }
 
-    // test for tycast(fp2si, si2fp)
+    /// Test for type casting(fp2si, si2fp)
     #[test]
     fn test_tycast() {
         let src = r#"
