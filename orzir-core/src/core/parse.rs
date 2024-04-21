@@ -845,6 +845,33 @@ impl Print for usize {
     }
 }
 
+impl Parse for f32 {
+    type Item = f32;
+
+    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        if let TokenKind::Tokenized(s) = token.kind {
+            let value = s
+                .parse::<f32>()
+                .map_err(|e| parse_error!(token.span, e))?;
+            Ok(value)
+        } else {
+            parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
+            )
+            .into()
+        }
+    }
+}
+
+impl Print for f32 {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
+        write!(state.buffer, "{}", self)?;
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{TokenKind, TokenStream};

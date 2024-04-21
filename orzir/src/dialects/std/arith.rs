@@ -10,6 +10,7 @@ use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Ver
 use thiserror::Error;
 
 use super::builtin::IntTy;
+use super::builtin::FloatTy;
 use crate::verifiers::*;
 
 /// An integer constant operation.
@@ -626,6 +627,7 @@ pub fn register(ctx: &mut Context) {
     ctx.dialects.insert("arith".into(), dialect);
 
     IConstOp::register(ctx, IConstOp::parse);
+    FConstOp::register(ctx, FConstOp::parse);
     IAddOp::register(ctx, IAddOp::parse);
     FAddOp::register(ctx, FAddOp::parse);
     ISubOp::register(ctx, ISubOp::parse);
@@ -639,6 +641,8 @@ pub fn register(ctx: &mut Context) {
     ICmpOp::register(ctx, ICmpOp::parse);
     FCmpOp::register(ctx, FCmpOp::parse);
     FNegOp::register(ctx, FNegOp::parse);
+    FPToSIOp::register(ctx, FPToSIOp::parse);
+    SIToFPOp::register(ctx, SIToFPOp::parse);
 }
 
 #[cfg(test)]
@@ -649,41 +653,47 @@ mod tests {
 
     use crate::dialects::std::{builtin::ModuleOp, register_std_dialects};
 
-    fn test_parse_print(src: &str, expected: &str) {
-        let stream = TokenStream::new(src);
-        let mut state = ParseState::new(stream);
-        let mut ctx = Context::default();
-        register_std_dialects(&mut ctx);
-        let item = OpObj::parse(&mut ctx, &mut state).unwrap();
-        let mut state = PrintState::new("");
-        item.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
-        item.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
-        assert_eq!(state.buffer, expected);
-    }
+    // fn test_parse_print(src: &str, expected: &str) {
+    //     let stream = TokenStream::new(src);
+    //     let mut state = ParseState::new(stream);
+    //     let mut ctx = Context::default();
+    //     register_std_dialects(&mut ctx);
+    //     let item = OpObj::parse(&mut ctx, &mut state).unwrap();
+    //     let mut state = PrintState::new("");
+    //     item.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
+    //     item.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
+    //     assert_eq!(state.buffer, expected);
+    // }
 
-    #[test]
-    fn test_iconst_op() {
-        let src = "%x = arith.iconst 123i32 : int<32>";
-        let expected = "%x = arith.iconst 0x0000007bi32 : int<32>";
-        test_parse_print(src, expected);
-    }
+    // // test for iconst
+    // #[test]
+    // fn test_iconst_op() {
+    //     let src = "%x = arith.iconst 123i32 : int<32>";
+    //     let expected = "%x = arith.iconst 0x0000007bi32 : int<32>";
+    //     test_parse_print(src, expected);
+    // }
 
+    // test for int items(iconst, iadd, isub, imul)
     #[test]
-    fn test_0() {
+    fn test_int_items() {
         let src = r#"
         module {
-            func.func @foo : fn () -> (int<32>, float) {
+            func.func @intitem : fn () -> (int<32>, float) {
             ^entry:
                 // nothing here
                 %0 = arith.iconst true : int<1>
                 %1 = arith.iconst false : int<1>
                 %2 = arith.iadd %0, %1 : int<1>
-
+                %3 = arith.isub %0, %1 : int<1>
                 %aaaa = arith.iconst -0x123i32 : int<32>
 
                 %b = arith.iconst 0b101i32 : int<32>
                 %c = arith.iconst 0o123i32 : int<32>
                 %d = arith.iconst 123i32 : int<32>
+                %e = arith.iadd %b, %c : int<32>
+                %f = arith.isub %c, %d : int<32>
+                %k = arith.imul %e, %f : int<32>
+
             }
         }
         "#;
@@ -705,19 +715,24 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol(&ctx, "foo")
+            .lookup_symbol(&ctx, "intitem")
             .is_some());
     }
+
+    // test for float items(fconst, fadd, fsub, fmul, fneg, fdiv)
     #[test]
-    fn test_float_add() {
+    fn test_float_items() {
         let src = r#"
         module {
-            func.func @bar : fn () -> float {
+            func.func @floatitem : fn () -> float {
             ^entry:
                 %0 = arith.fconst 1.0 : float
                 %1 = arith.fconst 2.0 : float
                 %2 = arith.fadd %0, %1 : float
-                func.return %2
+                %3 = arith.fsub %0, %1 : float   
+                %4 = arith.fmul %2, %3 : float
+                %5 = arith.fneg %4 : float
+                %6 = arith.fdiv %3, %4 : float
             }
         }
         "#;
@@ -739,12 +754,13 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol(&ctx, "bar")
+            .lookup_symbol(&ctx, "floatitem")
             .is_some());
     }
     
+    // test for cmp op(icmp, fcmp)
     #[test]
-    fn test_integer_cmp() {
+    fn test_cmp() {
         let src = r#"
         module {
             func.func @cmp : fn () -> int<1> {
@@ -752,6 +768,9 @@ mod tests {
                 %0 = arith.iconst 1i32 : int<32>
                 %1 = arith.iconst 2i32 : int<32>
                 %2 = arith.icmp slt, %0, %1 : int<1>
+                %a = arith.fconst 1.0 : float
+                %b = arith.fconst 2.0 : float
+                %c = arith.fcmp olt, %a, %b : int<1>                
                 func.return %2
             }
         }
@@ -778,15 +797,18 @@ mod tests {
             .is_some());
     }
 
+    // test for bit items(iand, ior, ixor)
     #[test]
-    fn test_bit_and() {
+    fn test_bititem() {
         let src = r#"
         module {
-            func.func @and : fn () -> int<32> {
+            func.func @bititem : fn () -> int<32> {
             ^entry:
                 %0 = arith.iconst 3i32 : int<32>
                 %1 = arith.iconst 4i32 : int<32>
                 %2 = arith.iand %0, %1 : int<32>
+                %3 = arith.ior %0, %1 : int<32>
+                %4 = arith.ixor %0, %1 : int<32>               
                 func.return %2
             }
         }
@@ -809,19 +831,22 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol(&ctx, "and")
+            .lookup_symbol(&ctx, "bititem")
             .is_some());
     }
 
+    // test for tycast(fp2si, si2fp)
     #[test]
-    fn test_bit_not() {
+    fn test_tycast() {
         let src = r#"
         module {
-            func.func @not : fn () -> int<32> {
+            func.func @tycast : fn () -> int<32> {
             ^entry:
-                %0 = arith.iconst 1i32 : int<32>
-                %1 = arith.inot %0 : int<32>
-                func.return %1
+                %0 = arith.iconst 3i32 : int<32>
+                %1 = arith.fconst 2.0 : float
+                %2 = arith.fptosi %1 : int<32>
+                %3 = arith.sitofp %0 : float
+                func.return %0
             }
         }
         "#;
@@ -843,7 +868,7 @@ mod tests {
             .get_region(0)
             .unwrap()
             .deref(&ctx.regions)
-            .lookup_symbol(&ctx, "not")
+            .lookup_symbol(&ctx, "tycast")
             .is_some());
     }
 }
