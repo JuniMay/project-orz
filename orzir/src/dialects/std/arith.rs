@@ -49,6 +49,42 @@ impl Verify for IConstOp {
     }
 }
 
+/// An float constant operation.
+///
+/// This will generate an float constant with the given value.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+#[mnemonic = "arith.fconst"]
+#[verifiers(NumResults<1>, NumOperands<0>, NumRegions<0>, FloatLikeResults)]
+#[format(pattern = "{value}", kind = "op", num_results = 1)]
+pub struct FConstOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The value of the floating-point constant.
+    value: f32,
+}
+
+#[derive(Debug, Error)]
+#[error("expected a floating-point value {0}, but got {1}")]
+pub struct IncompatibleValueErr(pub f32, pub f32);
+
+impl Verify for FConstOp {
+    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
+        self.run_verifiers(ctx)?;
+        self.result.deref(&ctx.values).verify(ctx)?;
+        let result_ty = self.result.deref(&ctx.values).ty(ctx).deref(&ctx.tys);
+        if let Some(ty) = result_ty.as_a::<FloatTy>() {
+            // Check if the type of the result matches the type of the constant value
+            if ty.width() != 32 {
+                return verification_error!(IncompatibleValueErr(32.0, self.value)).into();
+            }
+        }
+        Ok(())
+    }
+}
+
 /// An integer addition operation.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.iadd"]
