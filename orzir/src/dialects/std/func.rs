@@ -97,8 +97,7 @@ mod tests {
     use crate::dialects::std::{
         arith,
         builtin::{self, ModuleOp},
-        cf,
-        func, register_std_dialects,
+        cf, func, register_std_dialects,
     };
 
     #[test]
