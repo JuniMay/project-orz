@@ -676,11 +676,12 @@ mod tests {
     fn test_float_add() {
         let src = r#"
         module {
-            func.func @bar : fn () -> (float) {
+            func.func @bar : fn () -> float {
             ^entry:
                 %0 = arith.fconst 1.0 : float
                 %1 = arith.fconst 2.0 : float
                 %2 = arith.fadd %0, %1 : float
+                func.return %2
             }
         }
         "#;
@@ -710,11 +711,12 @@ mod tests {
     fn test_integer_cmp() {
         let src = r#"
         module {
-            func.func @cmp : fn () -> (int<1>) {
+            func.func @cmp : fn () -> int<1> {
             ^entry:
                 %0 = arith.iconst 1i32 : int<32>
                 %1 = arith.iconst 2i32 : int<32>
-                %2 = arith.icmp slt, %0, %1 : int<32>
+                %2 = arith.icmp slt, %0, %1 : int<1>
+                func.return %2
             }
         }
         "#;
@@ -744,11 +746,12 @@ mod tests {
     fn test_bit_and() {
         let src = r#"
         module {
-            func.func @and : fn () -> (int<32>) {
+            func.func @and : fn () -> int<32> {
             ^entry:
                 %0 = arith.iconst 3i32 : int<32>
                 %1 = arith.iconst 4i32 : int<32>
                 %2 = arith.iand %0, %1 : int<32>
+                func.return %2
             }
         }
         "#;
@@ -778,10 +781,11 @@ mod tests {
     fn test_bit_not() {
         let src = r#"
         module {
-            func.func @not : fn () -> (int<32>) {
+            func.func @not : fn () -> int<32> {
             ^entry:
                 %0 = arith.iconst 1i32 : int<32>
                 %1 = arith.inot %0 : int<32>
+                func.return %1
             }
         }
         "#;
