@@ -710,11 +710,11 @@ mod tests {
     fn test_integer_cmp() {
         let src = r#"
         module {
-            func.func @cmp : fn () -> (i1) {
+            func.func @cmp : fn () -> (int<1>) {
             ^entry:
-                %0 = arith.iconst 1 : i32
-                %1 = arith.iconst 2 : i32
-                %2 = arith.icmp "slt" %0, %1 : i32
+                %0 = arith.iconst 1i32 : int<32>
+                %1 = arith.iconst 2i32 : int<32>
+                %2 = arith.icmp slt, %0, %1 : int<32>
             }
         }
         "#;
@@ -744,11 +744,11 @@ mod tests {
     fn test_bit_and() {
         let src = r#"
         module {
-            func.func @and : fn () -> (i32) {
+            func.func @and : fn () -> (int<32>) {
             ^entry:
-                %0 = arith.iconst 3 : i32
-                %1 = arith.iconst 4 : i32
-                %2 = arith.iand %0, %1 : i32
+                %0 = arith.iconst 3i32 : int<32>
+                %1 = arith.iconst 4i32 : int<32>
+                %2 = arith.iand %0, %1 : int<32>
             }
         }
         "#;
@@ -778,10 +778,10 @@ mod tests {
     fn test_bit_not() {
         let src = r#"
         module {
-            func.func @not : fn () -> (i32) {
+            func.func @not : fn () -> (int<32>) {
             ^entry:
-                %0 = arith.iconst 1 : i32
-                %1 = arith.inot %0 : i32
+                %0 = arith.iconst 1i32 : int<32>
+                %1 = arith.inot %0 : int<32>
             }
         }
         "#;
