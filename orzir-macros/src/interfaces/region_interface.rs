@@ -1,7 +1,7 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 
-use crate::op::{FieldIdent, IndexKind, OpDeriveInfo, OpFieldMeta, RegionMeta};
+use crate::op::{DeriveInfo, FieldIdent, FieldMeta, IndexKind, RegionMeta};
 
 #[derive(Default)]
 struct DeriveArtifacts {
@@ -16,7 +16,7 @@ struct DeriveArtifacts {
     setter_has_default_arm: bool,
 }
 
-fn derive_struct(derive_info: &OpDeriveInfo, artifacts: &mut DeriveArtifacts) -> syn::Result<()> {
+fn derive_struct(derive_info: &DeriveInfo, artifacts: &mut DeriveArtifacts) -> syn::Result<()> {
     artifacts.num_impl = quote! { 0 };
     artifacts.getter_impl = TokenStream::new();
     artifacts.setter_impl = TokenStream::new();
@@ -25,12 +25,12 @@ fn derive_struct(derive_info: &OpDeriveInfo, artifacts: &mut DeriveArtifacts) ->
     artifacts.setter_has_default_arm = false;
 
     for (ident, meta) in derive_info.fields.iter() {
-        if !matches!(meta, OpFieldMeta::Region(_)) {
+        if !matches!(meta, FieldMeta::Region(_)) {
             continue;
         }
 
         let index = match &meta {
-            OpFieldMeta::Region(RegionMeta { index, .. }) => index,
+            FieldMeta::Region(RegionMeta { index, .. }) => index,
             _ => unreachable!(),
         };
 
@@ -145,7 +145,7 @@ fn derive_struct(derive_info: &OpDeriveInfo, artifacts: &mut DeriveArtifacts) ->
 }
 
 pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
-    let derive_info = OpDeriveInfo::from_ast(ast)?;
+    let derive_info = DeriveInfo::from_ast(ast)?;
     let mut artifacts = DeriveArtifacts::default();
 
     derive_struct(&derive_info, &mut artifacts)?;

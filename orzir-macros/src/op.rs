@@ -71,7 +71,7 @@ pub enum FieldIdent {
     Index(usize),
 }
 
-pub enum OpFieldMeta {
+pub enum FieldMeta {
     Metadata,
     Region(RegionMeta),
     Operand(IndexKind),
@@ -80,10 +80,10 @@ pub enum OpFieldMeta {
     Other { is_vec: bool, ty: syn::Type },
 }
 
-pub struct OpDeriveInfo {
+pub struct DeriveInfo {
     pub is_named: bool,
     /// The mnemonic of the operation.
-    pub mnemonic: (String, String),
+    pub mnemonic: Option<(String, String)>,
     /// The verifiers that the operation implements.
     pub verifiers: Vec<syn::Path>,
     /// The interfaces that the operation implements.
@@ -91,7 +91,7 @@ pub struct OpDeriveInfo {
     /// The fields in the struct.
     ///
     /// This follows the order of the fields in the struct.
-    pub fields: Vec<(FieldIdent, OpFieldMeta)>,
+    pub fields: Vec<(FieldIdent, FieldMeta)>,
 }
 
 pub fn is_type_vec(ty: &syn::Type) -> Option<syn::Type> {
@@ -110,7 +110,7 @@ pub fn is_type_vec(ty: &syn::Type) -> Option<syn::Type> {
     None
 }
 
-impl OpDeriveInfo {
+impl DeriveInfo {
     pub fn from_ast(ast: &syn::DeriveInput) -> syn::Result<Self> {
         let mut mnemonic = None;
         let mut verifiers = Vec::new();
@@ -141,7 +141,10 @@ impl OpDeriveInfo {
                             }
                         }
                         if mnemonic.is_none() {
-                            return Err(syn::Error::new(attr.span(), "invalid mnemonic attribute"));
+                            return Err(syn::Error::new(
+                                attr.span(),
+                                "invalid mnemonic format, expected `<primary>.<secondary>`",
+                            ));
                         }
                     }
                     "verifiers" => {
@@ -164,15 +167,6 @@ impl OpDeriveInfo {
                 }
             }
         }
-
-        if mnemonic.is_none() {
-            return Err(syn::Error::new(
-                ast.ident.span(),
-                "missing mnemonic attribute",
-            ));
-        }
-
-        let mnemonic = mnemonic.unwrap();
 
         let mut fields = Vec::new();
 
@@ -204,24 +198,23 @@ impl OpDeriveInfo {
 
                             match ident {
                                 "metadata" => {
-                                    fields.push((field_ident.clone(), OpFieldMeta::Metadata));
+                                    fields.push((field_ident.clone(), FieldMeta::Metadata));
                                 }
                                 "region" => {
                                     let meta = attr.parse_args::<RegionMeta>()?;
-                                    fields.push((field_ident.clone(), OpFieldMeta::Region(meta)));
+                                    fields.push((field_ident.clone(), FieldMeta::Region(meta)));
                                 }
                                 "operand" => {
                                     let index = attr.parse_args::<IndexKind>()?;
-                                    fields.push((field_ident.clone(), OpFieldMeta::Operand(index)));
+                                    fields.push((field_ident.clone(), FieldMeta::Operand(index)));
                                 }
                                 "result" => {
                                     let index = attr.parse_args::<IndexKind>()?;
-                                    fields.push((field_ident.clone(), OpFieldMeta::Result(index)));
+                                    fields.push((field_ident.clone(), FieldMeta::Result(index)));
                                 }
                                 "successor" => {
                                     let index = attr.parse_args::<IndexKind>()?;
-                                    fields
-                                        .push((field_ident.clone(), OpFieldMeta::Successor(index)));
+                                    fields.push((field_ident.clone(), FieldMeta::Successor(index)));
                                 }
                                 _ => unreachable!(),
                             }
@@ -234,11 +227,11 @@ impl OpDeriveInfo {
                 if !has_attr {
                     let ty = field.ty.clone();
                     if let Some(ty) = is_type_vec(&ty) {
-                        fields.push((field_ident, OpFieldMeta::Other { is_vec: true, ty }));
+                        fields.push((field_ident, FieldMeta::Other { is_vec: true, ty }));
                     } else {
                         fields.push((
                             field_ident,
-                            OpFieldMeta::Other {
+                            FieldMeta::Other {
                                 is_vec: false,
                                 ty: field.ty.clone(),
                             },
@@ -247,7 +240,8 @@ impl OpDeriveInfo {
                 }
             }
         } else {
-            unimplemented!("items other than structs are not supported yet")
+            // there will be no info for enum or other items for now.
+            is_named = false;
         }
 
         Ok(Self {
@@ -260,11 +254,11 @@ impl OpDeriveInfo {
     }
 }
 
-fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
+fn derive_struct_ctor(derive_info: &DeriveInfo) -> syn::Result<TokenStream> {
     let ctor_args = derive_info
         .fields
         .iter()
-        .filter(|(_, meta)| !matches!(meta, OpFieldMeta::Metadata))
+        .filter(|(_, meta)| !matches!(meta, FieldMeta::Metadata))
         .map(|(ident, meta)| {
             let ident = match ident {
                 FieldIdent::Ident(ident) => syn::Ident::new(ident, proc_macro2::Span::call_site()),
@@ -273,8 +267,8 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                 }
             };
             match meta {
-                OpFieldMeta::Metadata => unreachable!(),
-                OpFieldMeta::Operand(index) => match index {
+                FieldMeta::Metadata => unreachable!(),
+                FieldMeta::Operand(index) => match index {
                     IndexKind::All | IndexKind::Range(..) => {
                         quote! { #ident: Vec<::orzir_core::ArenaPtr<::orzir_core::Value>>, }
                     }
@@ -282,7 +276,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                         quote! { #ident: ::orzir_core::ArenaPtr<::orzir_core::Value>, }
                     }
                 },
-                OpFieldMeta::Region(meta) => match meta.index {
+                FieldMeta::Region(meta) => match meta.index {
                     IndexKind::All | IndexKind::Range(..) => {
                         quote! { #ident: Vec<::orzir_core::ArenaPtr<::orzir_core::Region>>, }
                     }
@@ -290,7 +284,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                         quote! { #ident: ::orzir_core::ArenaPtr<::orzir_core::Region>, }
                     }
                 },
-                OpFieldMeta::Result(index) => match index {
+                FieldMeta::Result(index) => match index {
                     IndexKind::All | IndexKind::Range(..) => {
                         quote! { #ident: Vec<::orzir_core::ArenaPtr<::orzir_core::Value>>, }
                     }
@@ -298,7 +292,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                         quote! { #ident: ::orzir_core::ArenaPtr<::orzir_core::Value>, }
                     }
                 },
-                OpFieldMeta::Successor(index) => match index {
+                FieldMeta::Successor(index) => match index {
                     IndexKind::All | IndexKind::Range(..) => {
                         quote! { #ident: Vec<Successor>, }
                     }
@@ -306,7 +300,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                         quote! { #ident: Successor, }
                     }
                 },
-                OpFieldMeta::Other { is_vec, ty } => {
+                FieldMeta::Other { is_vec, ty } => {
                     if *is_vec {
                         quote! { #ident: Vec<#ty>, }
                     } else {
@@ -328,7 +322,7 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
                 }
             };
             match meta {
-                OpFieldMeta::Metadata => {
+                FieldMeta::Metadata => {
                     if derive_info.is_named {
                         quote! { #ident: ::orzir_core::OpMetadata::new(self_ptr), }
                     } else {
@@ -366,11 +360,11 @@ fn derive_struct_ctor(derive_info: &OpDeriveInfo) -> syn::Result<TokenStream> {
     Ok(output)
 }
 
-fn derive_struct_metadata_methods(derive_info: &OpDeriveInfo) -> TokenStream {
+fn derive_struct_metadata_methods(derive_info: &DeriveInfo) -> TokenStream {
     let metadata_field = derive_info
         .fields
         .iter()
-        .find(|(_, meta)| matches!(meta, OpFieldMeta::Metadata))
+        .find(|(_, meta)| matches!(meta, FieldMeta::Metadata))
         .unwrap();
 
     let metadata_field = match metadata_field {
@@ -398,9 +392,14 @@ fn derive_struct_metadata_methods(derive_info: &OpDeriveInfo) -> TokenStream {
 }
 
 pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
-    let derive_info = OpDeriveInfo::from_ast(ast)?;
+    let derive_info = DeriveInfo::from_ast(ast)?;
 
-    let (primary, secondary) = &derive_info.mnemonic;
+    let (primary, secondary) = &derive_info.mnemonic.as_ref().ok_or_else(|| {
+        syn::Error::new(
+            ast.span(),
+            "missing mnemonic attribute, expected #[mnemonic = \"<primary>.<secondary>\"]",
+        )
+    })?;
 
     let ctor = derive_struct_ctor(&derive_info)?;
     let metadata = derive_struct_metadata_methods(&derive_info);

@@ -4,7 +4,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::spanned::Spanned;
 
-use crate::op::{FieldIdent, IndexKind, OpDeriveInfo, OpFieldMeta, RegionMeta};
+use crate::op::{DeriveInfo, FieldIdent, FieldMeta, IndexKind, RegionMeta};
 
 /// A format token is embraced by `{}` or just a tokenizer-compatible delimiter.
 ///
@@ -344,7 +344,7 @@ impl FormatInfo {
 /// Generate the parser for a repeat pattern.
 fn generate_repeat_parser(
     field_ident: &FieldIdent,
-    op_field_meta: &OpFieldMeta,
+    op_field_meta: &FieldMeta,
     repeat_meta: &RepeatMeta,
 ) -> syn::Result<TokenStream> {
     // field ident will be assigned with the parsed value.
@@ -355,8 +355,8 @@ fn generate_repeat_parser(
 
     // generate the basic parse stmt.
     let parse_stmts = match op_field_meta {
-        OpFieldMeta::Metadata => unreachable!("should not parse metadata field"),
-        OpFieldMeta::Region(RegionMeta { index, kind }) => {
+        FieldMeta::Metadata => unreachable!("should not parse metadata field"),
+        FieldMeta::Region(RegionMeta { index, kind }) => {
             if let IndexKind::Single(_) = index {
                 unreachable!("should not parse single region field");
             }
@@ -377,7 +377,7 @@ fn generate_repeat_parser(
                 __state.exit_region();
             }
         }
-        OpFieldMeta::Result(index) | OpFieldMeta::Operand(index) => {
+        FieldMeta::Result(index) | FieldMeta::Operand(index) => {
             if let IndexKind::Single(_) = index {
                 unreachable!("should not parse single result/operand field");
             }
@@ -385,7 +385,7 @@ fn generate_repeat_parser(
                 let __item_result = <::orzir_core::Value as ::orzir_core::Parse>::parse(__ctx, __state);
             }
         }
-        OpFieldMeta::Successor(index) => {
+        FieldMeta::Successor(index) => {
             if let IndexKind::Single(_) = index {
                 unreachable!("should not parse single successor field");
             }
@@ -393,7 +393,7 @@ fn generate_repeat_parser(
                 let __item_result = <::orzir_core::Successor as ::orzir_core::Parse>::parse(__ctx, __state);
             }
         }
-        OpFieldMeta::Other { is_vec, ty } => {
+        FieldMeta::Other { is_vec, ty } => {
             if !is_vec {
                 unreachable!("should not parse non-vec field with repeat attribute");
             }
@@ -501,7 +501,7 @@ fn generate_repeat_parser(
 /// Generat a printer for repeat pattern.
 fn generate_repeat_printer(
     field_ident: &FieldIdent,
-    op_field_meta: &OpFieldMeta,
+    op_field_meta: &FieldMeta,
     repeat_meta: &RepeatMeta,
 ) -> syn::Result<TokenStream> {
     let field = match field_ident {
@@ -516,8 +516,8 @@ fn generate_repeat_printer(
     };
 
     let print_stmts = match op_field_meta {
-        OpFieldMeta::Metadata => unreachable!("should not print metadata field"),
-        OpFieldMeta::Region(RegionMeta { index, .. }) => {
+        FieldMeta::Metadata => unreachable!("should not print metadata field"),
+        FieldMeta::Region(RegionMeta { index, .. }) => {
             if let IndexKind::Single(_) = index {
                 unreachable!("should not print single region field");
             }
@@ -525,7 +525,7 @@ fn generate_repeat_printer(
                 <::orzir_core::Region as ::orzir_core::Print>::print(__item.deref(&__ctx.regions), __ctx, __state)?;
             }
         }
-        OpFieldMeta::Result(index) | OpFieldMeta::Operand(index) => {
+        FieldMeta::Result(index) | FieldMeta::Operand(index) => {
             if let IndexKind::Single(_) = index {
                 unreachable!("should not print single result/operand field");
             }
@@ -533,7 +533,7 @@ fn generate_repeat_printer(
                 <::orzir_core::Value as ::orzir_core::Print>::print(__item.deref(&__ctx.values), __ctx, __state)?;
             }
         }
-        OpFieldMeta::Successor(index) => {
+        FieldMeta::Successor(index) => {
             if let IndexKind::Single(_) = index {
                 unreachable!("should not print single successor field");
             }
@@ -541,7 +541,7 @@ fn generate_repeat_printer(
                 <::orzir_core::Successor as ::orzir_core::Print>::print(__item, __ctx, __state)?;
             }
         }
-        OpFieldMeta::Other { is_vec, ty } => {
+        FieldMeta::Other { is_vec, ty } => {
             if !is_vec {
                 unreachable!("should not print non-vec field with repeat attribute");
             }
@@ -600,18 +600,18 @@ fn generate_repeat_printer(
 
 fn generate_field_parser(
     field_ident: &FieldIdent,
-    op_field_meta: &OpFieldMeta,
+    op_field_meta: &FieldMeta,
     format_info: &FormatInfo,
 ) -> syn::Result<TokenStream> {
     match op_field_meta {
-        OpFieldMeta::Metadata => {
+        FieldMeta::Metadata => {
             // just skip.
             Ok(quote! {})
         }
-        OpFieldMeta::Operand(index)
-        | OpFieldMeta::Region(RegionMeta { index, .. })
-        | OpFieldMeta::Result(index)
-        | OpFieldMeta::Successor(index) => match index {
+        FieldMeta::Operand(index)
+        | FieldMeta::Region(RegionMeta { index, .. })
+        | FieldMeta::Result(index)
+        | FieldMeta::Successor(index) => match index {
             IndexKind::All | IndexKind::Range(..) => {
                 let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
                     sep: None,
@@ -631,7 +631,7 @@ fn generate_field_parser(
                 };
 
                 let parse_stmts = match op_field_meta {
-                    OpFieldMeta::Region(RegionMeta { index, kind }) => {
+                    FieldMeta::Region(RegionMeta { index, kind }) => {
                         if kind.is_none() {
                             return Err(syn::Error::new(
                                 // TODO: Span may not be correct here
@@ -653,12 +653,12 @@ fn generate_field_parser(
                             __state.exit_region();
                         }
                     }
-                    OpFieldMeta::Result(_) | OpFieldMeta::Operand(_) => {
+                    FieldMeta::Result(_) | FieldMeta::Operand(_) => {
                         quote! {
                             let #field_ident = <::orzir_core::Value as ::orzir_core::Parse>::parse(__ctx, __state)?;
                         }
                     }
-                    OpFieldMeta::Successor(_) => {
+                    FieldMeta::Successor(_) => {
                         quote! {
                             let #field_ident = <::orzir_core::Successor as ::orzir_core::Parse>::parse(__ctx, __state)?;
                         }
@@ -669,7 +669,7 @@ fn generate_field_parser(
                 Ok(parse_stmts)
             }
         },
-        OpFieldMeta::Other { is_vec, ty } => {
+        FieldMeta::Other { is_vec, ty } => {
             if *is_vec {
                 let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
                     sep: None,
@@ -699,18 +699,18 @@ fn generate_field_parser(
 
 fn generate_field_printer(
     field_ident: &FieldIdent,
-    op_field_meta: &OpFieldMeta,
+    op_field_meta: &FieldMeta,
     format_info: &FormatInfo,
 ) -> syn::Result<TokenStream> {
     match op_field_meta {
-        OpFieldMeta::Metadata => {
+        FieldMeta::Metadata => {
             // just skip.
             Ok(quote! {})
         }
-        OpFieldMeta::Operand(index)
-        | OpFieldMeta::Region(RegionMeta { index, .. })
-        | OpFieldMeta::Result(index)
-        | OpFieldMeta::Successor(index) => match index {
+        FieldMeta::Operand(index)
+        | FieldMeta::Region(RegionMeta { index, .. })
+        | FieldMeta::Result(index)
+        | FieldMeta::Successor(index) => match index {
             IndexKind::All | IndexKind::Range(..) => {
                 let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
                     sep: None,
@@ -732,7 +732,7 @@ fn generate_field_printer(
                 };
 
                 let print_stmts = match op_field_meta {
-                    OpFieldMeta::Region(RegionMeta { .. }) => {
+                    FieldMeta::Region(RegionMeta { .. }) => {
                         quote! {
                             <::orzir_core::Region as ::orzir_core::Print>::print(
                                 #field.deref(&__ctx.regions),
@@ -741,7 +741,7 @@ fn generate_field_printer(
                             )?;
                         }
                     }
-                    OpFieldMeta::Result(_) | OpFieldMeta::Operand(_) => {
+                    FieldMeta::Result(_) | FieldMeta::Operand(_) => {
                         quote! {
                             <::orzir_core::Value as ::orzir_core::Print>::print(
                                 #field.deref(&__ctx.values),
@@ -750,7 +750,7 @@ fn generate_field_printer(
                             )?;
                         }
                     }
-                    OpFieldMeta::Successor(_) => {
+                    FieldMeta::Successor(_) => {
                         quote! {
                             <::orzir_core::Successor as ::orzir_core::Print>::print(
                                 &#field,
@@ -765,7 +765,7 @@ fn generate_field_printer(
                 Ok(print_stmts)
             }
         },
-        OpFieldMeta::Other { is_vec, ty } => {
+        FieldMeta::Other { is_vec, ty } => {
             if *is_vec {
                 let repeat_meta = format_info.repeats.get(field_ident).unwrap_or(&RepeatMeta {
                     sep: None,
@@ -797,7 +797,7 @@ fn generate_field_printer(
 
 fn generate_parser(
     struct_ident: &syn::Ident,
-    derive_info: &OpDeriveInfo,
+    derive_info: &DeriveInfo,
     format_info: &FormatInfo,
 ) -> syn::Result<TokenStream> {
     let mut parse_stmts = TokenStream::new();
@@ -965,7 +965,7 @@ fn generate_parser(
             };
 
             match field_meta {
-                OpFieldMeta::Result(index) => {
+                FieldMeta::Result(index) => {
                     match index {
                         IndexKind::All => {
                             result_assign.extend(quote! {
@@ -994,7 +994,7 @@ fn generate_parser(
                         #ident,
                     });
                 }
-                OpFieldMeta::Metadata => match field_ident {
+                FieldMeta::Metadata => match field_ident {
                     FieldIdent::Ident(_) => construction.extend(quote! {
                         #ident: ::orzir_core::OpMetadata::new(__op),
                     }),
@@ -1151,7 +1151,7 @@ fn generate_parser(
 
 fn generate_printer(
     struct_ident: &syn::Ident,
-    derive_info: &OpDeriveInfo,
+    derive_info: &DeriveInfo,
     format_info: &FormatInfo,
 ) -> syn::Result<TokenStream> {
     let mut print_stmts = TokenStream::new();
@@ -1243,7 +1243,8 @@ fn generate_printer(
     Ok(print_stmts)
 }
 
-fn derive_default_parse(ident: &syn::Ident) -> TokenStream {
+/// A simple parser for types that can be parsed from a string.
+fn derive_simple_parse(ident: &syn::Ident) -> TokenStream {
     quote! {
         impl orzir_core::Parse for #ident {
             type Item = Self;
@@ -1272,7 +1273,8 @@ fn derive_default_parse(ident: &syn::Ident) -> TokenStream {
     }
 }
 
-fn derive_default_print(ident: &syn::Ident) -> TokenStream {
+/// A simple printer for types that can be printed to a string.
+fn derive_simple_print(ident: &syn::Ident) -> TokenStream {
     quote! {
         impl orzir_core::Print for #ident {
             fn print(
@@ -1289,12 +1291,25 @@ fn derive_default_print(ident: &syn::Ident) -> TokenStream {
 
 pub fn derive_parse_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let format_info = FormatInfo::from_ast(ast)?;
+    let derive_info = DeriveInfo::from_ast(ast)?;
 
-    if let FormatKind::Other = format_info.meta.kind {
-        return Ok(derive_default_parse(&ast.ident));
+    if let syn::Data::Struct(_) = ast.data {
+        // do nothing, struct can be derived
+    } else {
+        // check if the format is `{self}`
+        if format_info.meta.pattern.tokens.len() != 1 {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "format pattern must be `{self}` for non-struct types, others are not supported yet.",
+            ));
+        }
+        if let FormatToken::Field(s) = format_info.meta.pattern.tokens.get(0).unwrap() {
+            if s == "self" {
+                return Ok(derive_simple_parse(&ast.ident));
+            }
+        }
     }
 
-    let derive_info = OpDeriveInfo::from_ast(ast)?;
     let parse_impl = generate_parser(&ast.ident, &derive_info, &format_info)?;
 
     Ok(parse_impl)
@@ -1302,12 +1317,25 @@ pub fn derive_parse_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
 
 pub fn derive_print_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
     let format_info = FormatInfo::from_ast(ast)?;
+    let derive_info = DeriveInfo::from_ast(ast)?;
 
-    if let FormatKind::Other = format_info.meta.kind {
-        return Ok(derive_default_print(&ast.ident));
+    if let syn::Data::Struct(_) = ast.data {
+        // do nothing, struct can be derived
+    } else {
+        // check if the format is `{self}`
+        if format_info.meta.pattern.tokens.len() != 1 {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "format pattern must be `{self}` for non-struct types, others are not supported yet.",
+            ));
+        }
+        if let FormatToken::Field(s) = format_info.meta.pattern.tokens.get(0).unwrap() {
+            if s == "self" {
+                return Ok(derive_simple_print(&ast.ident));
+            }
+        }
     }
 
-    let derive_info = OpDeriveInfo::from_ast(ast)?;
     let print_impl = generate_printer(&ast.ident, &derive_info, &format_info)?;
 
     Ok(print_impl)
