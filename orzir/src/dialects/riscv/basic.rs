@@ -9,7 +9,7 @@ use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Ver
 use thiserror::Error;
 
 use super::regs::IReg;
-use crate::verifiers::{control_flow::*, *};
+use crate::{dialects::std::builtin::Symbol, verifiers::{control_flow::*, *}};
 
 #[derive(Debug, Error)]
 #[error("expected an immediate with width at most {0}, but got {1}")]
@@ -201,6 +201,49 @@ pub struct LoadOp {
     offset: ApInt,
 }
 
+/// Load symbol address pseudo instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv.load_addr"]
+#[verifiers(
+    NumResults<1>, NumOperands<0>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands,
+    OperandTysAre<IReg>, ResultTysAre<IReg>
+)]
+#[format(pattern = "{symbol}", kind = "op", num_results = 1)]
+pub struct LoadAddrOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The symbol to load the address of.
+    symbol: Symbol,
+}
+
+/// Load from symbol pseudo instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv.load_symbol"]
+#[verifiers(
+    NumResults<1>, NumOperands<0>, NumRegions<0>,
+    SameResultTys, SameOperandTys, SameOperandAndResultTys,
+    IntegerLikeOperands,
+    OperandTysAre<IReg>, ResultTysAre<IReg>
+)]
+#[format(pattern = "{pred} , {symbol}", kind = "op", num_results = 1)]
+pub struct LoadSymbolOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The predicate of the load operation.
+    pred: LoadPredicate,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The symbol to load from.
+    symbol: Symbol,
+}
+
+
 pub enum StorePredicate {
     SB,
     SH,
@@ -289,6 +332,27 @@ pub struct StoreOp {
     base: ArenaPtr<Value>,
     /// The offset immediate of the store operation.
     offset: ApInt,
+}
+
+/// Store symbol pseudo instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv.store_symbol"]
+#[verifiers(
+    NumResults<0>, NumOperands<1>, NumRegions<0>,
+    SameOperandTys, IntegerLikeOperands,
+    OperandTysAre<IReg>, ResultTysAre<IReg>
+)]
+#[format(pattern = "{pred} , {value} , {symbol}", kind = "op", num_results = 0)]
+pub struct StoreSymbolOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The predicate of the store operation.
+    pred: StorePredicate,
+    /// The value to store.
+    #[operand(0)]
+    value: ArenaPtr<Value>,
+    /// The symbol to store to.
+    symbol: Symbol,
 }
 
 pub enum BranchPredicate {
