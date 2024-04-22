@@ -93,7 +93,7 @@ impl Verify for FConstOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct IAddOp {
     #[metadata]
     metadata: OpMetadata,
@@ -116,7 +116,7 @@ pub struct IAddOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     FloatLikeOperands, FloatLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct FAddOp {
     #[metadata]
     metadata: OpMetadata,
@@ -139,7 +139,7 @@ pub struct FAddOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct ISubOp {
     #[metadata]
     metadata: OpMetadata,
@@ -162,7 +162,7 @@ pub struct ISubOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     FloatLikeOperands, FloatLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct FSubOp {
     #[metadata]
     metadata: OpMetadata,
@@ -185,7 +185,7 @@ pub struct FSubOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct IMulOp {
     #[metadata]
     metadata: OpMetadata,
@@ -208,7 +208,7 @@ pub struct IMulOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     FloatLikeOperands, FloatLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct FMulOp {
     #[metadata]
     metadata: OpMetadata,
@@ -231,7 +231,7 @@ pub struct FMulOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct UDivOp {
     #[metadata]
     metadata: OpMetadata,
@@ -254,7 +254,7 @@ pub struct UDivOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct SDivOp {
     #[metadata]
     metadata: OpMetadata,
@@ -277,7 +277,7 @@ pub struct SDivOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     FloatLikeOperands, FloatLikeResults,
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct FDivOp {
     #[metadata]
     metadata: OpMetadata,
@@ -300,7 +300,7 @@ pub struct FDivOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct IAndOp {
     #[metadata]
     metadata: OpMetadata,
@@ -323,7 +323,7 @@ pub struct IAndOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct IOrOp {
     #[metadata]
     metadata: OpMetadata,
@@ -346,7 +346,7 @@ pub struct IOrOp {
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands, IntegerLikeResults
 )]
-#[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
 pub struct IXorOp {
     #[metadata]
     metadata: OpMetadata,
@@ -473,7 +473,7 @@ impl Print for ICmpPredicate {
     SameResultTys, SameOperandTys, IntegerLikeOperands,
     IntegerLikeResults
 )]
-#[format(pattern = "{pred} , {lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{pred} {lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct ICmpOp {
     #[metadata]
     metadata: OpMetadata,
@@ -592,7 +592,7 @@ impl Print for FCmpPredicate {
     NumResults<1>, NumOperands<2>, NumRegions<0>,
     SameResultTys, SameOperandTys, FloatLikeOperands, IntegerLikeResults
 )]
-#[format(pattern = "{pred} , {lhs} , {rhs}", kind = "op", num_results = 1)]
+#[format(pattern = "{pred} {lhs} , {rhs}", kind = "op", num_results = 1)]
 pub struct FCmpOp {
     #[metadata]
     metadata: OpMetadata,
@@ -795,10 +795,10 @@ mod tests {
             ^entry:
                 %0 = arith.iconst 1i32 : int<32>
                 %1 = arith.iconst 2i32 : int<32>
-                %2 = arith.icmp slt, %0, %1 : int<1>
+                %2 = arith.icmp slt %0, %1 : int<1>
                 %a = arith.fconst 1.0 : float
                 %b = arith.fconst 2.0 : float
-                %c = arith.fcmp olt, %a, %b : int<1>                
+                %c = arith.fcmp olt %a, %b : int<1>                
                 func.return %2
             }
         }
