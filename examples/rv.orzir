@@ -38,7 +38,7 @@ module {
         %t27 = rv.slt  %arg0, %arg1 : rv.ireg
         %t28 = rv.sltu %arg0, %arg1 : rv.ireg
         rv.jmp ^ret
-        
+
     ^ret:
         func.return %t1
     }

@@ -1,16 +1,15 @@
 use std::fmt::{self, Write};
 
-use orzir_core::{parse_error, token_wildcard, ParseErrorKind, Print, PrintResult, PrintState, TokenKind, Ty};
 use orzir_core::{
-    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
-    RunVerifiers, Value, Verify, Successor, ParseState, ParseResult
+    apint::ApInt, parse_error, token_wildcard, verification_error, ArenaPtr, Context, Dialect, Op,
+    OpMetadata, Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState,
+    RunVerifiers, Successor, TokenKind, Ty, Value, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 
 use super::regs::IReg;
-use crate::verifiers::*;
-use crate::verifiers::control_flow::*;
+use crate::verifiers::{control_flow::*, *};
 
 #[derive(Debug, Error)]
 #[error("expected an immediate with width at most {0}, but got {1}")]
@@ -22,10 +21,10 @@ macro_rules! rv_immediate {
         #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
         #[mnemonic = $mnemonic]
         #[verifiers(
-            NumResults<1>, NumOperands<1>, NumRegions<0>,
-            SameResultTys, SameOperandTys, SameOperandAndResultTys,
-            IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
-        )]
+                            NumResults<1>, NumOperands<1>, NumRegions<0>,
+                            SameResultTys, SameOperandTys, SameOperandAndResultTys,
+                            IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
+                        )]
         #[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
         pub struct $name {
             #[metadata]
@@ -46,7 +45,8 @@ macro_rules! rv_immediate {
 
                 // verify the width of the immediate
                 if self.imm.width() > $imm_width {
-                    return verification_error!(ImmOutOfRangeErr($imm_width, self.imm.width())).into();
+                    return verification_error!(ImmOutOfRangeErr($imm_width, self.imm.width()))
+                        .into();
                 }
 
                 Ok(())
@@ -69,38 +69,41 @@ rv_immediate!("rv.andi", AndiOp, 12);
 rv_immediate!("rv.slti", SltiOp, 12);
 rv_immediate!("rv.sltiu", SltiuOp, 12);
 
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.jmp"]
+/// Represents the `zero` or `x0` register.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv.zero"]
 #[verifiers(
-    NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator
+    NumResults<1>, NumOperands<0>, NumRegions<0>,
+    SameResultTys, ResultTysAre<IReg>
 )]
+#[format(pattern = "", kind = "op", num_results = 1)]
+pub struct ZeroOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+}
+
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv.jmp"]
+#[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 #[format(pattern = "{succ}", kind = "op", num_results = 0)]
 pub struct JmpOp {
     #[metadata]
     metadata: OpMetadata,
 
+    /// The successor of the jump operation.
+    ///
+    /// In a valid assembly code, there is no semantic for block arguments,
+    /// but the RISC-V dialect is designed to optimize the pre-register
+    /// allocation form of the code (which is still in SSA form), and thus
+    /// the successor can have a block argument.
+    ///
+    /// However, when emitting the corresponding machine code, the block
+    /// argument should eliminated/hoisted.
     #[successor(0)]
     succ: Successor,
-}
-
-#[derive(Debug, Error)]
-#[error("invalid successor for jmp operation")]
-pub struct InvalidAsmSuccessorErr;
-
-impl Verify for JmpOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // for the assembly-like jmp operation, the successor should not have any arguments
-        //
-        // TODO: This may be implemented as a verifier
-        if !self.succ.args().is_empty() {
-            return verification_error!(InvalidAsmSuccessorErr).into();
-        }
-
-        Ok(())
-    
-    }
 }
 
 pub enum LoadPredicate {
@@ -154,7 +157,8 @@ impl Parse for LoadPredicate {
     fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         if let TokenKind::Tokenized(s) = token.kind {
-            let pred = LoadPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
+            let pred =
+                LoadPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
             Ok(pred)
         } else {
             parse_error!(
@@ -176,7 +180,7 @@ impl Print for LoadPredicate {
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "rv.load"]
 #[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>, 
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     IntegerLikeOperands,
     OperandTysAre<IReg>, ResultTysAre<IReg>
@@ -194,6 +198,96 @@ pub struct LoadOp {
     #[operand(0)]
     base: ArenaPtr<Value>,
     /// The offset immediate of the load operation.
+    offset: ApInt,
+}
+
+pub enum StorePredicate {
+    SB,
+    SH,
+    SW,
+    SD,
+}
+
+impl fmt::Display for StorePredicate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StorePredicate::SB => write!(f, "sb"),
+            StorePredicate::SH => write!(f, "sh"),
+            StorePredicate::SW => write!(f, "sw"),
+            StorePredicate::SD => write!(f, "sd"),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("invalid store predicate: {0}")]
+pub struct InvalidStorePredicateErr(String);
+
+impl TryFrom<&str> for StorePredicate {
+    type Error = InvalidStorePredicateErr;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "sb" => Ok(StorePredicate::SB),
+            "sh" => Ok(StorePredicate::SH),
+            "sw" => Ok(StorePredicate::SW),
+            "sd" => Ok(StorePredicate::SD),
+            _ => Err(InvalidStorePredicateErr(value.into())),
+        }
+    }
+}
+
+impl Parse for StorePredicate {
+    type Item = Self;
+
+    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        if let TokenKind::Tokenized(s) = token.kind {
+            let pred =
+                StorePredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
+            Ok(pred)
+        } else {
+            parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
+            )
+            .into()
+        }
+    }
+}
+
+impl Print for StorePredicate {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
+        write!(state.buffer, "{}", self)?;
+        Ok(())
+    }
+}
+
+/// The store instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv.store"]
+#[verifiers(
+    NumResults<0>, NumOperands<2>, NumRegions<0>,
+    SameOperandTys, IntegerLikeOperands,
+    OperandTysAre<IReg>, ResultTysAre<IReg>
+)]
+#[format(
+    pattern = "{pred} , {value} , {base} , {offset}",
+    kind = "op",
+    num_results = 0
+)]
+pub struct StoreOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The predicate of the store operation.
+    pred: StorePredicate,
+    /// The value to store.
+    #[operand(0)]
+    value: ArenaPtr<Value>,
+    /// The base address of the store operation.
+    #[operand(1)]
+    base: ArenaPtr<Value>,
+    /// The offset immediate of the store operation.
     offset: ApInt,
 }
 
@@ -245,7 +339,8 @@ impl Parse for BranchPredicate {
     fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.consume()?;
         if let TokenKind::Tokenized(s) = token.kind {
-            let pred = BranchPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
+            let pred =
+                BranchPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
             Ok(pred)
         } else {
             parse_error!(
@@ -269,7 +364,11 @@ impl Print for BranchPredicate {
 #[verifiers(
     NumResults<0>, NumOperands<2>, NumRegions<0>, NumSuccessors<2>, IsTerminator
 )]
-#[format(pattern = "{pred} , {lhs} , {rhs} , {then_succ} , {else_succ}", kind = "op", num_results = 0)]
+#[format(
+    pattern = "{pred} , {lhs} , {rhs} , {then_succ} , {else_succ}",
+    kind = "op",
+    num_results = 0
+)]
 pub struct BranchOp {
     #[metadata]
     metadata: OpMetadata,
@@ -309,10 +408,10 @@ macro_rules! rv_binary {
         #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
         #[mnemonic = $mnemonic]
         #[verifiers(
-            NumResults<1>, NumOperands<2>, NumRegions<0>,
-            SameResultTys, SameOperandTys, SameOperandAndResultTys,
-            IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
-        )]
+                            NumResults<1>, NumOperands<2>, NumRegions<0>,
+                            SameResultTys, SameOperandTys, SameOperandAndResultTys,
+                            IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
+                        )]
         #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
         pub struct $name {
             #[metadata]
@@ -384,15 +483,13 @@ pub fn register(ctx: &mut Context) {
     SltuOp::register(ctx, SltuOp::parse);
 
     BranchOp::register(ctx, BranchOp::parse);
-    
+
     IReg::register(ctx, IReg::parse);
 }
 
 #[cfg(test)]
 mod tests {
-    use orzir_core::{
-        Context, OpObj, Parse, ParseState, Print, PrintState, TokenStream
-    };
+    use orzir_core::{Context, OpObj, Parse, ParseState, Print, PrintState, TokenStream};
 
     use crate::dialects::{riscv::basic, std::register_std_dialects};
 
