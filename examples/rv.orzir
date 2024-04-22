@@ -1,0 +1,52 @@
+module {
+
+    // test func
+    func.func @test : fn (rv.ireg, rv.ireg) -> rv.ireg {
+    ^entry(%arg0: rv.ireg, %arg1: rv.ireg):
+        rv.br beq, %arg0, %arg1, ^blk0, ^blk1
+    ^blk0:
+        %t1 = rv.addi %arg0, 1i12 : rv.ireg
+        %t2 = rv.addiw %arg0, 2i12 : rv.ireg
+        %t3 = rv.slli %arg0, 3i6 : rv.ireg
+        %t4 = rv.slliw %arg0, 4i5 : rv.ireg
+        %t5 = rv.srli %arg0, 5i6 : rv.ireg
+        %t6 = rv.srliw %arg0, 6i5 : rv.ireg
+        %t7 = rv.srai %arg0, 7i6 : rv.ireg
+        %t8 = rv.sraiw %arg0, 8i5 : rv.ireg
+        %t9 = rv.xori %arg0, 9i12 : rv.ireg
+        %t10 = rv.ori %arg0, 10i12 : rv.ireg
+        %t11 = rv.andi %arg0, 11i12 : rv.ireg
+        %t12 = rv.slti %arg0, 12i12 : rv.ireg
+        %t13 = rv.sltiu %arg0, 13i12 : rv.ireg
+        rv.jmp ^ret
+    ^blk1:
+        %t14 = rv.add %arg0, %arg1 : rv.ireg
+        %t15 = rv.addw %arg0, %arg1 : rv.ireg
+        %t16 = rv.sub %arg0, %arg1 : rv.ireg
+        %t17 = rv.subw %arg0, %arg1 : rv.ireg
+        %t18 = rv.sll %arg0, %arg1 : rv.ireg
+        %t19 = rv.sllw %arg0, %arg1 : rv.ireg
+        %t20 = rv.srl %arg0, %arg1 : rv.ireg
+        %t21 = rv.srlw %arg0, %arg1 : rv.ireg
+        %t22 = rv.sra %arg0, %arg1 : rv.ireg
+        %t23 = rv.sraw %arg0, %arg1 : rv.ireg
+        %t24 = rv.xor %arg0, %arg1 : rv.ireg
+        %t25 = rv.or %arg0, %arg1 : rv.ireg
+        %t26 = rv.and %arg0, %arg1 : rv.ireg
+        %t27 = rv.slt %arg0, %arg1 : rv.ireg
+        %t28 = rv.sltu %arg0, %arg1 : rv.ireg
+        rv.jmp ^ret
+    ^ret:
+        func.return %t1
+    }
+
+    // main func
+    func.func @main : fn () -> rv.ireg {
+        %0 = rv.li 114514i32 : rv.ireg
+        %1 = rv.li 1919810i32 : rv.ireg
+        %2 = rv.load lb, %1, 1235i12 :rv.ireg
+        %3 = func.call @test(%2, %1) : rv.ireg
+
+        func.return %3
+    }
+}
