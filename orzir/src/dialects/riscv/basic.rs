@@ -16,464 +16,60 @@ use crate::verifiers::control_flow::*;
 #[error("expected an immediate with width at most {0}, but got {1}")]
 pub struct ImmOutOfRangeErr(pub usize, pub usize);
 
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.addi"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct AddiOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for AddiOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 12 {
-            return verification_error!(ImmOutOfRangeErr(12, self.imm.width())).into();
+/// Implement a RISC-V immediate operation.
+macro_rules! rv_immediate {
+    ($mnemonic:literal, $name:ident, $imm_width:literal) => {
+        #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
+        #[mnemonic = $mnemonic]
+        #[verifiers(
+            NumResults<1>, NumOperands<1>, NumRegions<0>,
+            SameResultTys, SameOperandTys, SameOperandAndResultTys,
+            IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
+        )]
+        #[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
+        pub struct $name {
+            #[metadata]
+            metadata: OpMetadata,
+            /// The result of the operation.
+            #[result(0)]
+            result: ArenaPtr<Value>,
+            /// The left-hand side operand.
+            #[operand(0)]
+            lhs: ArenaPtr<Value>,
+            /// The right-hand side immediate.
+            imm: ApInt,
         }
 
-        Ok(())
-    }
+        impl Verify for $name {
+            fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
+                self.run_verifiers(ctx)?;
+
+                // verify the width of the immediate
+                if self.imm.width() > $imm_width {
+                    return verification_error!(ImmOutOfRangeErr($imm_width, self.imm.width())).into();
+                }
+
+                Ok(())
+            }
+        }
+    };
 }
+
+rv_immediate!("rv.addi", AddiOp, 12);
+rv_immediate!("rv.addiw", AddiwOp, 12);
+rv_immediate!("rv.slli", SlliOp, 12);
+rv_immediate!("rv.slliw", SlliwOp, 5);
+rv_immediate!("rv.srli", SrliOp, 12);
+rv_immediate!("rv.srliw", SrliwOp, 5);
+rv_immediate!("rv.srai", SraiOp, 12);
+rv_immediate!("rv.sraiw", SraiwOp, 5);
+rv_immediate!("rv.xori", XoriOp, 12);
+rv_immediate!("rv.ori", OriOp, 12);
+rv_immediate!("rv.andi", AndiOp, 12);
+rv_immediate!("rv.slti", SltiOp, 12);
+rv_immediate!("rv.sltiu", SltiuOp, 12);
 
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.addiw"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct AddiwOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for AddiwOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 12 {
-            return verification_error!(ImmOutOfRangeErr(12, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.slli"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct SlliOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for SlliOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() > 12 {
-            return verification_error!(ImmOutOfRangeErr(7, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.slliw"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct SlliwOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for SlliwOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 5 {
-            return verification_error!(ImmOutOfRangeErr(5, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.srli"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct SrliOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for SrliOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() > 7 {
-            return verification_error!(ImmOutOfRangeErr(7, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.srliw"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct SrliwOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for SrliwOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 5 {
-            return verification_error!(ImmOutOfRangeErr(5, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.srai"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct SraiOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for SraiOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() > 7 {
-            return verification_error!(ImmOutOfRangeErr(7, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.sraiw"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct SraiwOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for SraiwOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 5 {
-            return verification_error!(ImmOutOfRangeErr(5, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.xori"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct XoriOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for XoriOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 12 {
-            return verification_error!(ImmOutOfRangeErr(12, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.ori"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct OriOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for OriOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 12 {
-            return verification_error!(ImmOutOfRangeErr(12, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.andi"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct AndiOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for AndiOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 12 {
-            return verification_error!(ImmOutOfRangeErr(12, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.slti"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct SltiOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for SltiOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 12 {
-            return verification_error!(ImmOutOfRangeErr(12, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
-#[mnemonic = "rv.sltiu"]
-#[verifiers(
-    NumResults<1>, NumOperands<1>, NumRegions<0>,
-    SameResultTys, SameOperandTys, SameOperandAndResultTys,
-    IntegerLikeOperands,
-    OperandTysAre<IReg>, ResultTysAre<IReg>
-)]
-#[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
-pub struct SltiuOp {
-    #[metadata]
-    metadata: OpMetadata,
-    /// The result of the operation.
-    #[result(0)]
-    result: ArenaPtr<Value>,
-    /// The left-hand side operand.
-    #[operand(0)]
-    lhs: ArenaPtr<Value>,
-    /// The right-hand side immediate.
-    imm: ApInt,
-}
-
-impl Verify for SltiuOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
-        self.run_verifiers(ctx)?;
-
-        // verify the width of the immediate
-        if self.imm.width() != 12 {
-            return verification_error!(ImmOutOfRangeErr(12, self.imm.width())).into();
-        }
-
-        Ok(())
-    }
-}
-
-
-
-#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "rv.jmp"]
 #[verifiers(
     NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator
@@ -482,11 +78,30 @@ impl Verify for SltiuOp {
 pub struct JmpOp {
     #[metadata]
     metadata: OpMetadata,
+
     #[successor(0)]
     succ: Successor,
 }
 
-// TODO: Verifier for JmpOp
+#[derive(Debug, Error)]
+#[error("invalid successor for jmp operation")]
+pub struct InvalidAsmSuccessorErr;
+
+impl Verify for JmpOp {
+    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
+        self.run_verifiers(ctx)?;
+
+        // for the assembly-like jmp operation, the successor should not have any arguments
+        //
+        // TODO: This may be implemented as a verifier
+        if !self.succ.args().is_empty() {
+            return verification_error!(InvalidAsmSuccessorErr).into();
+        }
+
+        Ok(())
+    
+    }
+}
 
 pub enum LoadPredicate {
     LB,
@@ -570,11 +185,15 @@ impl Print for LoadPredicate {
 pub struct LoadOp {
     #[metadata]
     metadata: OpMetadata,
+    /// The predicate of the load operation.
     pred: LoadPredicate,
+    /// The result of the operation.
     #[result(0)]
     result: ArenaPtr<Value>,
+    /// The base address of the load operation.
     #[operand(0)]
     base: ArenaPtr<Value>,
+    /// The offset immediate of the load operation.
     offset: ApInt,
 }
 
@@ -654,13 +273,18 @@ impl Print for BranchPredicate {
 pub struct BranchOp {
     #[metadata]
     metadata: OpMetadata,
+    /// The predicate of the branch operation.
     pred: BranchPredicate,
+    /// The left-hand side operand.
     #[operand(0)]
     lhs: ArenaPtr<Value>,
+    /// The right-hand side operand.
     #[operand(1)]
     rhs: ArenaPtr<Value>,
+    /// The successor if the branch is taken.
     #[successor(0)]
     then_succ: Successor,
+    /// The successor if the branch is not taken.
     #[successor(1)]
     else_succ: Successor,
 }
@@ -679,6 +303,7 @@ pub struct LiOp {
     value: ApInt,
 }
 
+/// Implement a RISC-V binary operation.
 macro_rules! rv_binary {
     ($mnemonic:literal, $name:ident) => {
         #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
@@ -686,8 +311,7 @@ macro_rules! rv_binary {
         #[verifiers(
             NumResults<1>, NumOperands<2>, NumRegions<0>,
             SameResultTys, SameOperandTys, SameOperandAndResultTys,
-            IntegerLikeOperands,
-            OperandTysAre<IReg>, ResultTysAre<IReg>
+            IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
         )]
         #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
         pub struct $name {
@@ -771,18 +395,6 @@ mod tests {
     };
 
     use crate::dialects::{riscv::basic, std::register_std_dialects};
-
-    fn test_parse_print(src: &str, expected: &str) {
-        let stream = TokenStream::new(src);
-        let mut state = ParseState::new(stream);
-        let mut ctx = Context::default();
-        basic::register(&mut ctx);
-        let item = OpObj::parse(&mut ctx, &mut state).unwrap();
-        let mut state = PrintState::new("");
-        item.deref(&ctx.ops).as_ref().verify(&ctx).unwrap();
-        item.deref(&ctx.ops).print(&ctx, &mut state).unwrap();
-        assert_eq!(state.buffer, expected);
-    }
 
     #[test]
     fn test_0() {
