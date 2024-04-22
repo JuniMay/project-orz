@@ -100,7 +100,7 @@ impl Verify for ModuleOp {
 #[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.int"]
 #[verifiers(IntegerLikeTy)]
-#[format(pattern = "< {0} >", kind = "ty")]
+#[format(pattern = "<{0}>", kind = "ty")]
 pub struct IntTy(usize);
 
 impl IntTy {
@@ -119,6 +119,10 @@ pub struct IndexTy;
 #[format(pattern = "", kind = "ty")]
 pub struct FloatTy;
 
+impl FloatTy {
+    pub fn width(&self) -> u32 { 32 }
+}
+
 #[derive(Debug, Hash, PartialEq, Eq, Ty, Parse, Print, Verify)]
 #[mnemonic = "builtin.double"]
 #[verifiers(FloatLikeTy)]
@@ -129,7 +133,7 @@ pub struct DoubleTy;
 #[mnemonic = "builtin.tuple"]
 #[format(pattern = "{elems}", kind = "ty")]
 pub struct TupleTy {
-    #[repeat(sep = ",", leading = "<", trailing = ">")]
+    #[repeat(sep = ", ", leading = "<", trailing = ">")]
     elems: Vec<ArenaPtr<TyObj>>,
 }
 
@@ -231,9 +235,9 @@ impl Print for FunctionTy {
 
 #[derive(Debug, Hash, PartialEq, Eq, Ty, Verify, Parse, Print)]
 #[mnemonic = "builtin.memref"]
-#[format(pattern = "< {elem} , {shape} >", kind = "ty")]
+#[format(pattern = "<{elem}, {shape}>", kind = "ty")]
 pub struct MemRefTy {
-    #[repeat(sep = "*", leading = "[", trailing = "]")]
+    #[repeat(sep = " * ", leading = "[", trailing = "]")]
     shape: Vec<usize>,
     elem: ArenaPtr<TyObj>,
 }

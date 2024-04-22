@@ -13,16 +13,20 @@ use crate::op::{FieldIdent, IndexKind, OpDeriveInfo, OpFieldMeta, RegionMeta};
 enum FormatToken {
     Field(String),
     Delimiter(String),
+    Whitespace(String),
+    Tokenized(String),
 }
 
+/// Check if a character is a valid delimiter.
 fn is_delimiter(c: char) -> bool {
     matches!(
         c,
-        ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '*'
+        ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '*' | '-'
     )
 }
 
 impl FormatToken {
+    /// Parse a format token from a string.
     fn from_str(token: &str) -> syn::Result<Self> {
         if token.starts_with('{') && token.ends_with('}') {
             Ok(Self::Field(token[1..token.len() - 1].to_string()))
@@ -30,13 +34,14 @@ impl FormatToken {
             Ok(Self::Delimiter(token.chars().next().unwrap().to_string()))
         } else if token == "->" || (token.len() == 1 && token.chars().all(is_delimiter)) {
             Ok(Self::Delimiter(token.to_string()))
+        } else if token.chars().all(char::is_whitespace) {
+            Ok(Self::Whitespace(token.to_string()))
         } else {
-            Err(syn::Error::new(token.span(), "invalid format token"))
+            Ok(Self::Tokenized(token.to_string()))
         }
     }
 
-    /// if this is an ident or an arrow, return a rust string literal, otherwise
-    /// return a rust char literal.
+    /// Convert the token to the corresponding `TokenKind`
     fn to_token(&self) -> TokenStream {
         match self {
             Self::Delimiter(delimiter) => {
@@ -49,6 +54,9 @@ impl FormatToken {
                     unreachable!("invalid delimiter {}", delimiter);
                 }
             }
+            Self::Tokenized(s) => {
+                quote! { ::orzir_core::TokenKind::Tokenized(#s.to_string()) }
+            }
             _ => unreachable!("should not convert field to token"),
         }
     }
@@ -59,40 +67,21 @@ impl FormatToken {
         match self {
             Self::Delimiter(delimiter) => {
                 let delimiter = delimiter.as_str();
-
-                let output = quote! {
+                quote! {
                     write!(__state.buffer, "{}", #delimiter)?;
-                };
-
-                let output = if delimiter == ":"
-                    || delimiter == "->"
-                    || delimiter == "*"
-                    || delimiter == "="
-                {
-                    quote! {
-                        write!(__state.buffer, " ")?;
-                        #output
-                    }
-                } else {
-                    output
-                };
-
-                let output = if delimiter == ":"
-                    || delimiter == "->"
-                    || delimiter == ","
-                    || delimiter == ";"
-                    || delimiter == "*"
-                    || delimiter == "="
-                {
-                    quote! {
-                        #output
-                        write!(__state.buffer, " ")?;
-                    }
-                } else {
-                    output
-                };
-
-                output
+                }
+            }
+            Self::Whitespace(w) => {
+                let w = w.as_str();
+                quote! {
+                    write!(__state.buffer, "{}", #w)?;
+                }
+            }
+            Self::Tokenized(s) => {
+                let s = s.as_str();
+                quote! {
+                    write!(__state.buffer, "{}", #s)?;
+                }
             }
             _ => unreachable!("should not generate printer for field"),
         }
@@ -106,17 +95,89 @@ struct FormatPattern {
 
 impl FormatPattern {
     fn from_str(pattern: &str) -> syn::Result<Self> {
-        let tokens = pattern
-            .split_whitespace()
-            .map(FormatToken::from_str)
-            .collect::<syn::Result<Vec<_>>>()?;
+        let mut idx = 0;
+        let mut buffer = String::new();
+
+        let mut tokens = Vec::new();
+
+        let chars = pattern.chars().collect::<Vec<_>>();
+
+        while idx < chars.len() {
+            let curr_char = chars[idx];
+
+            match curr_char {
+                '{' => {
+                    if idx + 1 < chars.len() && chars[idx + 1] == '{' {
+                        tokens.push(FormatToken::from_str("{{")?);
+                        idx += 1;
+                    } else {
+                        while idx < chars.len() && chars[idx] != '}' {
+                            buffer.push(chars[idx]);
+                            idx += 1;
+                        }
+                        if chars[idx] != '}' {
+                            return Err(syn::Error::new(
+                                Span::call_site(),
+                                "unexpected end of format pattern",
+                            ));
+                        }
+                        buffer.push('}');
+                        tokens.push(FormatToken::from_str(buffer.as_str())?);
+                    }
+                }
+                '}' => {
+                    if idx + 1 < chars.len() && chars[idx + 1] == '}' {
+                        tokens.push(FormatToken::from_str("}}")?);
+                        idx += 1;
+                    } else {
+                        return Err(syn::Error::new(
+                            Span::call_site(),
+                            "unexpected '}' in format pattern",
+                        ));
+                    }
+                }
+                '-' => {
+                    if idx + 1 < chars.len() && chars[idx + 1] == '>' {
+                        tokens.push(FormatToken::from_str("->")?);
+                        idx += 1;
+                    } else {
+                        tokens.push(FormatToken::from_str("-")?);
+                    }
+                }
+                c if c.is_whitespace() => {
+                    while idx < chars.len() && chars[idx].is_whitespace() {
+                        buffer.push(chars[idx]);
+                        idx += 1;
+                    }
+                    idx -= 1;
+                    tokens.push(FormatToken::from_str(buffer.as_str())?);
+                }
+                c if is_delimiter(c) => {
+                    tokens.push(FormatToken::from_str(&curr_char.to_string())?);
+                }
+                _ => {
+                    while idx < chars.len()
+                        && !chars[idx].is_whitespace()
+                        && !is_delimiter(chars[idx])
+                    {
+                        buffer.push(chars[idx]);
+                        idx += 1;
+                    }
+                    tokens.push(FormatToken::from_str(buffer.as_str())?);
+                }
+            }
+
+            buffer.clear();
+            idx += 1;
+        }
+
         Ok(Self { tokens })
     }
 }
 
 /// The format kind.
 ///
-/// TODO: This can be determined be examine the `derive` attribute.
+/// TODO: This can be determined by examining the `derive` attribute.
 enum FormatKind {
     Op,
     Ty,
@@ -182,7 +243,7 @@ impl syn::parse::Parse for FormatMeta {
 /// The repeat meta for the field.
 struct RepeatMeta {
     /// The separator.
-    sep: Option<FormatToken>,
+    sep: Option<FormatPattern>,
     /// The leading delimiter.
     leading: Option<FormatToken>,
     /// The trailing delimiter.
@@ -200,9 +261,9 @@ impl syn::parse::Parse for RepeatMeta {
             match ident.to_string().as_str() {
                 "sep" => {
                     input.parse::<syn::Token![=]>()?;
-                    sep = Some(FormatToken::from_str(
-                        &input.parse::<syn::LitStr>()?.value(),
-                    )?);
+                    let sep_str: syn::LitStr = input.parse()?;
+                    let sep_pattern = FormatPattern::from_str(&sep_str.value())?;
+                    sep = Some(sep_pattern);
                 }
                 "leading" => {
                     input.parse::<syn::Token![=]>()?;
@@ -372,15 +433,30 @@ fn generate_repeat_parser(
     };
 
     let parse_stmts = if let Some(sep) = &repeat_meta.sep {
-        let sep_token = sep.to_token();
-        quote! {
-            #parse_stmts
+        // get the separator token, skip the whitespace.
+        let mut sep_token = None;
 
-            if let #sep_token = __state.stream.peek()?.kind {
-                __state.stream.consume()?;
-            } else {
-                break;
+        for token in sep.tokens.iter() {
+            if let FormatToken::Whitespace(_) = token {
+                continue;
             }
+            sep_token = Some(token.to_token());
+        }
+
+        if let Some(sep_token) = sep_token {
+            // TODO: this can be better implemented to support more complex patterns.
+            quote! {
+                #parse_stmts
+
+                if let #sep_token = __state.stream.peek()?.kind {
+                    __state.stream.consume()?;
+                } else {
+                    break;
+                }
+            }
+        } else {
+            // all whitespace, just parse the next item.
+            parse_stmts
         }
     } else {
         parse_stmts
@@ -476,7 +552,11 @@ fn generate_repeat_printer(
     };
 
     let sep_printer = if let Some(sep) = &repeat_meta.sep {
-        sep.generate_printer()
+        let mut printer = TokenStream::new();
+        for token in sep.tokens.iter() {
+            printer.extend(token.generate_printer());
+        }
+        printer
     } else {
         quote! {
             write!(__state.buffer, " ")?;
@@ -749,6 +829,15 @@ fn generate_parser(
                 let delimiter_token = token.to_token();
                 parse_stmts.extend(quote! {
                     __state.stream.expect(#delimiter_token)?;
+                });
+            }
+            FormatToken::Whitespace(_) => {
+                // just skip.
+            }
+            FormatToken::Tokenized(_) => {
+                let token = token.to_token();
+                parse_stmts.extend(quote! {
+                    __state.stream.expect(#token)?;
                 });
             }
         }
@@ -1093,6 +1182,14 @@ fn generate_printer(
                 let delimiter_printer = token.generate_printer();
                 print_stmts.extend(delimiter_printer);
             }
+            FormatToken::Whitespace(_) => {
+                let whitespace_printer = token.generate_printer();
+                print_stmts.extend(whitespace_printer);
+            }
+            FormatToken::Tokenized(_) => {
+                let token_printer = token.generate_printer();
+                print_stmts.extend(token_printer);
+            }
         }
     }
 
@@ -1172,7 +1269,7 @@ mod tests {
     fn test_0() {
         let src = quote! {
             #[mnemonic = "arith.iadd"]
-            #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+            #[format(pattern = "{lhs} plus {rhs}", kind = "op", num_results = 1)]
             pub struct IAddOp {
                 #[metadata]
                 metadata: OpMetadata,
@@ -1200,7 +1297,7 @@ mod tests {
     fn test_1() {
         let src = quote! {
             #[mnemonic = "arith.iadd"]
-            #[format(pattern = "{lhs} , {rhs}", num_results = 1)]
+            #[format(pattern = "{lhs} plus {rhs}", num_results = 1)]
             pub struct IAddOp {
                 #[metadata]
                 metadata: OpMetadata,

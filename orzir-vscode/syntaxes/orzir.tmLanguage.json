@@ -22,6 +22,9 @@
 		},
 		{
 			"include": "#number"
+		},
+		{
+			"include": "#comments"
 		}
 	],
 	"repository": {
@@ -133,6 +136,19 @@
 				{
 					"name": "constant.character.escape.orzir",
 					"match": "\\\\."
+				}
+			]
+		},
+		"comments": {
+			"patterns": [
+				{
+					"name": "comment.line.double-slash.orzir",
+					"match": "//.*"
+				},
+				{
+					"name": "comment.block.orzir",
+					"begin": "/\\*",
+					"end": "\\*/"
 				}
 			]
 		}

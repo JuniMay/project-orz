@@ -14,7 +14,10 @@ module {
     ^else(%y: int<32>):
         cf.jump ^return
 
-    ^return:
-        func.return %a
+    ^return:// line comment
+        func.return %a 
+        /*
+            block comment
+        */
     }
 }

@@ -28,7 +28,7 @@ pub struct Jump {
 #[verifiers(NumResults<0>, NumOperands<1>, NumRegions<0>, NumSuccessors<2>, IsTerminator)]
 #[format(
     kind = "op",
-    pattern = "{cond} , {then_succ} , {else_succ}",
+    pattern = "{cond}, {then_succ}, {else_succ}",
     num_results = 0
 )]
 pub struct Branch {

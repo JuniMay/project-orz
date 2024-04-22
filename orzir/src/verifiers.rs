@@ -262,8 +262,44 @@ pub trait IntegerLikeOperands: Op {
 }
 
 #[derive(Debug, Error)]
-#[error("operand is not float-like")]
+#[error("result is not float-like")]
 struct NotFloatLikeResultError;
+
+/// Verifier `IsTerminator` for `Op`.
+///
+/// This verifier indicates that the operation has float-like results.
+pub trait FloatLikeResults: Op {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+        for ty in self.result_tys(ctx) {
+            if !ty.deref(&ctx.tys).impls::<dyn FloatLikeTy>(ctx) {
+                return verification_error!(NotFloatLikeResultError).into();
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("result is not integer-like")]
+struct NotIntegerLikeResultError;
+
+/// Verifier `IsTerminator` for `Op`.
+///
+/// This verifier indicates that the operation has float-like results.
+pub trait IntegerLikeResults: Op {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+        for ty in self.result_tys(ctx) {
+            if !ty.deref(&ctx.tys).impls::<dyn IntegerLikeTy>(ctx) {
+                return verification_error!(NotIntegerLikeResultError).into();
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("operands have different types")]
+struct DifferentOperandTypesError;
 
 /// Verifier `SameOperandTys` for `Op`
 ///
@@ -280,7 +316,7 @@ pub trait SameOperandTys: Op {
 
         for ty in operand_tys {
             if ty != operand_ty {
-                return verification_error!(NotFloatLikeResultError).into();
+                return verification_error!(DifferentOperandTypesError).into();
             }
         }
 
