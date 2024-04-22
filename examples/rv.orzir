@@ -1,11 +1,37 @@
 module {
+    mem.global @global_slot : memref<int<32>, [2]> = bytes[
+        ef, be, ad, de, 
+        78, 56, 34, 12,
+    ]
 
     // test func
     func.func @test : fn (rv.ireg, rv.ireg) -> rv.ireg {
     ^entry(%arg0: rv.ireg, %arg1: rv.ireg):
-        rv.br beq, %arg0, %arg1, ^blk0, ^blk1
+        %slot_0 = mem.alloca int<32> : memref<int<32>, [1234 * 4321 * 3]>
+        %slot_1 = mem.alloca float : memref<float, [1234 * 4321 * 3]>
+
+        // convert a memref to a riscv register
+        // in assembly, this typically performs an add/sub on sp/fp register
+        %z = rv.load_addr %slot_0 : rv.ireg
+
+        // get the address of @global_slot, assembly: `la %x, @global_slot`
+        %x = rv.load_symbol_addr @global_slot : rv.ireg
+
+        // load a byte from @global_slot
+        %y = rv.load_symbol lb @global_slot : rv.ireg
+
+        // store %y to @global_slot
+        rv.store_symbol sb %y, @global_slot
+
+        %z_0 = rv.load ld %z, 1234 : rv.ireg
+        %z_1 = rv.load lbu %z, 4321 : rv.ireg
+
+        rv.store sd %z_0, %x, 0
+
+        rv.br beq %arg0, %arg1, ^blk0, ^blk1
 
     ^blk0:
+        %zero = rv.zero : rv.ireg
         %t1 = rv.addi   %arg0, 1 : rv.ireg
         %t2 = rv.addiw  %arg0, 2 : rv.ireg
         %t3 = rv.slli   %arg0, 3 : rv.ireg
@@ -19,7 +45,7 @@ module {
         %t11 = rv.andi  %arg0, 11 : rv.ireg
         %t12 = rv.slti  %arg0, 12 : rv.ireg
         %t13 = rv.sltiu %arg0, 13 : rv.ireg
-        rv.jmp ^ret
+        rv.jump ^ret
 
     ^blk1:
         %t14 = rv.add  %arg0, %arg1 : rv.ireg
@@ -37,7 +63,7 @@ module {
         %t26 = rv.and  %arg0, %arg1 : rv.ireg
         %t27 = rv.slt  %arg0, %arg1 : rv.ireg
         %t28 = rv.sltu %arg0, %arg1 : rv.ireg
-        rv.jmp ^ret
+        rv.jump ^ret
 
     ^ret:
         func.return %t1
@@ -47,7 +73,7 @@ module {
     func.func @main : fn () -> rv.ireg {
         %0 = rv.li 114514 : rv.ireg
         %1 = rv.li 1919810 : rv.ireg
-        %2 = rv.load lb, %1, 1235 :rv.ireg
+        %2 = rv.load lb %1, 1235 :rv.ireg
         %3 = func.call @test(%2, %1) : rv.ireg
 
         func.return %3

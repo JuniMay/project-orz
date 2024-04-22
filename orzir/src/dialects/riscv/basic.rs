@@ -1,16 +1,19 @@
 use std::fmt::{self, Write};
 
 use orzir_core::{
-    apint::ApInt, parse_error, token_wildcard, verification_error, ArenaPtr, Context, Dialect, Op,
-    OpMetadata, Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState,
-    RunVerifiers, Successor, TokenKind, Ty, Value, Verify,
+    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
+    RunVerifiers, Successor, Ty, Value, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 
 use super::regs::IReg;
-use crate::{dialects::std::builtin::Symbol, verifiers::{control_flow::*, *}};
+use crate::{
+    dialects::std::builtin::Symbol,
+    verifiers::{control_flow::*, *},
+};
 
+/// The immediate out of range error.
 #[derive(Debug, Error)]
 #[error("expected an immediate with width at most {0}, but got {1}")]
 pub struct ImmOutOfRangeErr(pub usize, pub usize);
@@ -21,11 +24,10 @@ macro_rules! rv_immediate {
         #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print)]
         #[mnemonic = $mnemonic]
         #[verifiers(
-                            NumResults<1>, NumOperands<1>, NumRegions<0>,
-                            SameResultTys, SameOperandTys, SameOperandAndResultTys,
-                            IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
-                        )]
-        #[format(pattern = "{lhs} , {imm}", kind = "op", num_results = 1)]
+            NumResults<1>, NumOperands<1>, NumRegions<0>, SameResultTys, SameOperandTys,
+            SameOperandAndResultTys, IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
+        )]
+        #[format(pattern = "{lhs}, {imm}", kind = "op", num_results = 1)]
         pub struct $name {
             #[metadata]
             metadata: OpMetadata,
@@ -85,27 +87,33 @@ pub struct ZeroOp {
     result: ArenaPtr<Value>,
 }
 
+/// The jump instruction.
+///
+/// This does not correspond to a real RISC-V instruction, the most similar is
+/// `j` pseudo instruction.
+///
+/// In a valid assembly code, there is no semantic for block arguments,
+/// but the RISC-V dialect is designed to optimize the pre-register
+/// allocation form of the code (which is still in SSA form), and thus
+/// the successor can have a block argument.
+///
+/// However, when emitting the corresponding machine code, the block
+/// argument should eliminated/hoisted.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-#[mnemonic = "rv.jmp"]
+#[mnemonic = "rv.jump"]
 #[verifiers(NumResults<0>, NumOperands<0>, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 #[format(pattern = "{succ}", kind = "op", num_results = 0)]
-pub struct JmpOp {
+pub struct JumpOp {
     #[metadata]
     metadata: OpMetadata,
 
     /// The successor of the jump operation.
-    ///
-    /// In a valid assembly code, there is no semantic for block arguments,
-    /// but the RISC-V dialect is designed to optimize the pre-register
-    /// allocation form of the code (which is still in SSA form), and thus
-    /// the successor can have a block argument.
-    ///
-    /// However, when emitting the corresponding machine code, the block
-    /// argument should eliminated/hoisted.
     #[successor(0)]
     succ: Successor,
 }
 
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
 pub enum LoadPredicate {
     LB,
     LH,
@@ -151,32 +159,6 @@ impl TryFrom<&str> for LoadPredicate {
     }
 }
 
-impl Parse for LoadPredicate {
-    type Item = Self;
-
-    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let token = state.stream.consume()?;
-        if let TokenKind::Tokenized(s) = token.kind {
-            let pred =
-                LoadPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
-            Ok(pred)
-        } else {
-            parse_error!(
-                token.span,
-                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
-            )
-            .into()
-        }
-    }
-}
-
-impl Print for LoadPredicate {
-    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, "{}", self)?;
-        Ok(())
-    }
-}
-
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "rv.load"]
 #[verifiers(
@@ -185,7 +167,7 @@ impl Print for LoadPredicate {
     IntegerLikeOperands,
     OperandTysAre<IReg>, ResultTysAre<IReg>
 )]
-#[format(pattern = "{pred} , {base} , {offset}", kind = "op", num_results = 1)]
+#[format(pattern = "{pred} {base}, {offset}", kind = "op", num_results = 1)]
 pub struct LoadOp {
     #[metadata]
     metadata: OpMetadata,
@@ -203,7 +185,7 @@ pub struct LoadOp {
 
 /// Load symbol address pseudo instruction.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-#[mnemonic = "rv.load_addr"]
+#[mnemonic = "rv.load_symbol_addr"]
 #[verifiers(
     NumResults<1>, NumOperands<0>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
@@ -211,7 +193,7 @@ pub struct LoadOp {
     OperandTysAre<IReg>, ResultTysAre<IReg>
 )]
 #[format(pattern = "{symbol}", kind = "op", num_results = 1)]
-pub struct LoadAddrOp {
+pub struct LoadSymbolAddrOp {
     #[metadata]
     metadata: OpMetadata,
     /// The result of the operation.
@@ -219,6 +201,27 @@ pub struct LoadAddrOp {
     result: ArenaPtr<Value>,
     /// The symbol to load the address of.
     symbol: Symbol,
+}
+
+/// Get address of a `memref` value.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv.load_addr"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys,
+    OperandTysAre<crate::dialects::std::builtin::MemRefTy>,
+    ResultTysAre<IReg>
+)]
+#[format(pattern = "{value}", kind = "op", num_results = 1)]
+pub struct LoadAddrOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The value to get the address of.
+    #[operand(0)]
+    value: ArenaPtr<Value>,
 }
 
 /// Load from symbol pseudo instruction.
@@ -230,7 +233,7 @@ pub struct LoadAddrOp {
     IntegerLikeOperands,
     OperandTysAre<IReg>, ResultTysAre<IReg>
 )]
-#[format(pattern = "{pred} , {symbol}", kind = "op", num_results = 1)]
+#[format(pattern = "{pred} {symbol}", kind = "op", num_results = 1)]
 pub struct LoadSymbolOp {
     #[metadata]
     metadata: OpMetadata,
@@ -243,7 +246,8 @@ pub struct LoadSymbolOp {
     symbol: Symbol,
 }
 
-
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
 pub enum StorePredicate {
     SB,
     SH,
@@ -280,32 +284,6 @@ impl TryFrom<&str> for StorePredicate {
     }
 }
 
-impl Parse for StorePredicate {
-    type Item = Self;
-
-    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let token = state.stream.consume()?;
-        if let TokenKind::Tokenized(s) = token.kind {
-            let pred =
-                StorePredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
-            Ok(pred)
-        } else {
-            parse_error!(
-                token.span,
-                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
-            )
-            .into()
-        }
-    }
-}
-
-impl Print for StorePredicate {
-    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, "{}", self)?;
-        Ok(())
-    }
-}
-
 /// The store instruction.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "rv.store"]
@@ -315,7 +293,7 @@ impl Print for StorePredicate {
     OperandTysAre<IReg>, ResultTysAre<IReg>
 )]
 #[format(
-    pattern = "{pred} , {value} , {base} , {offset}",
+    pattern = "{pred} {value}, {base}, {offset}",
     kind = "op",
     num_results = 0
 )]
@@ -342,7 +320,7 @@ pub struct StoreOp {
     SameOperandTys, IntegerLikeOperands,
     OperandTysAre<IReg>, ResultTysAre<IReg>
 )]
-#[format(pattern = "{pred} , {value} , {symbol}", kind = "op", num_results = 0)]
+#[format(pattern = "{pred} {value}, {symbol}", kind = "op", num_results = 0)]
 pub struct StoreSymbolOp {
     #[metadata]
     metadata: OpMetadata,
@@ -355,6 +333,8 @@ pub struct StoreSymbolOp {
     symbol: Symbol,
 }
 
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
 pub enum BranchPredicate {
     BEQ,
     BNE,
@@ -397,39 +377,13 @@ impl TryFrom<&str> for BranchPredicate {
     }
 }
 
-impl Parse for BranchPredicate {
-    type Item = Self;
-
-    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let token = state.stream.consume()?;
-        if let TokenKind::Tokenized(s) = token.kind {
-            let pred =
-                BranchPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
-            Ok(pred)
-        } else {
-            parse_error!(
-                token.span,
-                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
-            )
-            .into()
-        }
-    }
-}
-
-impl Print for BranchPredicate {
-    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, "{}", self)?;
-        Ok(())
-    }
-}
-
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "rv.br"]
 #[verifiers(
     NumResults<0>, NumOperands<2>, NumRegions<0>, NumSuccessors<2>, IsTerminator
 )]
 #[format(
-    pattern = "{pred} , {lhs} , {rhs} , {then_succ} , {else_succ}",
+    pattern = "{pred} {lhs}, {rhs}, {then_succ}, {else_succ}",
     kind = "op",
     num_results = 0
 )]
@@ -472,11 +426,10 @@ macro_rules! rv_binary {
         #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
         #[mnemonic = $mnemonic]
         #[verifiers(
-                            NumResults<1>, NumOperands<2>, NumRegions<0>,
-                            SameResultTys, SameOperandTys, SameOperandAndResultTys,
-                            IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
-                        )]
-        #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+            NumResults<1>, NumOperands<2>, NumRegions<0>, SameResultTys, SameOperandTys,
+            SameOperandAndResultTys, IntegerLikeOperands, OperandTysAre<IReg>, ResultTysAre<IReg>
+        )]
+        #[format(pattern = "{lhs}, {rhs}", kind = "op", num_results = 1)]
         pub struct $name {
             #[metadata]
             metadata: OpMetadata,
@@ -513,9 +466,18 @@ pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("rv".into());
     ctx.dialects.insert("rv".into(), dialect);
 
-    AddiOp::register(ctx, AddiOp::parse);
-    JmpOp::register(ctx, JmpOp::parse);
+    ZeroOp::register(ctx, ZeroOp::parse);
+
     LoadOp::register(ctx, LoadOp::parse);
+    LoadAddrOp::register(ctx, LoadAddrOp::parse);
+    LoadSymbolAddrOp::register(ctx, LoadSymbolAddrOp::parse);
+    LoadSymbolOp::register(ctx, LoadSymbolOp::parse);
+
+    StoreOp::register(ctx, StoreOp::parse);
+    StoreSymbolOp::register(ctx, StoreSymbolOp::parse);
+
+    AddiOp::register(ctx, AddiOp::parse);
+    JumpOp::register(ctx, JumpOp::parse);
     LiOp::register(ctx, LiOp::parse);
     AddiwOp::register(ctx, AddiwOp::parse);
     SlliOp::register(ctx, SlliOp::parse);

@@ -12,7 +12,7 @@ use crate::verifiers::{control_flow::*, *};
 #[mnemonic = "cf.jump"]
 #[verifiers(NumResults<0>, VariadicOperands, NumRegions<0>, NumSuccessors<1>, IsTerminator)]
 #[format(pattern = "{succ}", kind = "op", num_results = 0)]
-pub struct Jump {
+pub struct JumoOp {
     #[metadata]
     metadata: OpMetadata,
     /// The successor of this jump operation.
@@ -31,7 +31,7 @@ pub struct Jump {
     pattern = "{cond}, {then_succ}, {else_succ}",
     num_results = 0
 )]
-pub struct Branch {
+pub struct BranchOp {
     #[metadata]
     metadata: OpMetadata,
     /// The condition of the branch.
@@ -50,8 +50,8 @@ pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("cf".into());
     ctx.dialects.insert("cf".into(), dialect);
 
-    Jump::register(ctx, Jump::parse);
-    Branch::register(ctx, Branch::parse);
+    JumoOp::register(ctx, JumoOp::parse);
+    BranchOp::register(ctx, BranchOp::parse);
 }
 
 #[cfg(test)]

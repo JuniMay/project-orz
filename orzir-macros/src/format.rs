@@ -1243,19 +1243,71 @@ fn generate_printer(
     Ok(print_stmts)
 }
 
+fn derive_default_parse(ident: &syn::Ident) -> TokenStream {
+    quote! {
+        impl orzir_core::Parse for #ident {
+            type Item = Self;
+
+            fn parse(
+                _: &mut orzir_core::Context,
+                state: &mut orzir_core::ParseState
+            ) -> orzir_core::ParseResult<Self::Item> {
+                let token = state.stream.consume()?;
+                if let orzir_core::TokenKind::Tokenized(s) = token.kind {
+                    let self_ = <Self as TryFrom<&str>>::try_from(s.as_str())
+                        .map_err(|e| orzir_core::parse_error!(token.span, e))?;
+                    Ok(self_)
+                } else {
+                    orzir_core::parse_error!(
+                        token.span,
+                        orzir_core::ParseErrorKind::InvalidToken(
+                            vec![orzir_core::token_wildcard!("...")].into(),
+                            token.kind
+                        )
+                    )
+                    .into()
+                }
+            }
+        }
+    }
+}
+
+fn derive_default_print(ident: &syn::Ident) -> TokenStream {
+    quote! {
+        impl orzir_core::Print for #ident {
+            fn print(
+                &self,
+                _: &orzir_core::Context,
+                state: &mut orzir_core::PrintState
+            ) -> orzir_core::PrintResult<()> {
+                write!(state.buffer, "{}", self)?;
+                Ok(())
+            }
+        }
+    }
+}
+
 pub fn derive_parse_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
-    let derive_info = OpDeriveInfo::from_ast(ast)?;
     let format_info = FormatInfo::from_ast(ast)?;
 
+    if let FormatKind::Other = format_info.meta.kind {
+        return Ok(derive_default_parse(&ast.ident));
+    }
+
+    let derive_info = OpDeriveInfo::from_ast(ast)?;
     let parse_impl = generate_parser(&ast.ident, &derive_info, &format_info)?;
 
     Ok(parse_impl)
 }
 
 pub fn derive_print_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
-    let derive_info = OpDeriveInfo::from_ast(ast)?;
     let format_info = FormatInfo::from_ast(ast)?;
 
+    if let FormatKind::Other = format_info.meta.kind {
+        return Ok(derive_default_print(&ast.ident));
+    }
+
+    let derive_info = OpDeriveInfo::from_ast(ast)?;
     let print_impl = generate_printer(&ast.ident, &derive_info, &format_info)?;
 
     Ok(print_impl)
