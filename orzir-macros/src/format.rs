@@ -14,16 +14,19 @@ enum FormatToken {
     Field(String),
     Delimiter(String),
     Whitespace(String),
+    Tokenized(String),
 }
 
+/// Check if a character is a valid delimiter.
 fn is_delimiter(c: char) -> bool {
     matches!(
         c,
-        ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '*'
+        ':' | '=' | '(' | ')' | '{' | '}' | '[' | ']' | '<' | '>' | ',' | ';' | '*' | '-'
     )
 }
 
 impl FormatToken {
+    /// Parse a format token from a string.
     fn from_str(token: &str) -> syn::Result<Self> {
         if token.starts_with('{') && token.ends_with('}') {
             Ok(Self::Field(token[1..token.len() - 1].to_string()))
@@ -34,15 +37,11 @@ impl FormatToken {
         } else if token.chars().all(char::is_whitespace) {
             Ok(Self::Whitespace(token.to_string()))
         } else {
-            Err(syn::Error::new(
-                token.span(),
-                format!("invalid format token `{}`", token),
-            ))
+            Ok(Self::Tokenized(token.to_string()))
         }
     }
 
-    /// if this is an ident or an arrow, return a rust string literal, otherwise
-    /// return a rust char literal.
+    /// Convert the token to the corresponding `TokenKind`
     fn to_token(&self) -> TokenStream {
         match self {
             Self::Delimiter(delimiter) => {
@@ -54,6 +53,9 @@ impl FormatToken {
                 } else {
                     unreachable!("invalid delimiter {}", delimiter);
                 }
+            }
+            Self::Tokenized(s) => {
+                quote! { ::orzir_core::TokenKind::Tokenized(#s.to_string()) }
             }
             _ => unreachable!("should not convert field to token"),
         }
@@ -73,6 +75,12 @@ impl FormatToken {
                 let w = w.as_str();
                 quote! {
                     write!(__state.buffer, "{}", #w)?;
+                }
+            }
+            Self::Tokenized(s) => {
+                let s = s.as_str();
+                quote! {
+                    write!(__state.buffer, "{}", #s)?;
                 }
             }
             _ => unreachable!("should not generate printer for field"),
@@ -144,8 +152,18 @@ impl FormatPattern {
                     idx -= 1;
                     tokens.push(FormatToken::from_str(buffer.as_str())?);
                 }
-                _ => {
+                c if is_delimiter(c) => {
                     tokens.push(FormatToken::from_str(&curr_char.to_string())?);
+                }
+                _ => {
+                    while idx < chars.len()
+                        && !chars[idx].is_whitespace()
+                        && !is_delimiter(chars[idx])
+                    {
+                        buffer.push(chars[idx]);
+                        idx += 1;
+                    }
+                    tokens.push(FormatToken::from_str(buffer.as_str())?);
                 }
             }
 
@@ -159,7 +177,7 @@ impl FormatPattern {
 
 /// The format kind.
 ///
-/// TODO: This can be determined be examine the `derive` attribute.
+/// TODO: This can be determined by examining the `derive` attribute.
 enum FormatKind {
     Op,
     Ty,
@@ -426,6 +444,7 @@ fn generate_repeat_parser(
         }
 
         if let Some(sep_token) = sep_token {
+            // TODO: this can be better implemented to support more complex patterns.
             quote! {
                 #parse_stmts
 
@@ -815,6 +834,12 @@ fn generate_parser(
             FormatToken::Whitespace(_) => {
                 // just skip.
             }
+            FormatToken::Tokenized(_) => {
+                let token = token.to_token();
+                parse_stmts.extend(quote! {
+                    __state.stream.expect(#token)?;
+                });
+            }
         }
     }
 
@@ -1161,6 +1186,10 @@ fn generate_printer(
                 let whitespace_printer = token.generate_printer();
                 print_stmts.extend(whitespace_printer);
             }
+            FormatToken::Tokenized(_) => {
+                let token_printer = token.generate_printer();
+                print_stmts.extend(token_printer);
+            }
         }
     }
 
@@ -1240,7 +1269,7 @@ mod tests {
     fn test_0() {
         let src = quote! {
             #[mnemonic = "arith.iadd"]
-            #[format(pattern = "{lhs} , {rhs}", kind = "op", num_results = 1)]
+            #[format(pattern = "{lhs} plus {rhs}", kind = "op", num_results = 1)]
             pub struct IAddOp {
                 #[metadata]
                 metadata: OpMetadata,
@@ -1268,7 +1297,7 @@ mod tests {
     fn test_1() {
         let src = quote! {
             #[mnemonic = "arith.iadd"]
-            #[format(pattern = "{lhs}, {rhs}", num_results = 1)]
+            #[format(pattern = "{lhs} plus {rhs}", num_results = 1)]
             pub struct IAddOp {
                 #[metadata]
                 metadata: OpMetadata,
