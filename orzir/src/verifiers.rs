@@ -326,7 +326,7 @@ pub trait SameOperandTys: Op {
 
 #[derive(Debug, Error)]
 #[error("results have different types")]
-struct DifferentResultTypesError;
+struct DifferentResultTysError;
 
 /// Verifier `SameResultTys` for `Op`
 ///
@@ -342,7 +342,7 @@ pub trait SameResultTys: Op {
         let result_ty = result_tys[0];
         for ty in result_tys {
             if ty != result_ty {
-                return verification_error!(DifferentResultTypesError).into();
+                return verification_error!(DifferentResultTysError).into();
             }
         }
 
@@ -352,7 +352,7 @@ pub trait SameResultTys: Op {
 
 #[derive(Debug, Error)]
 #[error("results and operands have different types")]
-struct DifferentOperandAndResultTypesError;
+struct DifferentOperandAndResultTysError;
 
 /// Verifier `SameOperandAndResultTys` for `Op`.
 ///
@@ -380,7 +380,7 @@ pub trait SameOperandAndResultTys: SameOperandTys + SameResultTys {
         let result_ty = result_tys[0];
 
         if operand_ty != result_ty {
-            return verification_error!(DifferentOperandAndResultTypesError).into();
+            return verification_error!(DifferentOperandAndResultTysError).into();
         }
 
         Ok(())
@@ -399,6 +399,40 @@ pub trait SameOperandsAndResultsNum: Op {
     fn verify(&self, _: &Context) -> VerificationResult<()> {
         if self.num_operands() != self.num_results() {
             return verification_error!(DifferentOperandAndResultNumberError).into();
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("invalid operand type, expected {0}")]
+pub struct InvalidOperandTyError(String);
+
+pub trait OperandTysAre<T: Ty>: Op {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+        for ty in self.operand_tys(ctx) {
+            if !ty.deref(&ctx.tys).is_a::<T>() {
+                return verification_error!(InvalidOperandTyError(
+                    T::mnemonic_static().to_string()
+                ))
+                .into();
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("invalid result type, expected {0}")]
+pub struct InvalidResultTyError(String);
+
+pub trait ResultTysAre<T: Ty>: Op {
+    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+        for ty in self.result_tys(ctx) {
+            if !ty.deref(&ctx.tys).is_a::<T>() {
+                return verification_error!(InvalidResultTyError(T::mnemonic_static().to_string()))
+                    .into();
+            }
         }
         Ok(())
     }

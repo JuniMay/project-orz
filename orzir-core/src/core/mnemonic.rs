@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{collections::HashMap, fmt::Write};
 
 use super::parse::{ParseErrorKind, ParseState, TokenKind};
@@ -55,6 +56,12 @@ impl Mnemonic {
 
     /// Get the secondary part of the mnemonic.
     pub fn secondary(&self) -> &MnemonicSegment { &self.secondary }
+}
+
+impl fmt::Display for Mnemonic {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}", self.primary.as_str(), self.secondary.as_str())
+    }
 }
 
 macro_rules! map {

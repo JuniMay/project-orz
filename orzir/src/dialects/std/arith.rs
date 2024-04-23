@@ -2,9 +2,8 @@ use core::fmt;
 use std::fmt::Write;
 
 use orzir_core::{
-    apint::ApInt, parse_error, token_wildcard, verification_error, ArenaPtr, Context, Dialect, Op,
-    OpMetadata, Parse, ParseErrorKind, ParseResult, ParseState, Print, PrintState, RunVerifiers,
-    TokenKind, Typed, Value, Verify,
+    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
+    RunVerifiers, Typed, Value, Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
@@ -383,6 +382,8 @@ pub struct BitcastOp {
 }
 
 /// The icmp predicate for comparison operations.
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
 pub enum ICmpPredicate {
     Equal,
     NotEqual,
@@ -439,32 +440,6 @@ impl TryFrom<&str> for ICmpPredicate {
     }
 }
 
-impl Parse for ICmpPredicate {
-    type Item = Self;
-
-    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let token = state.stream.consume()?;
-        if let TokenKind::Tokenized(s) = token.kind {
-            let pred =
-                ICmpPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
-            Ok(pred)
-        } else {
-            parse_error!(
-                token.span,
-                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
-            )
-            .into()
-        }
-    }
-}
-
-impl Print for ICmpPredicate {
-    fn print(&self, _: &Context, state: &mut PrintState) -> orzir_core::PrintResult<()> {
-        write!(state.buffer, "{}", self)?;
-        Ok(())
-    }
-}
-
 /// An integer comparison operation
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
 #[mnemonic = "arith.icmp"]
@@ -491,6 +466,8 @@ pub struct ICmpOp {
 }
 
 /// The fcmp predicate for comparison operations.
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
 pub enum FCmpPredicate {
     Oeq,
     Ogt,
@@ -556,32 +533,6 @@ impl TryFrom<&str> for FCmpPredicate {
             "uno" => Ok(FCmpPredicate::Uno),
             _ => Err(InvalidFCmpPredicate(value.to_string())),
         }
-    }
-}
-
-impl Parse for FCmpPredicate {
-    type Item = Self;
-
-    fn parse(_: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let token = state.stream.consume()?;
-        if let TokenKind::Tokenized(s) = token.kind {
-            let pred =
-                FCmpPredicate::try_from(s.as_str()).map_err(|e| parse_error!(token.span, e))?;
-            Ok(pred)
-        } else {
-            parse_error!(
-                token.span,
-                ParseErrorKind::InvalidToken(vec![token_wildcard!("...")].into(), token.kind)
-            )
-            .into()
-        }
-    }
-}
-
-impl Print for FCmpPredicate {
-    fn print(&self, _: &Context, state: &mut PrintState) -> orzir_core::PrintResult<()> {
-        write!(state.buffer, "{}", self)?;
-        Ok(())
     }
 }
 
