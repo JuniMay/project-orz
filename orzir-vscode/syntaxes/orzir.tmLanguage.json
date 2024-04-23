@@ -116,7 +116,7 @@
 				},
 				{
 					"name": "keyword.operator.orzir",
-					"match": "([a-z_]+\\.[a-z_]+)"
+					"match": "([a-z_]+\\.[a-z._]+)"
 				}
 			]
 		},
