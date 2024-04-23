@@ -219,6 +219,191 @@ pub struct FClassOp {
     operand: ArenaPtr<Value>,
 }
 
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
+pub enum FCvtIntFmt {
+    W,
+    WU,
+    L,
+    LU,
+}
+
+impl fmt::Display for FCvtIntFmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FCvtIntFmt::W => write!(f, "w"),
+            FCvtIntFmt::WU => write!(f, "wu"),
+            FCvtIntFmt::L => write!(f, "l"),
+            FCvtIntFmt::LU => write!(f, "lu"),
+        }
+    }
+}
+
+impl TryFrom<&str> for FCvtIntFmt {
+    type Error = InvalidFloatFmtError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "w" => Ok(FCvtIntFmt::W),
+            "wu" => Ok(FCvtIntFmt::WU),
+            "l" => Ok(FCvtIntFmt::L),
+            "lu" => Ok(FCvtIntFmt::LU),
+            _ => Err(InvalidFloatFmtError(value.to_string())),
+        }
+    }
+}
+
+/// Float to int conversion instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fcvt.f2i"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, OperandTysAre<FReg>, ResultTysAre<IReg>
+)]
+#[format(pattern = "{from} to {to} {operand}", kind = "op", num_results = 1)]
+pub struct FCvtF2IOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The format of the floating point number.
+    from: FloatFmt,
+    /// The format of the integer number.
+    to: FCvtIntFmt,
+    /// The operand to convert.
+    #[operand(0)]
+    operand: ArenaPtr<Value>,
+}
+
+/// Int to float conversion instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fcvt.i2f"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, OperandTysAre<IReg>, ResultTysAre<FReg>
+)]
+#[format(pattern = "{from} to {to} {operand}", kind = "op", num_results = 1)]
+pub struct FCvtI2FOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The format of the integer number.
+    from: FCvtIntFmt,
+    /// The format of the floating point number.
+    to: FloatFmt,
+    /// The operand to convert.
+    #[operand(0)]
+    operand: ArenaPtr<Value>,
+}
+
+/// Float to float conversion instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fcvt.f2f"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, OperandTysAre<FReg>, ResultTysAre<FReg>
+)]
+#[format(pattern = "{from} to {to} {operand}", kind = "op", num_results = 1)]
+pub struct FCvtF2FOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The format of the floating point number.
+    from: FloatFmt,
+    /// The format of the floating point number.
+    to: FloatFmt,
+    /// The operand to convert.
+    #[operand(0)]
+    operand: ArenaPtr<Value>,
+}
+
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
+pub enum FMvFmt {
+    H,
+    W,
+    D,
+    /// The `fmv.x.q` and `fmv.q.x` are stated in the manual as below:
+    /// > FMV.X.Q and FMV.Q.X instructions are not provided in RV32 or RV64, so
+    /// > quad-precision bit patterns must be moved to the integer registers via
+    /// > memory.
+    /// ---
+    /// > RV128 will support FMV.X.Q and FMV.Q.X in the Q extension.
+    Q,
+}
+
+impl fmt::Display for FMvFmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FMvFmt::H => write!(f, "h"),
+            FMvFmt::W => write!(f, "w"),
+            FMvFmt::D => write!(f, "d"),
+            FMvFmt::Q => write!(f, "q"),
+        }
+    }
+}
+
+impl TryFrom<&str> for FMvFmt {
+    type Error = InvalidFloatFmtError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "h" => Ok(FMvFmt::H),
+            "w" => Ok(FMvFmt::W),
+            "d" => Ok(FMvFmt::D),
+            "q" => Ok(FMvFmt::Q),
+            _ => Err(InvalidFloatFmtError(value.to_string())),
+        }
+    }
+}
+
+/// Float move to integer instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fmv.f2i"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, OperandTysAre<FReg>, ResultTysAre<IReg>
+)]
+#[format(pattern = "{from} {operand}", kind = "op", num_results = 1)]
+pub struct FMvF2IOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The format of the floating point number.
+    from: FMvFmt,
+    /// The operand to convert.
+    #[operand(0)]
+    operand: ArenaPtr<Value>,
+}
+
+/// Integer move to float instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fmv.i2f"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, OperandTysAre<IReg>, ResultTysAre<FReg>
+)]
+#[format(pattern = "{to} {operand}", kind = "op", num_results = 1)]
+pub struct FMvI2FOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The format of the floating point number.
+    to: FMvFmt,
+    /// The operand to convert.
+    #[operand(0)]
+    operand: ArenaPtr<Value>,
+}
+
 pub fn register(ctx: &mut Context) {
     ctx.dialects
         .insert("rv_f".into(), Dialect::new("rv_f".into()));
@@ -242,4 +427,11 @@ pub fn register(ctx: &mut Context) {
 
     FCmpOp::register(ctx, FCmpOp::parse);
     FClassOp::register(ctx, FClassOp::parse);
+
+    FCvtF2IOp::register(ctx, FCvtF2IOp::parse);
+    FCvtI2FOp::register(ctx, FCvtI2FOp::parse);
+    FCvtF2FOp::register(ctx, FCvtF2FOp::parse);
+
+    FMvF2IOp::register(ctx, FMvF2IOp::parse);
+    FMvI2FOp::register(ctx, FMvI2FOp::parse);
 }
