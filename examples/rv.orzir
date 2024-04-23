@@ -15,13 +15,13 @@ module {
         %z = rv.load_addr %slot_0 : rv.ireg
 
         // get the address of @global_slot, assembly: `la %x, @global_slot`
-        %x = rv.load_symbol_addr @global_slot : rv.ireg
+        %x = rv.load.symbol_addr @global_slot : rv.ireg
 
         // load a byte from @global_slot
-        %y = rv.load_symbol lb @global_slot : rv.ireg
+        %y = rv.load.symbol lb @global_slot : rv.ireg
 
         // store %y to @global_slot
-        rv.store_symbol sb %y, @global_slot
+        rv.store.symbol sb %y, @global_slot
 
         %z_0 = rv.load ld %z, 1234 : rv.ireg
         %z_1 = rv.load lbu %z, 4321 : rv.ireg

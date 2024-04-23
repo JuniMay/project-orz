@@ -185,7 +185,7 @@ pub struct LoadOp {
 
 /// Load symbol address pseudo instruction.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-#[mnemonic = "rv.load_symbol_addr"]
+#[mnemonic = "rv.load.symbol_addr"]
 #[verifiers(
     NumResults<1>, NumOperands<0>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
@@ -226,7 +226,7 @@ pub struct LoadAddrOp {
 
 /// Load from symbol pseudo instruction.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-#[mnemonic = "rv.load_symbol"]
+#[mnemonic = "rv.load.symbol"]
 #[verifiers(
     NumResults<1>, NumOperands<0>, NumRegions<0>,
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
@@ -314,7 +314,7 @@ pub struct StoreOp {
 
 /// Store symbol pseudo instruction.
 #[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
-#[mnemonic = "rv.store_symbol"]
+#[mnemonic = "rv.store.symbol"]
 #[verifiers(
     NumResults<0>, NumOperands<1>, NumRegions<0>,
     SameOperandTys, IntegerLikeOperands,

@@ -1,11 +1,11 @@
 use std::fmt::{self, Write};
 
-use orzir_core::{ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Value};
+use orzir_core::{apint::ApInt, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Value};
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 
 use super::regs::{FReg, IReg};
-use crate::verifiers::*;
+use crate::{dialects::std::builtin::Symbol, verifiers::*};
 
 /// The floating point kind.
 #[derive(Parse, Print)]
@@ -404,6 +404,164 @@ pub struct FMvI2FOp {
     operand: ArenaPtr<Value>,
 }
 
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
+pub enum FLoadPredicate {
+    Lh,
+    Ls,
+    Ld,
+    Lq,
+}
+
+impl fmt::Display for FLoadPredicate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FLoadPredicate::Lh => write!(f, "lh"),
+            FLoadPredicate::Ls => write!(f, "ls"),
+            FLoadPredicate::Ld => write!(f, "ld"),
+            FLoadPredicate::Lq => write!(f, "lq"),
+        }
+    }
+}
+
+impl TryFrom<&str> for FLoadPredicate {
+    type Error = InvalidFloatFmtError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "lh" => Ok(FLoadPredicate::Lh),
+            "ls" => Ok(FLoadPredicate::Ls),
+            "ld" => Ok(FLoadPredicate::Ld),
+            "lq" => Ok(FLoadPredicate::Lq),
+            _ => Err(InvalidFloatFmtError(value.to_string())),
+        }
+    }
+}
+
+/// Float load instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fload"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, OperandTysAre<IReg>, ResultTysAre<FReg>
+)]
+#[format(pattern = "{pred} {addr}, {offset}", kind = "op", num_results = 1)]
+pub struct FLoadOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The predicate of the load.
+    pred: FLoadPredicate,
+    /// The address to load.
+    #[operand(0)]
+    addr: ArenaPtr<Value>,
+    /// The offset to load.
+    offset: ApInt,
+}
+
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
+pub enum FStorePredicate {
+    Sh,
+    Ss,
+    Sd,
+    Sq,
+}
+
+impl fmt::Display for FStorePredicate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FStorePredicate::Sh => write!(f, "sh"),
+            FStorePredicate::Ss => write!(f, "ss"),
+            FStorePredicate::Sd => write!(f, "sd"),
+            FStorePredicate::Sq => write!(f, "sq"),
+        }
+    }
+}
+
+impl TryFrom<&str> for FStorePredicate {
+    type Error = InvalidFloatFmtError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "sh" => Ok(FStorePredicate::Sh),
+            "ss" => Ok(FStorePredicate::Ss),
+            "sd" => Ok(FStorePredicate::Sd),
+            "sq" => Ok(FStorePredicate::Sq),
+            _ => Err(InvalidFloatFmtError(value.to_string())),
+        }
+    }
+}
+
+/// Float store instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fstore"]
+#[verifiers(
+    NumResults<0>, NumOperands<2>, NumRegions<0>,
+    SameOperandTys, OperandTysAre<FReg>
+)]
+#[format(
+    pattern = "{pred} {value}, {base}, {offset}",
+    kind = "op",
+    num_results = 0
+)]
+pub struct FStoreOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The predicate of the store.
+    pred: FStorePredicate,
+    /// The value to store.
+    #[operand(0)]
+    value: ArenaPtr<Value>,
+    /// The base address to store.
+    #[operand(1)]
+    base: ArenaPtr<Value>,
+    /// The offset to store.
+    offset: ApInt,
+}
+
+/// Load float from symbol
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fload.symbol"]
+#[verifiers(
+    NumResults<1>, NumOperands<0>, NumRegions<0>,
+    SameResultTys, ResultTysAre<FReg>
+)]
+#[format(pattern = "{pred} {symbol}", kind = "op", num_results = 1)]
+pub struct FLoadSymbolOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The predicate of the load.
+    pred: FLoadPredicate,
+    /// The symbol to load.
+    symbol: Symbol,
+}
+
+/// Store float to symbol
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fstore.symbol"]
+#[verifiers(
+    NumResults<0>, NumOperands<1>, NumRegions<0>,
+    SameOperandTys, OperandTysAre<FReg>
+)]
+#[format(pattern = "{pred} {value}, {symbol}", kind = "op", num_results = 0)]
+pub struct FStoreSymbolOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The predicate of the store.
+    pred: FStorePredicate,
+    /// The value to store.
+    #[operand(0)]
+    value: ArenaPtr<Value>,
+    /// The symbol to store.
+    symbol: Symbol,
+}
+
 pub fn register(ctx: &mut Context) {
     ctx.dialects
         .insert("rv_f".into(), Dialect::new("rv_f".into()));
@@ -434,4 +592,9 @@ pub fn register(ctx: &mut Context) {
 
     FMvF2IOp::register(ctx, FMvF2IOp::parse);
     FMvI2FOp::register(ctx, FMvI2FOp::parse);
+
+    FLoadOp::register(ctx, FLoadOp::parse);
+    FStoreOp::register(ctx, FStoreOp::parse);
+    FLoadSymbolOp::register(ctx, FLoadSymbolOp::parse);
+    FStoreSymbolOp::register(ctx, FStoreSymbolOp::parse);
 }
