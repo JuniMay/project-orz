@@ -4,7 +4,7 @@ use orzir_core::{ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Value};
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 
-use super::regs::FReg;
+use super::regs::{FReg, IReg};
 use crate::verifiers::*;
 
 /// The floating point kind.
@@ -127,7 +127,7 @@ rvf_binary!("rv_f.fsgnjx", FSgnjxOp);
     SameResultTys, SameOperandTys, SameOperandAndResultTys,
     OperandTysAre<FReg>,ResultTysAre<FReg>
 )]
-#[format(pattern = "{fmt} {rs1}", kind = "op", num_results = 1)]
+#[format(pattern = "{fmt} {operand}", kind = "op", num_results = 1)]
 pub struct FSqrtOp {
     #[metadata]
     metadata: OpMetadata,
@@ -136,9 +136,87 @@ pub struct FSqrtOp {
     result: ArenaPtr<Value>,
     /// The format of the floating point number.
     fmt: FloatFmt,
-    /// lhs
+    /// The operand
     #[operand(0)]
-    rs1: ArenaPtr<Value>,
+    operand: ArenaPtr<Value>,
+}
+
+#[derive(Parse, Print)]
+#[format(pattern = "{self}")]
+pub enum FCmpPredicate {
+    Eq,
+    Lt,
+    Le,
+}
+
+impl fmt::Display for FCmpPredicate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FCmpPredicate::Eq => write!(f, "eq"),
+            FCmpPredicate::Lt => write!(f, "lt"),
+            FCmpPredicate::Le => write!(f, "le"),
+        }
+    }
+}
+
+impl TryFrom<&str> for FCmpPredicate {
+    type Error = InvalidFloatFmtError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "eq" => Ok(FCmpPredicate::Eq),
+            "lt" => Ok(FCmpPredicate::Lt),
+            "le" => Ok(FCmpPredicate::Le),
+            _ => Err(InvalidFloatFmtError(value.to_string())),
+        }
+    }
+}
+
+/// Float comparison instruction.
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fcmp"]
+#[verifiers(
+    NumResults<1>, NumOperands<2>, NumRegions<0>,
+    SameResultTys, SameOperandTys, OperandTysAre<FReg>, ResultTysAre<IReg>
+)]
+#[format(pattern = "{pred} {fmt} {lhs}, {rhs}", kind = "op", num_results = 1)]
+pub struct FCmpOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The predicate of the comparison.
+    pred: FCmpPredicate,
+    /// The format of the floating point number.
+    fmt: FloatFmt,
+    /// The lhs for comparison
+    #[operand(0)]
+    lhs: ArenaPtr<Value>,
+    /// The rhs for comparison
+    #[operand(1)]
+    rhs: ArenaPtr<Value>,
+}
+
+/// Float class instruction
+#[derive(Op, DataFlow, RegionInterface, ControlFlow, Parse, Print, Verify)]
+#[mnemonic = "rv_f.fclass"]
+#[verifiers(
+    NumResults<1>, NumOperands<1>, NumRegions<0>,
+    SameResultTys, SameOperandTys, OperandTysAre<FReg>, ResultTysAre<IReg>
+)]
+#[format(pattern = "{fmt} {operand}", kind = "op", num_results = 1)]
+pub struct FClassOp {
+    #[metadata]
+    metadata: OpMetadata,
+    /// The result of the operation.
+    #[result(0)]
+    result: ArenaPtr<Value>,
+    /// The format of the floating point number.
+    fmt: FloatFmt,
+    /// The operand to classify.
+    #[operand(0)]
+    operand: ArenaPtr<Value>,
 }
 
 pub fn register(ctx: &mut Context) {
@@ -161,4 +239,7 @@ pub fn register(ctx: &mut Context) {
     FSgnjxOp::register(ctx, FSgnjxOp::parse);
 
     FSqrtOp::register(ctx, FSqrtOp::parse);
+
+    FCmpOp::register(ctx, FCmpOp::parse);
+    FClassOp::register(ctx, FClassOp::parse);
 }

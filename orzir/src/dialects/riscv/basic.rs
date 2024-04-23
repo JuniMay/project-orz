@@ -115,25 +115,25 @@ pub struct JumpOp {
 #[derive(Parse, Print)]
 #[format(pattern = "{self}")]
 pub enum LoadPredicate {
-    LB,
-    LH,
-    LW,
-    LBU,
-    LHU,
-    LD,
-    LWU,
+    Lb,
+    Lh,
+    Lw,
+    Lbu,
+    Lhu,
+    Ld,
+    Lwu,
 }
 
 impl fmt::Display for LoadPredicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LoadPredicate::LB => write!(f, "lb"),
-            LoadPredicate::LH => write!(f, "lh"),
-            LoadPredicate::LW => write!(f, "lw"),
-            LoadPredicate::LBU => write!(f, "lbu"),
-            LoadPredicate::LHU => write!(f, "lhu"),
-            LoadPredicate::LD => write!(f, "ld"),
-            LoadPredicate::LWU => write!(f, "lwu"),
+            LoadPredicate::Lb => write!(f, "lb"),
+            LoadPredicate::Lh => write!(f, "lh"),
+            LoadPredicate::Lw => write!(f, "lw"),
+            LoadPredicate::Lbu => write!(f, "lbu"),
+            LoadPredicate::Lhu => write!(f, "lhu"),
+            LoadPredicate::Ld => write!(f, "ld"),
+            LoadPredicate::Lwu => write!(f, "lwu"),
         }
     }
 }
@@ -147,13 +147,13 @@ impl TryFrom<&str> for LoadPredicate {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "lb" => Ok(LoadPredicate::LB),
-            "lh" => Ok(LoadPredicate::LH),
-            "lw" => Ok(LoadPredicate::LW),
-            "lbu" => Ok(LoadPredicate::LBU),
-            "lhu" => Ok(LoadPredicate::LHU),
-            "ld" => Ok(LoadPredicate::LD),
-            "lwu" => Ok(LoadPredicate::LWU),
+            "lb" => Ok(LoadPredicate::Lb),
+            "lh" => Ok(LoadPredicate::Lh),
+            "lw" => Ok(LoadPredicate::Lw),
+            "lbu" => Ok(LoadPredicate::Lbu),
+            "lhu" => Ok(LoadPredicate::Lhu),
+            "ld" => Ok(LoadPredicate::Ld),
+            "lwu" => Ok(LoadPredicate::Lwu),
             _ => Err(InvalidLoadPredicateErr(value.into())),
         }
     }
@@ -249,19 +249,19 @@ pub struct LoadSymbolOp {
 #[derive(Parse, Print)]
 #[format(pattern = "{self}")]
 pub enum StorePredicate {
-    SB,
-    SH,
-    SW,
-    SD,
+    Sb,
+    Sh,
+    Sw,
+    Sd,
 }
 
 impl fmt::Display for StorePredicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            StorePredicate::SB => write!(f, "sb"),
-            StorePredicate::SH => write!(f, "sh"),
-            StorePredicate::SW => write!(f, "sw"),
-            StorePredicate::SD => write!(f, "sd"),
+            StorePredicate::Sb => write!(f, "sb"),
+            StorePredicate::Sh => write!(f, "sh"),
+            StorePredicate::Sw => write!(f, "sw"),
+            StorePredicate::Sd => write!(f, "sd"),
         }
     }
 }
@@ -275,10 +275,10 @@ impl TryFrom<&str> for StorePredicate {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "sb" => Ok(StorePredicate::SB),
-            "sh" => Ok(StorePredicate::SH),
-            "sw" => Ok(StorePredicate::SW),
-            "sd" => Ok(StorePredicate::SD),
+            "sb" => Ok(StorePredicate::Sb),
+            "sh" => Ok(StorePredicate::Sh),
+            "sw" => Ok(StorePredicate::Sw),
+            "sd" => Ok(StorePredicate::Sd),
             _ => Err(InvalidStorePredicateErr(value.into())),
         }
     }
@@ -336,23 +336,23 @@ pub struct StoreSymbolOp {
 #[derive(Parse, Print)]
 #[format(pattern = "{self}")]
 pub enum BranchPredicate {
-    BEQ,
-    BNE,
-    BLT,
-    BGE,
-    BLTU,
-    BGEU,
+    Beq,
+    Bne,
+    Blt,
+    Bge,
+    Bltu,
+    Bgeu,
 }
 
 impl fmt::Display for BranchPredicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BranchPredicate::BEQ => write!(f, "beq"),
-            BranchPredicate::BNE => write!(f, "bne"),
-            BranchPredicate::BLT => write!(f, "blt"),
-            BranchPredicate::BGE => write!(f, "bge"),
-            BranchPredicate::BLTU => write!(f, "bltu"),
-            BranchPredicate::BGEU => write!(f, "bgeu"),
+            BranchPredicate::Beq => write!(f, "beq"),
+            BranchPredicate::Bne => write!(f, "bne"),
+            BranchPredicate::Blt => write!(f, "blt"),
+            BranchPredicate::Bge => write!(f, "bge"),
+            BranchPredicate::Bltu => write!(f, "bltu"),
+            BranchPredicate::Bgeu => write!(f, "bgeu"),
         }
     }
 }
@@ -366,12 +366,12 @@ impl TryFrom<&str> for BranchPredicate {
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
-            "beq" => Ok(BranchPredicate::BEQ),
-            "bne" => Ok(BranchPredicate::BNE),
-            "blt" => Ok(BranchPredicate::BLT),
-            "bge" => Ok(BranchPredicate::BGE),
-            "bltu" => Ok(BranchPredicate::BLTU),
-            "bgeu" => Ok(BranchPredicate::BGEU),
+            "beq" => Ok(BranchPredicate::Beq),
+            "bne" => Ok(BranchPredicate::Bne),
+            "blt" => Ok(BranchPredicate::Blt),
+            "bge" => Ok(BranchPredicate::Bge),
+            "bltu" => Ok(BranchPredicate::Bltu),
+            "bgeu" => Ok(BranchPredicate::Bgeu),
             _ => Err(InvalidBranchPredicateErr(value.into())),
         }
     }
