@@ -1,0 +1,15 @@
+/// The grammar of SysY language.
+/// 
+/// TODO: This needs to be implemented.
+
+grammar;
+
+match {
+  r"\s*" => {},
+  r"//[^\n\r]*[\n\r]*" => {},
+  r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => {},
+  _
+}
+
+/// CompUnit -> [ CompUnit ] ( Decl | FuncDef )
+pub CompUnit: CompUnit = {}
