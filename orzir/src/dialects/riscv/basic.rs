@@ -1,8 +1,8 @@
 use std::fmt::{self, Write};
 
 use orzir_core::{
-    apint::ApInt,
     verify_error,
+    ApInt,
     ArenaPtr,
     Context,
     Dialect,

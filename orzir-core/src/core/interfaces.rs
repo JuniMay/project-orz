@@ -4,7 +4,7 @@
 ///
 /// These interfaces can be derived with the macro and are mandatory for all
 /// operations.
-use crate::{ArenaPtr, Context, Region, RegionKind, Successor, TyObj, Typed, Value};
+use crate::{ArenaPtr, Context, Region, RegionKind, Successor, TyObj, Value};
 
 /// Builtin region interface.
 ///

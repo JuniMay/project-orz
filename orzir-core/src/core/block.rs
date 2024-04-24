@@ -22,7 +22,6 @@ use crate::{
     Region,
     RunVerifiers,
     TyObj,
-    Typed,
     Verify,
 };
 

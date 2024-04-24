@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::core::parse::Span;
+use crate::{core::parse::Span, ArenaPtr, OpObj};
 
 #[derive(Debug, Error)]
 #[error("parse error: {error} at {span}")]
@@ -83,4 +83,33 @@ impl From<std::fmt::Error> for PrintError {
 
 impl<T> From<PrintError> for PrintResult<T> {
     fn from(error: PrintError) -> PrintResult<T> { Err(error) }
+}
+
+#[derive(Debug, Error)]
+#[error("rewrite error: {error}")]
+pub struct RewriteError {
+    pub op: ArenaPtr<OpObj>,
+    pub error: Box<dyn std::error::Error>,
+}
+
+impl RewriteError {
+    pub fn new(op: ArenaPtr<OpObj>, error: impl std::error::Error + 'static) -> Self {
+        Self {
+            op,
+            error: Box::new(error),
+        }
+    }
+}
+
+pub type RewriteResult<T> = Result<T, RewriteError>;
+
+#[macro_export]
+macro_rules! rewrite_error {
+    ($op:expr, $error:expr) => {
+        $crate::RewriteError::new($op, $error)
+    };
+}
+
+impl<T> From<RewriteError> for RewriteResult<T> {
+    fn from(error: RewriteError) -> RewriteResult<T> { Err(error) }
 }

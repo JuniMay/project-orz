@@ -1,6 +1,6 @@
 use std::fmt::{self, Write};
 
-use orzir_core::{apint::ApInt, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Symbol, Value};
+use orzir_core::{ApInt, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Symbol, Value};
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 

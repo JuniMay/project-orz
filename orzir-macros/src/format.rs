@@ -241,7 +241,7 @@ impl syn::parse::Parse for FormatMeta {
 }
 
 /// The repeat meta for the field.
-/// 
+///
 /// TODO: This can be parsed from the format pattern.
 struct RepeatMeta {
     /// The separator.
@@ -924,7 +924,8 @@ fn generate_parser(
                     }
                 });
             } else {
-                // the number of results is variable and should match the number of trailing types.
+                // the number of results is variable and should match the number of trailing
+                // types.
                 epilogue.extend(quote! {
                     if __result_names.len() != __tys.len() {
                         let mut __span = __result_names[0].span;

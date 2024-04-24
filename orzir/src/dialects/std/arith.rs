@@ -2,8 +2,8 @@ use core::fmt;
 use std::fmt::Write;
 
 use orzir_core::{
-    apint::ApInt,
     verify_error,
+    ApInt,
     ArenaPtr,
     Context,
     Dialect,
@@ -11,7 +11,6 @@ use orzir_core::{
     OpMetadata,
     Parse,
     RunVerifiers,
-    Typed,
     Value,
     Verify,
 };

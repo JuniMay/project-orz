@@ -8,6 +8,7 @@ pub mod op;
 pub mod parse;
 pub mod print;
 pub mod region;
+pub mod rewrite;
 pub mod symbol;
 pub mod ty;
 pub mod value;

@@ -6,7 +6,7 @@ use super::{
     op::OpObj,
     parse::{ParseState, TokenKind},
     symbol::NameAllocDuplicatedErr,
-    ty::{TyObj, Typed},
+    ty::TyObj,
 };
 use crate::{
     core::parse::ParseErrorKind,
@@ -48,15 +48,6 @@ pub enum Value {
         /// The index of the argument.
         index: usize,
     },
-}
-
-impl Typed for Value {
-    fn ty(&self, _: &Context) -> ArenaPtr<TyObj> {
-        match self {
-            Value::OpResult { ty, .. } => *ty,
-            Value::BlockArgument { ty, .. } => *ty,
-        }
-    }
 }
 
 impl RunVerifiers for Value {
@@ -167,6 +158,13 @@ impl Value {
                 .parent_region(ctx)
                 .expect("OpResult should be embraced by a region."),
             Value::BlockArgument { block, .. } => block.deref(&ctx.blocks).parent_region(),
+        }
+    }
+
+    pub fn ty(&self, _: &Context) -> ArenaPtr<TyObj> {
+        match self {
+            Value::OpResult { ty, .. } => *ty,
+            Value::BlockArgument { ty, .. } => *ty,
         }
     }
 }
