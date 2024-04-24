@@ -1,15 +1,85 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Write};
 
 use thiserror::Error;
 
 use super::op::OpObj;
 use crate::{
+    parse_error,
     support::{
         bimap::{BiMap, Duplicated},
         storage::ArenaPtr,
     },
-    Context, Region,
+    token_wildcard,
+    Context,
+    Parse,
+    ParseErrorKind,
+    ParseResult,
+    ParseState,
+    Print,
+    PrintResult,
+    PrintState,
+    Region,
+    TokenKind,
 };
+
+/// A symbol.
+///
+/// This is currently a simple wrapper around a string, just with implementation
+/// of [Parse] and [Print].
+#[derive(Debug, Default, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Symbol(String);
+
+impl Parse for Symbol {
+    type Item = Self;
+
+    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
+        let token = state.stream.consume()?;
+        if let TokenKind::SymbolName(name) = token.kind {
+            let op = state.curr_op();
+            // register the symbol
+            let region = state.curr_region();
+            let symbol = Self(name);
+            region
+                .deref_mut(&mut ctx.regions)
+                .register_symbol(symbol.clone(), op);
+            // construct and return.
+            Ok(symbol)
+        } else {
+            parse_error!(
+                token.span,
+                ParseErrorKind::InvalidToken(vec![token_wildcard!("@...")].into(), token.kind)
+            )
+            .into()
+        }
+    }
+}
+
+impl Print for Symbol {
+    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
+        write!(state.buffer, "@{}", self.0)?;
+        Ok(())
+    }
+}
+
+impl From<String> for Symbol {
+    fn from(s: String) -> Self {
+        if let Some(s) = s.strip_prefix('@') {
+            Self(s.to_string())
+        } else {
+            Self(s)
+        }
+    }
+}
+
+impl From<&str> for Symbol {
+    fn from(s: &str) -> Self {
+        if let Some(s) = s.strip_prefix('@') {
+            Self(s.to_string())
+        } else {
+            Self(s.to_string())
+        }
+    }
+}
 
 /// A symbol table.
 ///
@@ -31,7 +101,9 @@ impl SymbolTable {
     }
 
     /// Insert a symbol and its definition operation into the table.
-    pub fn insert(&mut self, name: String, op: ArenaPtr<OpObj>) { self.symbols.insert(name, op); }
+    pub fn insert(&mut self, symbol: Symbol, op: ArenaPtr<OpObj>) {
+        self.symbols.insert(symbol.0, op);
+    }
 
     /// Get the operation that defines the symbol.
     ///

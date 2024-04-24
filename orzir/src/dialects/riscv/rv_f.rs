@@ -1,11 +1,11 @@
 use std::fmt::{self, Write};
 
-use orzir_core::{apint::ApInt, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Value};
+use orzir_core::{apint::ApInt, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Symbol, Value};
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 
 use super::regs::{FReg, IReg};
-use crate::{dialects::std::builtin::Symbol, verifiers::*};
+use crate::verifiers::*;
 
 /// The floating point kind.
 #[derive(Parse, Print)]
@@ -563,8 +563,8 @@ pub struct FStoreSymbolOp {
 }
 
 pub fn register(ctx: &mut Context) {
-    ctx.dialects
-        .insert("rv_f".into(), Dialect::new("rv_f".into()));
+    let dialect = Dialect::new("rv_f".into());
+    ctx.register_dialect(dialect);
 
     MAddOp::register(ctx, MAddOp::parse);
     MSubOp::register(ctx, MSubOp::parse);

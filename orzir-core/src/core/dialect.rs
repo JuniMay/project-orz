@@ -4,6 +4,10 @@ use super::{mnemonic::MnemonicSegment, op::OpParseFn, ty::TyParseFn};
 use crate::Mnemonic;
 
 /// A dialect.
+///
+/// Dialects define the operations and types that are available in a specific
+/// language. This is the same as dialects in the MLIR, which make it possible
+/// to extend the framework with new operations and types.
 pub struct Dialect {
     /// The mnemonic of the dialect.
     mnemonic: MnemonicSegment,

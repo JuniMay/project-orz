@@ -10,7 +10,12 @@ use crate::{
         cast::CastRef,
         storage::{ArenaPtr, GetUniqueArenaHash, UniqueArenaHash},
     },
-    Parse, ParseResult, Print, PrintResult, PrintState, Verify,
+    Parse,
+    ParseResult,
+    Print,
+    PrintResult,
+    PrintState,
+    Verify,
 };
 
 pub trait Ty: Downcast + GetUniqueArenaHash + Print + Verify {

@@ -12,6 +12,7 @@ pub use crate::{
         parse::{Parse, ParseErrorKind, ParseState, Span, TokenKind, TokenStream},
         print::{Print, PrintState},
         region::{Region, RegionKind},
+        symbol::Symbol,
         ty::{Ty, TyObj, TyParseFn, Typed},
         value::Value,
         verify::{RunVerifiers, Verify},
@@ -19,10 +20,9 @@ pub use crate::{
     support::{
         apint,
         cast::{Caster, CasterStorage},
-        error::{
-            ParseError, ParseResult, PrintError, PrintResult, VerificationError, VerificationResult,
-        },
-        graph, list,
+        error::{ParseError, ParseResult, PrintError, PrintResult, VerifyError, VerifyResult},
+        graph,
+        list,
         storage::{Arena, ArenaBase, ArenaPtr, UniqueArena},
     },
 };

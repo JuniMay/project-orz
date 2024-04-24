@@ -48,7 +48,7 @@ pub struct BranchOp {
 /// Register the control flow dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("cf".into());
-    ctx.dialects.insert("cf".into(), dialect);
+    ctx.register_dialect(dialect);
 
     JumoOp::register(ctx, JumoOp::parse);
     BranchOp::register(ctx, BranchOp::parse);
@@ -57,13 +57,22 @@ pub fn register(ctx: &mut Context) {
 #[cfg(test)]
 mod tests {
     use orzir_core::{
-        Context, OpObj, Parse, ParseState, Print, PrintState, RegionInterface, TokenStream,
+        Context,
+        OpObj,
+        Parse,
+        ParseState,
+        Print,
+        PrintState,
+        RegionInterface,
+        TokenStream,
     };
 
     use crate::dialects::std::{
         arith,
         builtin::{self, ModuleOp},
-        cf, func, register_std_dialects,
+        cf,
+        func,
+        register_std_dialects,
     };
 
     #[test]

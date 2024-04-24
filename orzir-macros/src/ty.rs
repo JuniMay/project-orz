@@ -207,7 +207,7 @@ pub fn derive_impl(ast: &syn::DeriveInput) -> syn::Result<TokenStream> {
         #verifier_impls
 
         impl ::orzir_core::RunVerifiers for #ident {
-            fn run_verifiers(&self, ctx: &::orzir_core::Context) -> ::orzir_core::VerificationResult<()> {
+            fn run_verifiers(&self, ctx: &::orzir_core::Context) -> ::orzir_core::VerifyResult<()> {
                 #verifier_calls
                 Ok(())
             }

@@ -3,7 +3,14 @@ use std::{collections::HashMap, fmt::Write};
 
 use super::parse::{ParseErrorKind, ParseState, TokenKind};
 use crate::{
-    parse_error, token_wildcard, Context, Parse, ParseResult, Print, PrintResult, PrintState,
+    parse_error,
+    token_wildcard,
+    Context,
+    Parse,
+    ParseResult,
+    Print,
+    PrintResult,
+    PrintState,
 };
 
 /// A mnemonic segment.

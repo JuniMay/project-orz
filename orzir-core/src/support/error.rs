@@ -29,11 +29,11 @@ impl<T> From<ParseError> for ParseResult<T> {
 
 #[derive(Debug, Error)]
 #[error("verification error: {error}")]
-pub struct VerificationError {
+pub struct VerifyError {
     pub error: Box<dyn std::error::Error>,
 }
 
-impl VerificationError {
+impl VerifyError {
     pub fn new(error: impl std::error::Error + 'static) -> Self {
         Self {
             error: Box::new(error),
@@ -41,17 +41,17 @@ impl VerificationError {
     }
 }
 
-pub type VerificationResult<T> = Result<T, VerificationError>;
+pub type VerifyResult<T> = Result<T, VerifyError>;
 
 #[macro_export]
-macro_rules! verification_error {
+macro_rules! verify_error {
     ($error:expr) => {
-        $crate::VerificationError::new($error)
+        $crate::VerifyError::new($error)
     };
 }
 
-impl<T> From<VerificationError> for VerificationResult<T> {
-    fn from(error: VerificationError) -> VerificationResult<T> { Err(error) }
+impl<T> From<VerifyError> for VerifyResult<T> {
+    fn from(error: VerifyError) -> VerifyResult<T> { Err(error) }
 }
 
 #[derive(Debug, Error)]

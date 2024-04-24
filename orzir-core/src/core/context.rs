@@ -1,8 +1,14 @@
 use std::{cell::RefCell, collections::HashMap};
 
 use super::{
-    block::Block, dialect::Dialect, mnemonic::MnemonicSegment, op::OpObj, region::Region,
-    symbol::NameManager, ty::TyObj, value::Value,
+    block::Block,
+    dialect::Dialect,
+    mnemonic::MnemonicSegment,
+    op::OpObj,
+    region::Region,
+    symbol::NameManager,
+    ty::TyObj,
+    value::Value,
 };
 use crate::support::{
     cast::CasterStorage,
@@ -32,4 +38,10 @@ pub struct Context {
     pub casters: CasterStorage,
     /// The name of values.
     pub(crate) value_names: RefCell<NameManager<Value>>,
+}
+
+impl Context {
+    pub fn register_dialect(&mut self, dialect: Dialect) {
+        self.dialects.insert(dialect.mnemonic(), dialect);
+    }
 }

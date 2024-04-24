@@ -5,11 +5,21 @@ use super::{
     layout::BlockList,
     op::OpObj,
     parse::ParseState,
-    symbol::{NameManager, SymbolTable},
+    symbol::{NameManager, Symbol, SymbolTable},
 };
 use crate::{
-    core::parse::TokenKind, delimiter, support::storage::ArenaPtr, Context, Parse, ParseResult,
-    Print, PrintResult, PrintState, RunVerifiers, VerificationResult, Verify,
+    core::parse::TokenKind,
+    delimiter,
+    support::storage::ArenaPtr,
+    Context,
+    Parse,
+    ParseResult,
+    Print,
+    PrintResult,
+    PrintState,
+    RunVerifiers,
+    Verify,
+    VerifyResult,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -38,11 +48,11 @@ pub struct Region {
 }
 
 impl RunVerifiers for Region {
-    fn run_verifiers(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
+    fn run_verifiers(&self, _ctx: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
 impl Verify for Region {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         for block in self.layout().iter() {
             block.deref(&ctx.blocks).verify(ctx)?;
         }
@@ -106,8 +116,8 @@ impl Region {
         false
     }
 
-    pub fn register_symbol(&mut self, name: String, op: ArenaPtr<OpObj>) {
-        self.symbol_table.insert(name, op);
+    pub fn register_symbol(&mut self, symbol: Symbol, op: ArenaPtr<OpObj>) {
+        self.symbol_table.insert(symbol, op);
     }
 
     pub fn lookup_symbol(&self, ctx: &Context, name: &str) -> Option<ArenaPtr<OpObj>> {

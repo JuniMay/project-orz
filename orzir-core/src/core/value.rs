@@ -9,8 +9,19 @@ use super::{
     ty::{TyObj, Typed},
 };
 use crate::{
-    core::parse::ParseErrorKind, parse_error, support::storage::ArenaPtr, token_wildcard, Parse,
-    ParseResult, Print, PrintResult, PrintState, Region, RunVerifiers, VerificationResult, Verify,
+    core::parse::ParseErrorKind,
+    parse_error,
+    support::storage::ArenaPtr,
+    token_wildcard,
+    Parse,
+    ParseResult,
+    Print,
+    PrintResult,
+    PrintState,
+    Region,
+    RunVerifiers,
+    Verify,
+    VerifyResult,
 };
 
 /// An SSA value.
@@ -49,11 +60,11 @@ impl Typed for Value {
 }
 
 impl RunVerifiers for Value {
-    fn run_verifiers(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
+    fn run_verifiers(&self, _ctx: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
 impl Verify for Value {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         self.ty(ctx).deref(&ctx.tys).as_ref().verify(ctx)
     }
 }

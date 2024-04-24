@@ -1,18 +1,42 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    delimiter, parse_error, token_wildcard, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
-    ParseErrorKind, Print, PrintResult, PrintState, TokenKind, TyObj, Value,
+    delimiter,
+    parse_error,
+    token_wildcard,
+    ArenaPtr,
+    Context,
+    Dialect,
+    Op,
+    OpMetadata,
+    Parse,
+    ParseErrorKind,
+    Print,
+    PrintResult,
+    PrintState,
+    Symbol,
+    TokenKind,
+    TyObj,
+    Value,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
+use thiserror::Error;
 
-use super::builtin::Symbol;
 use crate::verifiers::*;
 
 pub enum GlobalInit {
     ZeroInit,
     Undef,
     Bytes(Vec<u8>),
+    String(String),
+}
+
+#[derive(Debug, Error)]
+pub enum GlobalInitParseError {
+    #[error("invalid global init kind: {0}")]
+    InvalidGlobalInitKind(String),
+    #[error("invalid element: {0}")]
+    InvalidElement(String),
 }
 
 impl Print for GlobalInit {
@@ -26,11 +50,11 @@ impl Print for GlobalInit {
                     if i != 0 {
                         write!(state.buffer, ", ")?;
                     }
-                    // hex
                     write!(state.buffer, "{:02x}", byte)?;
                 }
                 write!(state.buffer, "]")?;
             }
+            GlobalInit::String(s) => write!(state.buffer, "{:?}", s)?,
         }
         Ok(())
     }
@@ -46,8 +70,8 @@ impl Parse for GlobalInit {
         let token = state.stream.consume()?;
         match token.kind {
             TokenKind::Tokenized(ref s) => match s.as_str() {
-                "zeroinit" => Ok(GlobalInit::ZeroInit),
                 "undef" => Ok(GlobalInit::Undef),
+                "zeroinit" => Ok(GlobalInit::ZeroInit),
                 "bytes" => {
                     let mut bytes = Vec::new();
                     state.stream.expect(delimiter!('['))?;
@@ -59,11 +83,7 @@ impl Parse for GlobalInit {
                                 let byte = u8::from_str_radix(s, 16).map_err(|_| {
                                     parse_error!(
                                         token.span,
-                                        // TODO: Better error message
-                                        ParseErrorKind::InvalidToken(
-                                            vec![token_wildcard!("...")].into(),
-                                            token.kind
-                                        )
+                                        GlobalInitParseError::InvalidElement(s.clone())
                                     )
                                 })?;
                                 bytes.push(byte);
@@ -89,19 +109,18 @@ impl Parse for GlobalInit {
                     }
                     Ok(GlobalInit::Bytes(bytes))
                 }
-                _ => parse_error!(
-                    token.span,
-                    ParseErrorKind::InvalidToken(
-                        vec![
-                            TokenKind::Tokenized("zeroinit".into()),
-                            TokenKind::Tokenized("undef".into()),
-                            TokenKind::Tokenized("bytes".into())
-                        ]
-                        .into(),
-                        token.kind
-                    )
-                )
-                .into(),
+                _ => {
+                    if s.starts_with('"') && s.ends_with('"') {
+                        let s = &s[1..s.len() - 1];
+                        Ok(GlobalInit::String(s.to_string()))
+                    } else {
+                        parse_error!(
+                            token.span,
+                            GlobalInitParseError::InvalidGlobalInitKind(s.clone())
+                        )
+                        .into()
+                    }
+                }
             },
             _ => parse_error!(
                 token.span,
@@ -215,7 +234,7 @@ pub struct CastOp {
 
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("mem".into());
-    ctx.dialects.insert("mem".into(), dialect);
+    ctx.register_dialect(dialect);
 
     GlobalOp::register(ctx, GlobalOp::parse);
     GetGlobalOp::register(ctx, GetGlobalOp::parse);
@@ -258,35 +277,11 @@ mod tests {
 
     #[test]
     fn test_mem_op_2() {
-        let src = r#"
-        module {
-            mem.global @global_slot : memref<int<32>, [2]> = bytes[
-                ef, be, ad, de, 
-                78, 56, 34, 12,
-            ]
-            mem.global @global_zero : memref<int<32>, [1 * 2 * 3]> = zeroinit
-            mem.global @global_undef : memref<int<32>, [114514 * 4]> = undef
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../examples/basic.orzir"
+        ));
 
-            func.func @test_mem : fn() -> int<32> {
-                %global_slot = mem.get_global @global_slot : memref<int<32>, [2]>
-                %casted_slot = mem.cast %global_slot : memref<int<8>, [8]>
-
-                %slot = mem.alloca int<32> : memref<int<32>, [2 * 3 * 4]>
-                cf.jump ^main
-            ^main:
-                %a = arith.iconst 1i64 : index
-                %b = arith.iconst 2i64 : index
-                %c = arith.iconst 3i64 : index
-                
-                %val = mem.load %slot[%a, %b, %c] : int<32>
-
-                mem.store %val, %slot[%a, %b, %c]
-
-                func.return %val
-            }
-        }
-
-        "#;
         let stream = TokenStream::new(src);
         let mut state = ParseState::new(stream);
         let mut ctx = Context::default();

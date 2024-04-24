@@ -46,8 +46,8 @@ rv_binary!("rv_m.remw", RemwOp);
 rv_binary!("rv_m.remuw", RemuwOp);
 
 pub fn register(ctx: &mut Context) {
-    ctx.dialects
-        .insert("rv_m".into(), Dialect::new("rv_m".into()));
+    let dialect = Dialect::new("rv_m".into());
+    ctx.register_dialect(dialect);
 
     MulOp::register(ctx, MulOp::parse);
     MulwOp::register(ctx, MulwOp::parse);

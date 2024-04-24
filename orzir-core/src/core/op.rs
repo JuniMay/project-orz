@@ -12,13 +12,22 @@ use super::{
 };
 use crate::{
     core::parse::ParseErrorKind,
-    delimiter, parse_error,
+    delimiter,
+    parse_error,
     support::{
         cast::{CastMut, CastRef},
         storage::ArenaPtr,
     },
-    ControlFlow, DataFlow, Parse, ParseResult, Print, PrintResult, PrintState, Region,
-    RegionInterface, Verify,
+    ControlFlow,
+    DataFlow,
+    Parse,
+    ParseResult,
+    Print,
+    PrintResult,
+    PrintState,
+    Region,
+    RegionInterface,
+    Verify,
 };
 
 /// The successor.
@@ -224,8 +233,9 @@ impl Parse for OpObj {
     /// state, then parse the mnemonic and the dialect-specific text.
     ///
     /// e.g. for the oepration text below:
+    ///
     /// ```text
-    /// %0, %1 = dialect.agnostic_op %2, %3 : int<32>, int<32>
+    /// %0, %1 = dialect.agnostic_op %2, %3 : (int<32>, int<32>)
     /// ```
     ///
     /// The result part `%0, %1` will be saved as names, then the `=` will be

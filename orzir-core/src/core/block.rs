@@ -1,41 +1,73 @@
 use std::fmt::Write;
 
+use thiserror::Error;
+
 use super::{layout::OpList, parse::ParseState, symbol::NameAllocDuplicatedErr, value::Value};
 use crate::{
     core::parse::{ParseErrorKind, TokenKind},
-    delimiter, parse_error,
+    delimiter,
+    parse_error,
     support::{
-        error::{PrintResult, VerificationResult},
+        error::{PrintResult, VerifyResult},
         storage::ArenaPtr,
     },
-    token_wildcard, Context, OpObj, Parse, ParseResult, Print, PrintState, Region, RunVerifiers,
-    TyObj, Typed, Verify,
+    token_wildcard,
+    verify_error,
+    Context,
+    OpObj,
+    Parse,
+    ParseResult,
+    Print,
+    PrintState,
+    Region,
+    RunVerifiers,
+    TyObj,
+    Typed,
+    Verify,
 };
 
 /// The block in the region.
-///
-/// The block does not store the operations, but represents the necessary
-/// argument information.
-#[derive(Debug)]
 pub struct Block {
     /// Self ptr.
     self_ptr: ArenaPtr<Self>,
     /// Arguments of the block.
+    ///
+    /// There is no phi node in the OrzIR, instead, the block arguments are used
+    /// to deal with the incoming values from the predecessors and keep the IR
+    /// in the SSA form.
     args: Vec<ArenaPtr<Value>>,
-    /// If this block is an entry.
+    /// If this block is an entry block.
+    ///
+    /// An entry block can be omitted if it has no arguments. The entry block
+    /// must be the first block in the layout.
     is_entry: bool,
     /// The parent region.
     parent_region: ArenaPtr<Region>,
     /// The layout of the block.
+    ///
+    /// The layout is the list of operations in the block, indicating the print
+    /// order of the operations.
     layout: OpList,
 }
 
 impl RunVerifiers for Block {
-    fn run_verifiers(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
+    fn run_verifiers(&self, _ctx: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
+/// The error when the entry block is not the first block in the layout.
+#[derive(Debug, Error)]
+#[error("The entry block must be the first block in the layout.")]
+pub struct InvalidEntryBlockError;
+
 impl Verify for Block {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
+        if self.is_entry {
+            let parent_region = self.parent_region.deref(&ctx.regions);
+            if parent_region.layout().front().unwrap() != self.self_ptr {
+                return verify_error!(InvalidEntryBlockError).into();
+            }
+        }
+
         for arg in &self.args {
             arg.deref(&ctx.values).verify(ctx)?;
         }
@@ -47,7 +79,7 @@ impl Verify for Block {
 }
 
 impl Block {
-    /// Create a new non-entry block.
+    /// Create a new block.
     pub fn new(
         ctx: &mut Context,
         is_entry: bool,
@@ -82,8 +114,10 @@ impl Block {
         self_ptr
     }
 
+    /// Get the layout of operations in the block.
     pub fn layout(&self) -> &OpList { &self.layout }
 
+    /// Get the mutable layout of operations in the block.
     pub fn layout_mut(&mut self) -> &mut OpList { &mut self.layout }
 
     /// Get the name of the block.
@@ -101,6 +135,7 @@ impl Block {
         region.block_names.borrow_mut().set(self.self_ptr, name)
     }
 
+    /// Set the arguments of the block by the given index.
     pub fn set_arg(&mut self, index: usize, arg: ArenaPtr<Value>) -> Option<ArenaPtr<Value>> {
         if index > self.args.len() {
             panic!("index out of range when setting block argument.");
@@ -114,6 +149,7 @@ impl Block {
         Some(old)
     }
 
+    /// Get the number of arguments of the block.
     pub fn num_args(&self) -> usize { self.args.len() }
 
     /// Get the arguments of the block.
@@ -121,8 +157,6 @@ impl Block {
 
     /// Test if the block is an entry block.
     pub fn is_entry(&self) -> bool { self.is_entry }
-
-    pub fn set_entry(&mut self, is_entry: bool) { self.is_entry = is_entry }
 
     /// Reserve a unknown block with a name, if the name is already used, return
     /// the block.
@@ -148,6 +182,11 @@ impl Block {
 impl Parse for Block {
     type Item = ArenaPtr<Block>;
 
+    /// Parsing a block.
+    ///
+    /// A block starts with a block label `^...`, and an optional list of block
+    /// arguments. A block ends with the `}` token, which indicates the end of a
+    /// region, or another block label.
     fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
         let token = state.stream.peek()?;
         let block = match &token.kind {

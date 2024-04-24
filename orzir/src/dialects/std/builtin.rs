@@ -1,72 +1,34 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    delimiter, parse_error, token_wildcard, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
-    ParseErrorKind, ParseResult, ParseState, Print, PrintResult, PrintState, Region,
-    RegionInterface, RegionKind, RunVerifiers, TokenKind, Ty, TyObj, VerificationResult, Verify,
+    delimiter,
+    parse_error,
+    ArenaPtr,
+    Context,
+    Dialect,
+    Op,
+    OpMetadata,
+    Parse,
+    ParseErrorKind,
+    ParseResult,
+    ParseState,
+    Print,
+    PrintResult,
+    PrintState,
+    Region,
+    RegionInterface,
+    RegionKind,
+    RunVerifiers,
+    Symbol,
+    TokenKind,
+    Ty,
+    TyObj,
+    Verify,
+    VerifyResult,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Ty, Verify};
 
 use crate::verifiers::{control_flow::*, *};
-
-/// A symbol.
-///
-/// This is currently a simple wrapper around a string, just with implementation
-/// of [Parse] and [Print].
-#[derive(Debug, Default, Clone)]
-pub struct Symbol(String);
-
-impl Parse for Symbol {
-    type Item = Self;
-
-    fn parse(ctx: &mut Context, state: &mut ParseState) -> ParseResult<Self::Item> {
-        let token = state.stream.consume()?;
-        if let TokenKind::SymbolName(name) = token.kind {
-            let op = state.curr_op();
-            // register the symbol
-            let region = state.curr_region();
-            region
-                .deref_mut(&mut ctx.regions)
-                .register_symbol(name.clone(), op);
-            // construct and return.
-            let symbol = Self(name);
-            Ok(symbol)
-        } else {
-            parse_error!(
-                token.span,
-                ParseErrorKind::InvalidToken(vec![token_wildcard!("@...")].into(), token.kind)
-            )
-            .into()
-        }
-    }
-}
-
-impl Print for Symbol {
-    fn print(&self, _: &Context, state: &mut PrintState) -> PrintResult<()> {
-        write!(state.buffer, "@{}", self.0)?;
-        Ok(())
-    }
-}
-
-impl From<String> for Symbol {
-    fn from(s: String) -> Self {
-        if let Some(s) = s.strip_prefix('@') {
-            Self(s.to_string())
-        } else {
-            Self(s)
-        }
-    }
-}
-
-impl From<&str> for Symbol {
-    fn from(s: &str) -> Self {
-        if let Some(s) = s.strip_prefix('@') {
-            Self(s.to_string())
-        } else {
-            Self(s.to_string())
-        }
-    }
-}
 
 /// The module operation.
 ///
@@ -87,7 +49,7 @@ pub struct ModuleOp {
 }
 
 impl Verify for ModuleOp {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         self.run_verifiers(ctx)?;
         self.get_region(0)
             .unwrap()
@@ -249,7 +211,7 @@ pub struct UnitTy;
 
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("builtin".into());
-    ctx.dialects.insert("builtin".into(), dialect);
+    ctx.register_dialect(dialect);
 
     ModuleOp::register(ctx, ModuleOp::parse);
 
@@ -268,7 +230,13 @@ mod tests {
     use orzir_core::{Context, OpObj, Parse, ParseState, Print, PrintState, TokenStream, TyObj};
 
     use crate::dialects::std::builtin::{
-        self, DoubleTy, FloatTy, FunctionTy, IntTy, MemRefTy, TupleTy,
+        self,
+        DoubleTy,
+        FloatTy,
+        FunctionTy,
+        IntTy,
+        MemRefTy,
+        TupleTy,
     };
 
     #[test]

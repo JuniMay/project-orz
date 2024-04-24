@@ -1,4 +1,4 @@
-use orzir_core::{verification_error, Context, Op, Ty, VerificationResult};
+use orzir_core::{verify_error, Context, Op, Ty, VerifyResult};
 use thiserror::Error;
 
 pub mod control_flow;
@@ -14,7 +14,7 @@ struct NotIsolatedFromAboveError;
 ///
 /// Note that symbols can be used.
 pub trait IsIsolatedFromAbove: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         let mut pending_regions = Vec::new();
         for region in self.regions() {
             pending_regions.push(region);
@@ -27,7 +27,7 @@ pub trait IsIsolatedFromAbove: Op {
                             let operand_region = operand.deref(&ctx.values).parent_region(ctx);
                             if !region.deref(&ctx.regions).is_ancestor(ctx, operand_region) {
                                 // not isolated from above
-                                return verification_error!(NotIsolatedFromAboveError).into();
+                                return verify_error!(NotIsolatedFromAboveError).into();
                             }
                         }
 
@@ -55,9 +55,9 @@ struct InvalidResultNumberError(usize, usize);
 ///
 /// A verifier indicating that the operation has excatly `N` results.
 pub trait NumResults<const N: usize>: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_results() != N {
-            return verification_error!(InvalidResultNumberError(N, self.num_results())).into();
+            return verify_error!(InvalidResultNumberError(N, self.num_results())).into();
         }
         Ok(())
     }
@@ -71,9 +71,9 @@ struct InvalidOperandNumberError(usize, usize);
 ///
 /// A trait indicating that the operation has excatly `N` operands.
 pub trait NumOperands<const N: usize>: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_operands() != N {
-            return verification_error!(InvalidOperandNumberError(N, self.num_operands())).into();
+            return verify_error!(InvalidOperandNumberError(N, self.num_operands())).into();
         }
         Ok(())
     }
@@ -87,9 +87,9 @@ struct InvalidRegionNumberError(usize, usize);
 ///
 /// A verifier indicating that the operation has excatly `N` regions.
 pub trait NumRegions<const N: usize>: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_regions() != N {
-            return verification_error!(InvalidRegionNumberError(N, self.num_regions())).into();
+            return verify_error!(InvalidRegionNumberError(N, self.num_regions())).into();
         }
         Ok(())
     }
@@ -103,10 +103,9 @@ struct InvalidSuccessorNumberError(usize, usize);
 ///
 /// A verifier indicating that the operation has exactly `N` successors.
 pub trait NumSuccessors<const N: usize>: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_successors() != N {
-            return verification_error!(InvalidSuccessorNumberError(N, self.num_successors()))
-                .into();
+            return verify_error!(InvalidSuccessorNumberError(N, self.num_successors())).into();
         }
         Ok(())
     }
@@ -120,10 +119,9 @@ struct InvalidAtLeastResultNumberError(usize, usize);
 ///
 /// A verifier indicating that the operation has at least `N` results.
 pub trait AtLeastNumResults<const N: usize>: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_results() < N {
-            return verification_error!(InvalidAtLeastResultNumberError(N, self.num_results()))
-                .into();
+            return verify_error!(InvalidAtLeastResultNumberError(N, self.num_results())).into();
         }
         Ok(())
     }
@@ -137,10 +135,9 @@ struct InvalidAtLeastOperandNumberError(usize, usize);
 ///
 /// A verifier indicating that the operation has at least `N` operands.
 pub trait AtLeastNumOperands<const N: usize>: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_operands() < N {
-            return verification_error!(InvalidAtLeastOperandNumberError(N, self.num_operands()))
-                .into();
+            return verify_error!(InvalidAtLeastOperandNumberError(N, self.num_operands())).into();
         }
         Ok(())
     }
@@ -154,10 +151,9 @@ struct InvalidAtLeastRegionNumberError(usize, usize);
 ///
 /// A verifier indicating that the operation has at least `N` regions.
 pub trait AtLeastNumRegions<const N: usize>: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_regions() < N {
-            return verification_error!(InvalidAtLeastRegionNumberError(N, self.num_regions()))
-                .into();
+            return verify_error!(InvalidAtLeastRegionNumberError(N, self.num_regions())).into();
         }
         Ok(())
     }
@@ -171,13 +167,10 @@ struct InvalidAtLeastSuccessorNumberError(usize, usize);
 ///
 /// A verifier indicating that the operation has at least `N` successors.
 pub trait AtLeastNumSuccessors<const N: usize>: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_successors() < N {
-            return verification_error!(InvalidAtLeastSuccessorNumberError(
-                N,
-                self.num_successors()
-            ))
-            .into();
+            return verify_error!(InvalidAtLeastSuccessorNumberError(N, self.num_successors()))
+                .into();
         }
         Ok(())
     }
@@ -187,42 +180,42 @@ pub trait AtLeastNumSuccessors<const N: usize>: Op {
 ///
 /// This verifier indicates that the operation has variadic operands.
 pub trait VariadicOperands: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> { Ok(()) }
+    fn verify(&self, _: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
 /// Verifier `VariadicResults` for `Op`.
 ///
 /// This verifier indicates that the operation has variadic results.
 pub trait VariadicResults: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> { Ok(()) }
+    fn verify(&self, _: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
 /// Verifier `VariadicRegions` for `Op`.
 ///
 /// This verifier indicates that the operation has variadic regions.
 pub trait VariadicRegions: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> { Ok(()) }
+    fn verify(&self, _: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
 /// Verifier `VariadicSuccessors` for `Op`.
 ///
 /// This verifier indicates that the operation has variadic successors.
 pub trait VariadicSuccessors: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> { Ok(()) }
+    fn verify(&self, _: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
 /// Verifier `IsTerminator` for `Ty`.
 ///
 /// This verifier indicates that the type is float-like.
 pub trait FloatLikeTy: Ty {
-    fn verify(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
+    fn verify(&self, _ctx: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
 /// Verifier `IsTerminator` for `Ty`.
 ///
 /// This verifier indicates that the type is integer-like.
 pub trait IntegerLikeTy: Ty {
-    fn verify(&self, _ctx: &Context) -> VerificationResult<()> { Ok(()) }
+    fn verify(&self, _ctx: &Context) -> VerifyResult<()> { Ok(()) }
 }
 
 #[derive(Debug, Error)]
@@ -233,10 +226,10 @@ struct NotFloatLikeError;
 ///
 /// This verifier indicates that the operation has float-like operands.
 pub trait FloatLikeOperands: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         for ty in self.operand_tys(ctx) {
             if !ty.deref(&ctx.tys).impls::<dyn FloatLikeTy>(ctx) {
-                return verification_error!(NotFloatLikeError).into();
+                return verify_error!(NotFloatLikeError).into();
             }
         }
         Ok(())
@@ -251,10 +244,10 @@ struct NotIntegerLikeError;
 ///
 /// This verifier indicates that the operation has integer-like operands.
 pub trait IntegerLikeOperands: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         for ty in self.operand_tys(ctx) {
             if !ty.deref(&ctx.tys).impls::<dyn IntegerLikeTy>(ctx) {
-                return verification_error!(NotIntegerLikeError).into();
+                return verify_error!(NotIntegerLikeError).into();
             }
         }
         Ok(())
@@ -269,10 +262,10 @@ struct NotFloatLikeResultError;
 ///
 /// This verifier indicates that the operation has float-like results.
 pub trait FloatLikeResults: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         for ty in self.result_tys(ctx) {
             if !ty.deref(&ctx.tys).impls::<dyn FloatLikeTy>(ctx) {
-                return verification_error!(NotFloatLikeResultError).into();
+                return verify_error!(NotFloatLikeResultError).into();
             }
         }
         Ok(())
@@ -287,10 +280,10 @@ struct NotIntegerLikeResultError;
 ///
 /// This verifier indicates that the operation has float-like results.
 pub trait IntegerLikeResults: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         for ty in self.result_tys(ctx) {
             if !ty.deref(&ctx.tys).impls::<dyn IntegerLikeTy>(ctx) {
-                return verification_error!(NotIntegerLikeResultError).into();
+                return verify_error!(NotIntegerLikeResultError).into();
             }
         }
         Ok(())
@@ -305,7 +298,7 @@ struct DifferentOperandTypesError;
 ///
 /// This verifier indicates that the operands are all the same types.
 pub trait SameOperandTys: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         let operand_tys = self.operand_tys(ctx);
 
         if operand_tys.is_empty() {
@@ -316,7 +309,7 @@ pub trait SameOperandTys: Op {
 
         for ty in operand_tys {
             if ty != operand_ty {
-                return verification_error!(DifferentOperandTypesError).into();
+                return verify_error!(DifferentOperandTypesError).into();
             }
         }
 
@@ -332,7 +325,7 @@ struct DifferentResultTysError;
 ///
 /// This verifier indicates that the results are all the same type.
 pub trait SameResultTys: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         let result_tys = self.result_tys(ctx);
 
         if result_tys.is_empty() {
@@ -342,7 +335,7 @@ pub trait SameResultTys: Op {
         let result_ty = result_tys[0];
         for ty in result_tys {
             if ty != result_ty {
-                return verification_error!(DifferentResultTysError).into();
+                return verify_error!(DifferentResultTysError).into();
             }
         }
 
@@ -360,7 +353,7 @@ struct DifferentOperandAndResultTysError;
 /// type. Note that the numbers of results and operands are not necessarily the
 /// same.
 pub trait SameOperandAndResultTys: SameOperandTys + SameResultTys {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         <Self as SameOperandTys>::verify(self, ctx)?;
         <Self as SameResultTys>::verify(self, ctx)?;
 
@@ -380,7 +373,7 @@ pub trait SameOperandAndResultTys: SameOperandTys + SameResultTys {
         let result_ty = result_tys[0];
 
         if operand_ty != result_ty {
-            return verification_error!(DifferentOperandAndResultTysError).into();
+            return verify_error!(DifferentOperandAndResultTysError).into();
         }
 
         Ok(())
@@ -396,9 +389,9 @@ struct DifferentOperandAndResultNumberError;
 /// This verifier indicates that the numbers of results and operands are the
 /// same.
 pub trait SameOperandsAndResultsNum: Op {
-    fn verify(&self, _: &Context) -> VerificationResult<()> {
+    fn verify(&self, _: &Context) -> VerifyResult<()> {
         if self.num_operands() != self.num_results() {
-            return verification_error!(DifferentOperandAndResultNumberError).into();
+            return verify_error!(DifferentOperandAndResultNumberError).into();
         }
         Ok(())
     }
@@ -409,13 +402,11 @@ pub trait SameOperandsAndResultsNum: Op {
 pub struct InvalidOperandTyError(String);
 
 pub trait OperandTysAre<T: Ty>: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         for ty in self.operand_tys(ctx) {
             if !ty.deref(&ctx.tys).is_a::<T>() {
-                return verification_error!(InvalidOperandTyError(
-                    T::mnemonic_static().to_string()
-                ))
-                .into();
+                return verify_error!(InvalidOperandTyError(T::mnemonic_static().to_string()))
+                    .into();
             }
         }
         Ok(())
@@ -427,10 +418,10 @@ pub trait OperandTysAre<T: Ty>: Op {
 pub struct InvalidResultTyError(String);
 
 pub trait ResultTysAre<T: Ty>: Op {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         for ty in self.result_tys(ctx) {
             if !ty.deref(&ctx.tys).is_a::<T>() {
-                return verification_error!(InvalidResultTyError(T::mnemonic_static().to_string()))
+                return verify_error!(InvalidResultTyError(T::mnemonic_static().to_string()))
                     .into();
             }
         }

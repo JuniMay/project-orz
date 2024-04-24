@@ -1,17 +1,26 @@
 use std::fmt::{self, Write};
 
 use orzir_core::{
-    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
-    RunVerifiers, Successor, Ty, Value, Verify,
+    apint::ApInt,
+    verify_error,
+    ArenaPtr,
+    Context,
+    Dialect,
+    Op,
+    OpMetadata,
+    Parse,
+    RunVerifiers,
+    Successor,
+    Symbol,
+    Ty,
+    Value,
+    Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
 
 use super::regs::IReg;
-use crate::{
-    dialects::std::builtin::Symbol,
-    verifiers::{control_flow::*, *},
-};
+use crate::verifiers::{control_flow::*, *};
 
 /// The immediate out of range error.
 #[derive(Debug, Error)]
@@ -42,12 +51,12 @@ macro_rules! rv_immediate {
         }
 
         impl Verify for $name {
-            fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
+            fn verify(&self, ctx: &Context) -> orzir_core::VerifyResult<()> {
                 self.run_verifiers(ctx)?;
 
                 // verify the width of the immediate
                 if self.imm.width() > $imm_width {
-                    return verification_error!(ImmOutOfRangeErr($imm_width, self.imm.width()))
+                    return verify_error!(ImmOutOfRangeErr($imm_width, self.imm.width()))
                         .into();
                 }
 
@@ -464,7 +473,7 @@ rv_binary!("rv.sltu", SltuOp);
 
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("rv".into());
-    ctx.dialects.insert("rv".into(), dialect);
+    ctx.register_dialect(dialect);
 
     ZeroOp::register(ctx, ZeroOp::parse);
 

@@ -2,8 +2,18 @@ use core::fmt;
 use std::fmt::Write;
 
 use orzir_core::{
-    apint::ApInt, verification_error, ArenaPtr, Context, Dialect, Op, OpMetadata, Parse,
-    RunVerifiers, Typed, Value, Verify,
+    apint::ApInt,
+    verify_error,
+    ArenaPtr,
+    Context,
+    Dialect,
+    Op,
+    OpMetadata,
+    Parse,
+    RunVerifiers,
+    Typed,
+    Value,
+    Verify,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 use thiserror::Error;
@@ -33,15 +43,14 @@ pub struct IConstOp {
 pub struct IncompatibleWidthErr(pub usize, pub usize);
 
 impl Verify for IConstOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> orzir_core::VerifyResult<()> {
         self.run_verifiers(ctx)?;
         self.result.deref(&ctx.values).verify(ctx)?;
         let result_ty = self.result.deref(&ctx.values).ty(ctx).deref(&ctx.tys);
         if let Some(ty) = result_ty.as_a::<IntTy>() {
             // for `index` type, the width can be arbitrary in verification time
             if ty.width() != self.value.width() {
-                return verification_error!(IncompatibleWidthErr(ty.width(), self.value.width()))
-                    .into();
+                return verify_error!(IncompatibleWidthErr(ty.width(), self.value.width())).into();
             }
         }
         Ok(())
@@ -70,14 +79,14 @@ pub struct FConstOp {
 pub struct IncompatibleValueErr(pub f32, pub f32);
 
 impl Verify for FConstOp {
-    fn verify(&self, ctx: &Context) -> orzir_core::VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> orzir_core::VerifyResult<()> {
         self.run_verifiers(ctx)?;
         self.result.deref(&ctx.values).verify(ctx)?;
         let result_ty = self.result.deref(&ctx.values).ty(ctx).deref(&ctx.tys);
         if let Some(ty) = result_ty.as_a::<FloatTy>() {
             // Check if the type of the result matches the type of the constant value
             if ty.width() != 32 {
-                return verification_error!(IncompatibleValueErr(32.0, self.value)).into();
+                return verify_error!(IncompatibleValueErr(32.0, self.value)).into();
             }
         }
         Ok(())
@@ -620,7 +629,7 @@ pub struct FNegOp {
 /// Register the `arith` dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("arith".into());
-    ctx.dialects.insert("arith".into(), dialect);
+    ctx.register_dialect(dialect);
 
     IConstOp::register(ctx, IConstOp::parse);
     FConstOp::register(ctx, FConstOp::parse);
@@ -646,7 +655,14 @@ pub fn register(ctx: &mut Context) {
 #[cfg(test)]
 mod tests {
     use orzir_core::{
-        Context, OpObj, Parse, ParseState, Print, PrintState, RegionInterface, TokenStream,
+        Context,
+        OpObj,
+        Parse,
+        ParseState,
+        Print,
+        PrintState,
+        RegionInterface,
+        TokenStream,
     };
 
     use crate::dialects::std::{builtin::ModuleOp, register_std_dialects};

@@ -1,12 +1,24 @@
 use std::fmt::Write;
 
 use orzir_core::{
-    ArenaPtr, Context, Dialect, Op, OpMetadata, Parse, Region, RegionInterface, RegionKind,
-    RunVerifiers, TyObj, Value, VerificationResult, Verify,
+    ArenaPtr,
+    Context,
+    Dialect,
+    Op,
+    OpMetadata,
+    Parse,
+    Region,
+    RegionInterface,
+    RegionKind,
+    RunVerifiers,
+    Symbol,
+    TyObj,
+    Value,
+    Verify,
+    VerifyResult,
 };
 use orzir_macros::{ControlFlow, DataFlow, Op, Parse, Print, RegionInterface, Verify};
 
-use super::builtin::Symbol;
 use crate::verifiers::{control_flow::*, *};
 
 /// A function operation.
@@ -29,7 +41,7 @@ pub struct FuncOp {
 }
 
 impl Verify for FuncOp {
-    fn verify(&self, ctx: &Context) -> VerificationResult<()> {
+    fn verify(&self, ctx: &Context) -> VerifyResult<()> {
         self.run_verifiers(ctx)?;
         self.ty.deref(&ctx.tys).as_ref().verify(ctx)?;
         self.get_region(0)
@@ -80,7 +92,7 @@ pub struct CallOp {
 /// Register the `func` dialect.
 pub fn register(ctx: &mut Context) {
     let dialect = Dialect::new("func".into());
-    ctx.dialects.insert("func".into(), dialect);
+    ctx.register_dialect(dialect);
 
     FuncOp::register(ctx, FuncOp::parse);
     ReturnOp::register(ctx, ReturnOp::parse);
@@ -90,14 +102,23 @@ pub fn register(ctx: &mut Context) {
 #[cfg(test)]
 mod tests {
     use orzir_core::{
-        Context, OpObj, Parse, ParseState, Print, PrintState, RegionInterface, RegionKind,
+        Context,
+        OpObj,
+        Parse,
+        ParseState,
+        Print,
+        PrintState,
+        RegionInterface,
+        RegionKind,
         TokenStream,
     };
 
     use crate::dialects::std::{
         arith,
         builtin::{self, ModuleOp},
-        cf, func, register_std_dialects,
+        cf,
+        func,
+        register_std_dialects,
     };
 
     #[test]

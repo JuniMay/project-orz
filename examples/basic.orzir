@@ -5,6 +5,7 @@ module {
     ]
     mem.global @global_zero : memref<int<32>, [1 * 2 * 3]> = zeroinit
     mem.global @global_undef : memref<int<32>, [114514 * 4]> = undef
+    mem.global @global_str : memref<int<8>, [14]> = "\tHello, World!\0"
 
     func.func @test_mem : fn() -> int<32> {
         %global_slot = mem.get_global @global_slot : memref<int<32>, [2]>

@@ -14,8 +14,16 @@ use thiserror::Error;
 
 use super::context::Context;
 use crate::{
-    parse_error, support::error::ParseResult, ArenaPtr, Block, OpObj, Print, PrintResult,
-    PrintState, Region, RegionKind,
+    parse_error,
+    support::error::ParseResult,
+    ArenaPtr,
+    Block,
+    OpObj,
+    Print,
+    PrintResult,
+    PrintState,
+    Region,
+    RegionKind,
 };
 
 /// The position in the source code.
@@ -658,8 +666,8 @@ impl<'a> TokenStream<'a> {
         loop {
             match self.peek_char() {
                 Some(c) if c.is_alphanumeric() || c == '_' || c == '.' => {
-                    s.push(c);
                     self.consume_char();
+                    s.push(c);
                 }
                 Some('"') if inside_quote => {
                     self.consume_char();
@@ -669,7 +677,25 @@ impl<'a> TokenStream<'a> {
                 Some('\\') if inside_quote => {
                     self.consume_char();
                     match self.next_char() {
-                        Some(c) => s.push(c),
+                        Some(c) => match c {
+                            '0' => s.push('\0'),
+                            'n' => s.push('\n'),
+                            'r' => s.push('\r'),
+                            't' => s.push('\t'),
+                            '"' => s.push('"'),
+                            '\\' => s.push('\\'),
+                            '\'' => s.push('\''),
+                            _ => {
+                                return parse_error!(
+                                    Span::new(self.peeked_pos, self.peeked_pos),
+                                    ParseErrorKind::InvalidCharacter(
+                                        vec!['0', 'n', 'r', 't', '"', '\\', '\''].into(),
+                                        c
+                                    )
+                                )
+                                .into();
+                            }
+                        },
                         None => {
                             return parse_error!(
                                 Span::new(self.peeked_pos, self.peeked_pos),
@@ -679,9 +705,9 @@ impl<'a> TokenStream<'a> {
                         }
                     }
                 }
-                Some(c) if c.is_whitespace() && inside_quote => {
-                    s.push(c);
+                Some(c) if inside_quote => {
                     self.consume_char();
+                    s.push(c);
                 }
                 Some(_) => break,
                 None => break,

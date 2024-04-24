@@ -1,3 +1,9 @@
+/// Builtin interfaces.
+///
+/// This module provides builtin interfaces for regions, values, successors.
+///
+/// These interfaces can be derived with the macro and are mandatory for all
+/// operations.
 use crate::{ArenaPtr, Context, Region, RegionKind, Successor, TyObj, Typed, Value};
 
 /// Builtin region interface.
