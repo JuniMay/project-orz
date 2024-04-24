@@ -41,7 +41,7 @@ mod ty;
 /// be specified for the metadata field of the struct, which contains the
 /// `self_ptr` and `parent_block` fields.
 ///
-/// For an [`Op``](orzir_core::Op) trait to be valid, the following traits must
+/// For an [`Op`](orzir_core::Op) trait to be valid, the following traits must
 /// be implemented:
 /// - [`Print`](orzir_core::Print)
 /// - [`Parse`](orzir_core::Parse)

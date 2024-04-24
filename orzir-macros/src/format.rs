@@ -241,6 +241,8 @@ impl syn::parse::Parse for FormatMeta {
 }
 
 /// The repeat meta for the field.
+/// 
+/// TODO: This can be parsed from the format pattern.
 struct RepeatMeta {
     /// The separator.
     sep: Option<FormatPattern>,
@@ -498,7 +500,7 @@ fn generate_repeat_parser(
     Ok(output)
 }
 
-/// Generat a printer for repeat pattern.
+/// Generate a printer for repeat pattern.
 fn generate_repeat_printer(
     field_ident: &FieldIdent,
     op_field_meta: &FieldMeta,
@@ -598,6 +600,7 @@ fn generate_repeat_printer(
     Ok(output)
 }
 
+/// Generate the parser for a field.
 fn generate_field_parser(
     field_ident: &FieldIdent,
     op_field_meta: &FieldMeta,
@@ -697,6 +700,7 @@ fn generate_field_parser(
     }
 }
 
+/// Generate the printer for a field.
 fn generate_field_printer(
     field_ident: &FieldIdent,
     op_field_meta: &FieldMeta,
@@ -795,6 +799,7 @@ fn generate_field_printer(
     }
 }
 
+/// Generate the parser for the struct.
 fn generate_parser(
     struct_ident: &syn::Ident,
     derive_info: &DeriveInfo,
@@ -844,6 +849,7 @@ fn generate_parser(
     }
 
     if let FormatKind::Op = format_info.meta.kind {
+        // epilogue is used to handle the results and validate the result number.
         let mut epilogue = quote! {
             let mut __result_names = __state.pop_result_names();
         };
@@ -864,6 +870,7 @@ fn generate_parser(
                 }
             });
         } else {
+            // parse the trailing types.
             epilogue.extend(quote! {
                 let mut __tys = Vec::new();
                 __state.stream.expect(::orzir_core::TokenKind::Char(':'))?;
@@ -917,6 +924,7 @@ fn generate_parser(
                     }
                 });
             } else {
+                // the number of results is variable and should match the number of trailing types.
                 epilogue.extend(quote! {
                     if __result_names.len() != __tys.len() {
                         let mut __span = __result_names[0].span;
@@ -1029,14 +1037,17 @@ fn generate_parser(
         };
 
         parse_stmts = quote! {
+            // reserve an arena entry for the operation.
             let __op = __ctx.ops.reserve();
+            // record the start position.
             let __start_pos = __state.stream.curr_pos()?;
-
+            // enter the component and set the current op in the parse state.
             __state.enter_component_from(__op);
-
+            // generate the artifacts.
             #parse_stmts
-
+            // record the end position.
             let __end_pos = __state.stream.curr_pos()?;
+            // set the span of the operation.
             __state.exit_component();
 
             #epilogue
@@ -1149,6 +1160,7 @@ fn generate_parser(
     Ok(parse_stmts)
 }
 
+/// Generate the printer for the struct.
 fn generate_printer(
     struct_ident: &syn::Ident,
     derive_info: &DeriveInfo,
