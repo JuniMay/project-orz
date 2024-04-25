@@ -13,3 +13,4 @@ pub mod symbol;
 pub mod ty;
 pub mod value;
 pub mod verify;
+pub mod walk;

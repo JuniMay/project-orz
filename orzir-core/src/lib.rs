@@ -17,6 +17,18 @@ pub use crate::{
         ty::{Ty, TyObj, TyParseFn},
         value::Value,
         verify::{RunVerifiers, Verify},
+        walk::{
+            continue_walk,
+            interrupt_walk,
+            skip_walk,
+            IrNode,
+            WalkCallback,
+            WalkOption,
+            WalkOrder,
+            WalkResult,
+            WalkResultKind,
+            Walker,
+        },
     },
     support::{
         apint::ApInt,

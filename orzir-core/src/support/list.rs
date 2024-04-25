@@ -61,6 +61,19 @@ where
     }
 }
 
+impl<'a, K, N> std::iter::DoubleEndedIterator for Iter<'a, K, N>
+where
+    K: Copy + Eq + Hash,
+    N: ListNode<K>,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let curr = self.curr?;
+        let node = self.list.nodes.get(&curr).unwrap();
+        self.curr = node.prev();
+        Some((curr, node))
+    } 
+}
+
 impl<K, N> Default for List<K, N>
 where
     K: Copy + Eq + Hash,
