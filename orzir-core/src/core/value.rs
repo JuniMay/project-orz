@@ -1,25 +1,24 @@
 use std::fmt::Write;
 
-use super::{
-    block::Block,
-    context::Context,
-    op::OpObj,
-    parse::{ParseState, TokenKind},
-    symbol::NameAllocDuplicatedErr,
-    ty::TyObj,
-};
+use super::symbol::NameAllocDuplicatedErr;
 use crate::{
-    core::parse::ParseErrorKind,
     parse_error,
-    support::storage::ArenaPtr,
     token_wildcard,
+    ArenaPtr,
+    Block,
+    Context,
+    OpObj,
     Parse,
+    ParseErrorKind,
     ParseResult,
+    ParseState,
     Print,
     PrintResult,
     PrintState,
     Region,
     RunVerifiers,
+    TokenKind,
+    TyObj,
     Verify,
     VerifyResult,
 };

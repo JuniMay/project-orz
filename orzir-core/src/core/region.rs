@@ -8,9 +8,8 @@ use super::{
     symbol::{NameManager, Symbol, SymbolTable},
 };
 use crate::{
-    core::parse::TokenKind,
     delimiter,
-    support::storage::ArenaPtr,
+    ArenaPtr,
     Context,
     Parse,
     ParseResult,
@@ -18,6 +17,7 @@ use crate::{
     PrintResult,
     PrintState,
     RunVerifiers,
+    TokenKind,
     Verify,
     VerifyResult,
 };

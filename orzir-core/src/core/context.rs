@@ -1,18 +1,17 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use super::{
-    block::Block,
-    dialect::Dialect,
-    mnemonic::MnemonicSegment,
-    op::OpObj,
-    region::Region,
-    symbol::NameManager,
-    ty::TyObj,
-    value::Value,
-};
-use crate::support::{
-    cast::CasterStorage,
-    storage::{Arena, UniqueArena},
+use super::symbol::NameManager;
+use crate::{
+    Arena,
+    Block,
+    CasterStorage,
+    Dialect,
+    MnemonicSegment,
+    OpObj,
+    Region,
+    TyObj,
+    UniqueArena,
+    Value,
 };
 
 /// The context of the whole IR.

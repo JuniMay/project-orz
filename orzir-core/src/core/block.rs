@@ -7,22 +7,21 @@ use crate::{
     core::parse::{ParseErrorKind, TokenKind},
     delimiter,
     parse_error,
-    support::{
-        error::{PrintResult, VerifyResult},
-        storage::ArenaPtr,
-    },
     token_wildcard,
     verify_error,
+    ArenaPtr,
     Context,
     OpObj,
     Parse,
     ParseResult,
     Print,
+    PrintResult,
     PrintState,
     Region,
     RunVerifiers,
     TyObj,
     Verify,
+    VerifyResult,
 };
 
 /// The block in the region.

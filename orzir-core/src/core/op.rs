@@ -3,28 +3,28 @@ use std::fmt::Write;
 use downcast_rs::{impl_downcast, Downcast};
 use thiserror::Error;
 
-use super::{
-    block::Block,
-    context::Context,
-    mnemonic::Mnemonic,
-    parse::{ParseFn, ParseState, TokenKind},
-    value::Value,
-};
+use super::parse::ParseFn;
 use crate::{
-    core::parse::ParseErrorKind,
     delimiter,
     parse_error,
     support::cast::{CastMut, CastRef},
     ArenaPtr,
+    Block,
+    Context,
     ControlFlow,
     DataFlow,
+    Mnemonic,
     Parse,
+    ParseErrorKind,
     ParseResult,
+    ParseState,
     Print,
     PrintResult,
     PrintState,
     Region,
     RegionInterface,
+    TokenKind,
+    Value,
     Verify,
 };
 

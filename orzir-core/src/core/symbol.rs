@@ -5,11 +5,9 @@ use thiserror::Error;
 use super::op::OpObj;
 use crate::{
     parse_error,
-    support::{
-        bimap::{BiMap, Duplicated},
-        storage::ArenaPtr,
-    },
+    support::bimap::{BiMap, Duplicated},
     token_wildcard,
+    ArenaPtr,
     Context,
     Parse,
     ParseErrorKind,

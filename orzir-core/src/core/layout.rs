@@ -1,8 +1,4 @@
-use super::{block::Block, op::OpObj};
-use crate::{
-    impl_list_node,
-    support::{list::List, storage::ArenaPtr},
-};
+use crate::{impl_list_node, list::List, ArenaPtr, Block, OpObj};
 
 #[derive(Default, Debug)]
 pub struct BlockNode {

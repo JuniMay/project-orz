@@ -1,7 +1,6 @@
 use std::fmt::Write;
 
-use super::context::Context;
-use crate::PrintResult;
+use crate::{Context, PrintResult};
 
 pub struct PrintState {
     indent: &'static str,
