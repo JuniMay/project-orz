@@ -12,7 +12,6 @@ pub use crate::{
         parse::{Parse, ParseErrorKind, ParseState, Span, TokenKind, TokenStream},
         print::{Print, PrintState},
         region::{Region, RegionKind},
-        rewrite::{PatternRewriter, RewritePattern},
         symbol::Symbol,
         ty::{Ty, TyObj, TyParseFn},
         value::Value,

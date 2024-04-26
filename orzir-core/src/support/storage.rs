@@ -171,6 +171,17 @@ impl<T> Arena<T> {
             panic!("ArenaPtr not reserved");
         }
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (ArenaPtr<T>, &T)> {
+        self.pool
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| match entry {
+                ArenaEntry::Vacant => None,
+                ArenaEntry::Reserved => None,
+                ArenaEntry::Occupied(val) => Some((ArenaPtr::from(index), val)),
+            })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
