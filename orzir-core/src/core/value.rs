@@ -1,4 +1,7 @@
-use std::fmt::Write;
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Write,
+};
 
 use super::symbol::NameAllocDuplicatedErr;
 use crate::{
@@ -214,5 +217,69 @@ impl Parse for Value {
             .into();
         };
         Ok(self_ptr)
+    }
+}
+
+/// The use information of values and blocks.
+///
+/// Definitions are already recorded in the [`Value`](crate::Value), here is
+/// just a record of uses.
+///
+/// The use information is not maintained, but generated on demand. For each
+/// transformation, the use information can be generated at the beginning, and
+/// then used/modified during the transformation.
+pub struct UseInfo {
+    value_uses: HashMap<ArenaPtr<Value>, HashSet<ArenaPtr<OpObj>>>,
+    block_uses: HashMap<ArenaPtr<Block>, HashSet<ArenaPtr<OpObj>>>,
+}
+
+impl UseInfo {
+    pub fn from_ctx(ctx: &Context) -> Self {
+        let mut info = Self {
+            value_uses: HashMap::default(),
+            block_uses: HashMap::default(),
+        };
+        for (op, obj) in ctx.ops.iter() {
+            for value in obj.as_ref().operands() {
+                info.value_uses.entry(value).or_default().insert(op);
+            }
+            for successor in obj.as_ref().successors() {
+                info.block_uses
+                    .entry(successor.block())
+                    .or_default()
+                    .insert(op);
+            }
+        }
+        info
+    }
+
+    /// Get the uses of a value.
+    pub fn value_uses(&self, value: ArenaPtr<Value>) -> &HashSet<ArenaPtr<OpObj>> {
+        self.value_uses
+            .get(&value)
+            .expect("value should be in the use info.")
+    }
+
+    /// Get the uses of a block.
+    pub fn block_uses(&self, block: ArenaPtr<Block>) -> &HashSet<ArenaPtr<OpObj>> {
+        self.block_uses
+            .get(&block)
+            .expect("block should be in the use info.")
+    }
+
+    /// Remove the use of a value.
+    pub fn remove_value_use(&mut self, value: ArenaPtr<Value>, op: ArenaPtr<OpObj>) {
+        self.value_uses
+            .get_mut(&value)
+            .expect("value should be in the use info.")
+            .remove(&op);
+    }
+
+    /// Remove the use of a block.
+    pub fn remove_block_use(&mut self, block: ArenaPtr<Block>, op: ArenaPtr<OpObj>) {
+        self.block_uses
+            .get_mut(&block)
+            .expect("block should be in the use info.")
+            .remove(&op);
     }
 }

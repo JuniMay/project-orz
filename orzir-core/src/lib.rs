@@ -14,7 +14,7 @@ pub use crate::{
         region::{Region, RegionKind},
         symbol::Symbol,
         ty::{Ty, TyObj, TyParseFn},
-        value::Value,
+        value::{UseInfo, Value},
         verify::{RunVerifiers, Verify},
         walk::{
             continue_walk,
