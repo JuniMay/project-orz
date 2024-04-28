@@ -345,7 +345,7 @@ fn derive_struct_ctor(derive_info: &DeriveInfo) -> syn::Result<TokenStream> {
     };
 
     let output = quote! {
-        fn new(
+        fn build(
             ctx: &mut ::orzir_core::Context,
             self_ptr: ::orzir_core::ArenaPtr<::orzir_core::OpObj>,
             #ctor_args

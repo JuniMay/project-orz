@@ -10,7 +10,7 @@ mod ty;
 
 /// Implement an [Op](orzir_core::Op) for the given struct.
 ///
-/// This will first generate a `new` constructor for the struct, which returns
+/// This will first generate a `build` constructor for the struct, which returns
 /// an `ArenaPtr<OpObj>` object.
 ///
 /// The `#[mnemonic = "..."]` attribute is used to specify the mnemonic of the
