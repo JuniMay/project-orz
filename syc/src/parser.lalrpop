@@ -1,6 +1,8 @@
 /// The grammar of SysY language.
 /// 
-/// TODO: This needs to be implemented.
+
+use crate::frontend::ast::*;
+//use hexponent::FloatLiteral;
 
 grammar;
 
@@ -11,5 +13,268 @@ match {
   _
 }
 
-/// CompUnit -> [ CompUnit ] ( Decl | FuncDef )
-pub CompUnit: CompUnit = {}
+// 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
+pub CompUnit: CompUnit = {
+  <item: (CompUnitItem)*> => CompUnit { <> }
+}
+
+// 编译单元项 CompUnitItem → Decl | FuncDef
+pub CompUnitItem: CompUnitItem = {
+  <d:Decl> => CompUnitItem::Decl(d),
+  <f:FuncDef> => CompUnitItem::FuncDef(f)
+}
+
+// 声明 Decl → ConstDecl | VarDecl
+pub Decl: Decl = {
+  <d:ConstDecl> => Decl::ConstDecl(d),
+  <v:VarDecl> => Decl::VarDecl(v)
+}
+
+// 类型 BasicType → 'void' | 'int' | 'float'
+pub BasicType: BasicType = {
+  "void" => BasicType::Void,
+  "int" => BasicType::Int,
+  "float" => BasicType::Float
+}
+
+// 常量声明 ConstDecl → 'const' BasicType ConstDef { ',' ConstDef } ';'
+pub ConstDecl: ConstDecl = {
+  "const" <t:BasicType> <c:ConstDef> <mut v:("," <ConstDef>)*> ";" => {
+    v.insert(0, c); 
+    ConstDecl { basictype: t, constdef: v } 
+  }
+}
+
+// 常量定义 ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
+pub ConstDef: ConstDef = {
+  <i:Ident> <v:("[" <ConstExp> "]" )* > "=" <c:ConstInitVal> => {
+    ConstDef { ident: i, constexp: v, constinitval: c }
+  }
+}
+
+// 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
+pub ConstInitVal: ConstInitVal = {
+  <c:ConstExp> => ConstInitVal::ConstExp(c),
+  "{" <ci:ConstInitVal> <mut v:("," <ConstInitVal>)*> "}" => {
+    v.insert(0, ci);
+    ConstInitVal::ConstInitVal(v)
+  },
+  "{" "}" => ConstInitVal::ConstInitVal(Vec::new())
+}
+
+// 变量声明 VarDecl → BasicType VarDef { ',' VarDef } ';'
+pub VarDecl: VarDecl = {
+  <t:BasicType> <vd:VarDef> <mut v:("," <VarDef>)*> ";" => {
+    v.insert(0, vd); 
+    VarDecl { basictype: t, vardef: v } 
+  }
+}
+
+// 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
+pub VarDef: VarDef = {
+  <i:Ident> <v:("[" <ConstExp> "]" )* > <ini: ("=" <InitVal>)?> => {
+    VarDef { ident: i, constexp: v, initval: ini }
+  }
+}
+
+// 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
+pub InitVal: InitVal = {
+  <e:Exp> => InitVal::Exp(e),
+  "{" <iv:InitVal> <mut v:("," <InitVal>)*> "}" => {
+    v.insert(0, iv);
+    InitVal::InitVal(v)
+  },
+  "{" "}" => InitVal::InitVal(Vec::new())
+}
+
+// 函数定义 FuncDef → BasicType Ident '(' [FuncFParams] ')' Block
+pub FuncDef: FuncDef={
+  <t:BasicType> <i:Ident> "(" ")" <b:Block> => {
+    FuncDef{ basictype: t, ident: i, funcfparams: FuncFParams { funcfparam: vec![] }, block: b }
+  },
+  <t:BasicType> <i:Ident> "(" <fps:FuncFParams> ")" <b:Block> => {
+    FuncDef{ basictype: t, ident: i, funcfparams: fps, block: b }
+  },
+}
+
+// 函数形参表 FuncFParams → FuncFParam { ',' FuncFParam }
+pub FuncFParams: FuncFParams={
+  <fp:FuncFParam> <mut v:("," <FuncFParam>)*> => {
+    v.insert(0, fp);
+    FuncFParams { funcfparam:v }
+  }
+}
+
+// 函数形参 FuncFParam → BasicType Ident ['[' ']' { '[' Exp ']' }]
+pub FuncFParam: FuncFParam={
+  <basictype:BasicType> <ident:Ident> <exp: ("[" "]" <("[" <Exp> "]")*>)?> => {
+    FuncFParam { <> }
+  },
+}
+
+// 语句块 Block → '{' { BlockItem } '}'
+Block: Block = "{" <blockitem: (BlockItem)*> "}" => Block { <> };
+
+
+// 语句块项 BlockItem → Decl | Stmt
+pub BlockItem: BlockItem = {
+  Decl => BlockItem::Decl(<>),
+  Stmt => BlockItem::Stmt(<>),
+}
+
+// 语句 Stmt → LVal '=' Exp ';' | [Exp] ';' | Block
+//             | 'if' '( Cond ')' Stmt [ 'else' Stmt ]
+//             | 'while' '(' Cond ')' Stmt
+//             | 'break' ';' | 'continue' ';'
+//             | 'return' [Exp] ';'
+// 需要处理else悬挂问题
+pub Stmt: Stmt={
+  MStmt => <>,
+  OStmt => <>,
+}
+
+pub MStmt: Stmt = {
+  <lval:LVal> "=" <exp:Exp> ";" => Stmt::Assign(lval, exp),
+  <exp:(Exp)?> ";" => Stmt::ExpSt(ExpSt{<>}),
+  <b:Block> => Stmt::Block(b),
+  "if" "(" <c:Cond> ")" <s1:MStmt> "else" <s2:MStmt> => {
+    Stmt::If(c, Box::new(s1), Some(Box::new(s2)))
+  },
+  "while" "(" <c:Cond> ")" <s:MStmt> => Stmt::While(c, Box::new(s)),
+  "break;" => Stmt::Break,
+  "continue;" => Stmt::Continue,
+  "return" <e:(Exp)?> ";" => Stmt::Return(Return{exp:e}),
+}
+
+pub OStmt: Stmt = {
+  "if" "(" <c:Cond> ")" <s1: Stmt> => {
+    Stmt::If(c, Box::new(s1), None)
+  },
+  "if" "(" <c:Cond> ")" <s1: MStmt> "else" <s2: OStmt> => {
+    Stmt::If(c, Box::new(s1), Some(Box::new(s2)))
+  },
+  "while" "(" <c:Cond> ")" <s:OStmt> => Stmt::While(c, Box::new(s)),
+}
+
+// 表达式 Exp → AddExp 注：SysY表达式是 int/float型表达式
+pub Exp: Exp = <addexp:AddExp> => Exp{<>};
+
+// 条件表达式 Cond → LOrExp
+pub Cond: Cond = <lorexp:LOrExp> => Cond{<>};
+
+// 左值表达式 LVal → Ident {'[' Exp ']'}
+pub LVal: LVal = <ident: Ident> <exp: ("[" <Exp> "]")*> => LVal { <> };
+
+// 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
+pub PrimaryExp: PrimaryExp = {
+  "(" <Exp> ")" => PrimaryExp::Exp(Box::new(<>)),
+  LVal => PrimaryExp::LVal(<>),
+  Number => PrimaryExp::Number(<>),
+}
+
+Int: i32 = {
+  r"[1-9][0-9]*" => i32::from_str_radix(<>, 10).unwrap(),
+  r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
+  r"0[xX][0-9a-fA-F]+" => i32::from_str_radix(&<>[2..], 16).unwrap(),
+}
+
+Float: f32 = {
+  r"((([0-9]*[.][0-9]*([eE][+-]?[0-9]+)?)|([0-9]+[eE][+-]?[0-9]+))[fLlL]?)" => <>.parse::<f32>().unwrap(),
+  r"(0[xX](([0-9A-Fa-f]*[.][0-9A-Fa-f]*([pP][+-]?[0-9]+)?)|([0-9A-Fa-f]+[pP][+-]?[0-9]+))[fLlL]?)" => {
+        let float_literal: hexponent::FloatLiteral = <>.parse().unwrap();
+        float_literal.convert::<f32>().inner()
+    },
+}
+
+// 数值 Number → IntConst | floatConst
+pub Number: Number = {
+  <n:Int> => Number::IntConst(n),
+  <f:Float> => Number::FloatConst(f),
+}
+
+// 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+pub UnaryExp: UnaryExp = {
+  PrimaryExp => UnaryExp::PrimaryExp(<>),
+  <start:@L> <i: Ident> <end:@R> "(" ")" => UnaryExp::FuncCall(FuncCall { ident:i, exp: Vec::new(),  pos: SourcePos { start, end }}),
+  <start:@L> <i: Ident> <end:@R> "(" <e: Exp> <mut exp: ("," <Exp>)*> ")" => {
+    exp.insert(0, e);
+    UnaryExp::FuncCall(FuncCall { ident:i, exp, pos: SourcePos { start, end }})
+  },
+  "+" <UnaryExp> => <>,
+  "-" <uexp: UnaryExp> => UnaryExp::UnaryOp(UnaryOp::Neg, Box::new(uexp)),
+  "!" <uexp: UnaryExp> => UnaryExp::UnaryOp(UnaryOp::Not, Box::new(uexp)),
+}
+
+// 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
+pub MulExp: MulExp = {
+  UnaryExp => MulExp::UnaryExp(<>),
+  <me: MulExp> "*" <ue: UnaryExp> => {
+    MulExp::MulUExp(Box::new(me), MulOp::Mul, ue)
+  },
+  <me: MulExp> "/" <ue: UnaryExp> => {
+    MulExp::MulUExp(Box::new(me), MulOp::Div, ue)
+  },
+  <me: MulExp> "%" <ue: UnaryExp> => {
+    MulExp::MulUExp(Box::new(me), MulOp::Mod, ue)
+  },
+}
+
+// 加减表达式 AddExp → MulExp | AddExp ('+' | '−') MulExp
+pub AddExp: AddExp = {
+  MulExp => AddExp::MulExp(<>),
+  <ae: AddExp> "+" <me: MulExp> => {
+    AddExp::AddMExp(Box::new(ae), AddOp::Add, me)
+  },
+  <ae: AddExp> "-" <me: MulExp> => {
+    AddExp::AddMExp(Box::new(ae), AddOp::Sub, me)
+  },
+}
+
+// 关系表达式 RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
+pub RelExp: RelExp = {
+  AddExp => RelExp::AddExp(<>),
+  <re: RelExp> "<" <ae: AddExp> => {
+    RelExp::RelAExp(Box::new(re), RelOp::Lt, ae)
+  },
+  <re: RelExp> ">" <ae: AddExp> => {
+    RelExp::RelAExp(Box::new(re), RelOp::Gt, ae)
+  },
+  <re: RelExp> "<=" <ae: AddExp> => {
+    RelExp::RelAExp(Box::new(re), RelOp::Le, ae)
+  },
+  <re: RelExp> ">=" <ae: AddExp> => {
+    RelExp::RelAExp(Box::new(re), RelOp::Ge, ae)
+  },
+}
+
+// 相等性表达式 EqExp → RelExp | EqExp ('==' | '!=') RelExp
+pub EqExp: EqExp = {
+  RelExp => EqExp::RelExp(<>),
+  <ee: EqExp> "==" <re: RelExp> => {
+    EqExp::EqRExp(Box::new(ee), EqOp::Eq, re)
+  },
+  <ee: EqExp> "!=" <re: RelExp> => {
+    EqExp::EqRExp(Box::new(ee), EqOp::Ne, re)
+  },
+}
+
+// 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
+LAndExp: LAndExp = {
+  EqExp => LAndExp::EqExp(<>),
+  <le: LAndExp> "&&" <ee: EqExp> => {
+    LAndExp::LAndEExp(Box::new(le),ee)
+  },
+}
+
+// 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
+LOrExp: LOrExp = {
+  LAndExp => LOrExp::LAndExp(<>),
+  <loe: LOrExp> "||" <lae: LAndExp> => {
+    LOrExp::LOrLExp(Box::new(loe),lae)
+  },
+}
+
+// 常量表达式 ConstExp → AddExp
+pub ConstExp: ConstExp = <addexp:AddExp> => ConstExp{<>};
+
+Ident: String = r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string();
