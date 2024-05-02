@@ -1,14 +1,12 @@
 mod ast;
 mod lower;
 
-lalrpop_mod!(pub sysyparser, "/syc/src/parser.rs");
-
 fn main() {
     println!("Hello, SysY!");
 
 #[cfg(test)]
 pub mod tests {
-    use crate::syc::src::sysyparser;
+    use crate::parser::*;
     #[test]
     pub fn test_sysy() {
         // valid-cases
