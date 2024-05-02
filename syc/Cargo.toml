@@ -1,0 +1,18 @@
+[package]
+name = "syc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+orzir = { path = "../orzir" }
+orzir-macros = { path = "../orzir-macros" }
+orzir-core = { path = "../orzir-core" }
+
+thiserror = "1.0.58"
+
+lalrpop-util = { version = "0.19.9", features = ["lexer"] }
+
+[build-dependencies]
+lalrpop = "0.19.9"
