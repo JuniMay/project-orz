@@ -282,4 +282,12 @@ impl UseInfo {
             .expect("block should be in the use info.")
             .remove(&op);
     }
+
+    pub fn add_value_use(&mut self, value: ArenaPtr<Value>, op: ArenaPtr<OpObj>) {
+        self.value_uses.entry(value).or_default().insert(op);
+    }
+
+    pub fn add_block_use(&mut self, block: ArenaPtr<Block>, op: ArenaPtr<OpObj>) {
+        self.block_uses.entry(block).or_default().insert(op);
+    }
 }
